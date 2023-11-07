@@ -8,5 +8,10 @@
     "express": "^4.18.2",
     "knex": "^3.0.1",
     "pg": "^8.11.3"
+  },
+  "scripts": {
+    "migrate:latest": "knex migrate:latest",
+    "seed:run": "knex seed:run",
+    "vercel-build": "npm run migrate:latest && npm run seed:run"
   }
 }
