@@ -1,15 +1,22 @@
 const { configDotenv } = require("dotenv")
 
 configDotenv()
-const db = require(env.process.PROD_PG_URL)
+const environment = process.env.NODE_ENV || 'development'
+const configuration = require('../knexfile')[environment]
+const db = require('knex')(configuration)
 
-app.delete('/api/v1/saved', (req, res) => {
-  const bird = req.body
-  db('birds').where('speciesCode', bird.speciesCode).first()
-    .then(bird => {
-      db('saved_birds').where('bird_id', bird.id).del()
-        .then(() => res.status(200).json(bird))
-        .catch(error => res.status(500).json({ error }))
-    })
-    .catch(error => res.status(500).json({ error }))
-})
+module.exports = async (req, res) => {
+  try {
+    const bird = req.body;
+    const birdFromDB = await db('birds').where('speciesCode', bird.speciesCode).first();
+    
+    if (birdFromDB) {
+      await db('saved_birds').where('bird_id', birdFromDB.id).del();
+      res.status(200).json(birdFromDB);
+    } else {
+      res.status(404).json({ error: 'Bird not found' });
+    }
+  } catch (error) {
+    res.status(500).json({ error });
+  }
+};

@@ -8,7 +8,6 @@ const db = require('knex')(configuration)
 
 module.exports = async (req, res) => {  
   try {
-    console.log('Connection URL:', process.env.PROD_PG_URL);
     const user = await db('users').first()
     res.status(200).json(user)
   } catch (error) {

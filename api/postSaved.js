@@ -1,42 +1,44 @@
 const { configDotenv } = require("dotenv")
 
 configDotenv()
-const db = require(env.process.PROD_PG_URL)
+const environment = process.env.NODE_ENV || 'development'
+const configuration = require('../knexfile')[environment]
+const db = require('knex')(configuration)
 
-app.post('/api/v1/saved', async (req, res) => {
-  const birdData = req.body
-
+module.exports = async (req, res) => {
   try {
+    const birdData = req.body;
+    const user_id = 1;
+
     await db.transaction(async (trx) => {
       const existingBird = await trx('birds')
         .where('speciesCode', birdData.speciesCode)
-        .first()
+        .first();
 
       if (existingBird) {
         await trx('saved_birds').insert({
-          user_id: 1,
+          user_id,
           bird_id: existingBird.id,
-          speciesCode: existingBird.speciesCode
+          speciesCode: existingBird.speciesCode,
         });
-        return existingBird
+        return existingBird;
       } else {
-        const newBirdId = await insertBird(birdData, trx)
+        const newBirdId = await insertBird(birdData, trx);
         await trx('saved_birds').insert({
-          user_id: 1,
+          user_id,
           bird_id: newBirdId,
-          speciesCode: birdData.speciesCode
+          speciesCode: birdData.speciesCode,
         });
         return birdData;
       }
-    })
-    .catch(trx.rollback)
+    });
 
-    res.status(201).json(birdData)
+    res.status(201).json(birdData);
   } catch (error) {
     console.error("An error occurred:", error);
     res.status(500).json({ error: 'An error occurred' });
   }
-});
+};
 
 const insertBird = async (birdData, trx) => {
   try {
