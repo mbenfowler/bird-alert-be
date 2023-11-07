@@ -21,7 +21,7 @@ module.exports = {
   },
   production: {
     client: 'pg',
-    connection: process.env.POSTGRES_URL,
+    connection: process.env.PROD_PG_URL,
     pool: {
       min: 2,
       max: 20
