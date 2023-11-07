@@ -9,7 +9,7 @@ module.exports = {
     connection: process.env.DEV_PG_URL,
     pool: {
       min: 2,
-      max: 10,
+      max: 20
     },
     migrations: {
       directory: __dirname + '/db/migrations'
@@ -21,10 +21,10 @@ module.exports = {
   },
   production: {
     client: 'pg',
-    connection: process.env.PROD_PG_URL,
+    connection: process.env.POSTGRES_URL,
     pool: {
       min: 2,
-      max: 10
+      max: 20
     },
     migrations: {
       directory: __dirname + '/db/migrations'
