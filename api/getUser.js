@@ -1,4 +1,3 @@
-const { knex } = require('knex')
 const { configDotenv } = require("dotenv")
 
 configDotenv()
