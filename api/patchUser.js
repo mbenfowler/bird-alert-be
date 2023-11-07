@@ -1,7 +1,7 @@
 const { configDotenv } = require("dotenv")
 
 configDotenv()
-const db = require(env,process.PROD_PG_URL)
+const db = require(env.process.PROD_PG_URL)
 
 app.patch('/api/v1/user', async (req, res) => {
   const user = req.body

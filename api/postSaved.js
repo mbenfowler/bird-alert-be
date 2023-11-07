@@ -1,15 +1,7 @@
-app.get('/api/v1/saved', async (req, res) => {
-  await db('saved_birds').where('user_id', 1).select('bird_id')
-    .then(birdIds => {
-      const birdPromises = birdIds.map(birdId => {
-        return db('birds').where('id', birdId.bird_id).first()
-      })
-      Promise.all(birdPromises)
-        .then(birds => res.status(200).json(birds))
-        .catch(error => res.status(500).json({ error }))
-    })
-    .catch(error => res.status(500).json({ error }))
-})
+const { configDotenv } = require("dotenv")
+
+configDotenv()
+const db = require(env.process.PROD_PG_URL)
 
 app.post('/api/v1/saved', async (req, res) => {
   const birdData = req.body
@@ -67,23 +59,3 @@ const insertBird = async (birdData, trx) => {
     throw error;
   }
 }
-
-app.delete('/api/v1/saved', (req, res) => {
-  const bird = req.body
-  db('birds').where('speciesCode', bird.speciesCode).first()
-    .then(bird => {
-      db('saved_birds').where('bird_id', bird.id).del()
-        .then(() => res.status(200).json(bird))
-        .catch(error => res.status(500).json({ error }))
-    })
-    .catch(error => res.status(500).json({ error }))
-})
-
-app.get('/api/v1/saved/:speciesCode', async (req, res) => {
-  const speciesCode = req.params.speciesCode;
-  const bird = await db('saved_birds')
-    .where('speciesCode', speciesCode)
-    .where('user_id', 1)
-    .first()
-  res.json(!!bird);
-})

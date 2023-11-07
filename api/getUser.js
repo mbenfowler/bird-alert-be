@@ -1,7 +1,7 @@
 const { configDotenv } = require("dotenv")
 
 configDotenv()
-const db = require(env,process.PROD_PG_URL)
+const db = require(env.process.PROD_PG_URL)
 
 app.get('/api/v1/user/:id', async (req, res) => {
   const userId = req.params.id;
