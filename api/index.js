@@ -3,7 +3,7 @@ const cors = require('cors')
 const app = express()
 
 const environment = process.env.NODE_ENV || 'development'
-const configuration = require('./knexfile')[environment]
+const configuration = require('../knexfile')[environment]
 const db = require('knex')(configuration)
 
 app.set('port', process.env.PORT || 3001)
@@ -14,7 +14,7 @@ app.use(cors({ origin: 'http://localhost:3000' , credentials :  true}))
 app.use(express.json())
 
 app.get('/', (req, res) => {
-    res.send('Hello World')
+    res.send(`Welcome to ${app.locals.title} API!`)
 })
 
 app.get('/api/v1/user/:id', async (req, res) => {
