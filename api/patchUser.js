@@ -7,7 +7,7 @@ const configuration = require('../knexfile')[environment]
 const db = require('knex')(configuration)
 
 module.exports = async (req, res) => {
-  const user = req.body;
+  const user = req.query;
 
   try {
     await db('users').where('id', 1).update({
