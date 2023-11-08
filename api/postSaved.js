@@ -15,13 +15,15 @@ module.exports = async (req, res) => {
   try {
     const birdData = req.body;
     const user_id = 1;
-
+    console.log('birdData', birdData)
     await db.transaction(async (trx) => {
       const existingBird = await trx('birds')
         .where('speciesCode', birdData.speciesCode)
         .first();
 
-      if (existingBird) {
+        console.log('existingBird', existingBird)
+
+        if (existingBird) {
         await trx('saved_birds').insert({
           user_id,
           bird_id: existingBird.id,
