@@ -24,6 +24,7 @@ exports.up = function(knex) {
       table.string('familyCode');
       table.string('familyComName');
       table.string('familySciName');
+      table.string('birdImg');
       table.string('wikiURL');
       table.integer('taxonOrder');
       table.timestamps(true, true);
