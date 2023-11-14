@@ -8,10 +8,18 @@ const db = require('knex')(configuration)
 
 module.exports = async (req, res) => {
   const { email, password } = req.query
+  console.log(email, password)
   try {
     const user = await db('users').where({ email }).first()
     if (!user) {
-      await db('users').insert({ email, password })
+      await db('users').insert({ 
+        email,
+        password,
+        username: '',
+        phone: '',
+        location: '',
+        state: ''
+      })
     }
   } catch (error) {
     res.status(500).json({ error })
