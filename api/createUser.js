@@ -7,10 +7,12 @@ const configuration = require('../knexfile')[environment]
 const db = require('knex')(configuration)
 
 module.exports = async (req, res) => {
-  const { email } = req.query
+  const { email, password } = req.query
   try {
     const user = await db('users').where({ email }).first()
-    res.status(200).json(user)
+    if (!user) {
+      await db('users').insert({ email, password })
+    }
   } catch (error) {
     res.status(500).json({ error })
   }
