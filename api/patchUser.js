@@ -10,7 +10,7 @@ module.exports = async (req, res) => {
   const user = req.query;
 
   try {
-    await db('users').where('id', 1).update({
+    await db('users').where(user.email).update({
       username: user.name,
       password: user.password,
       location: user.location,
