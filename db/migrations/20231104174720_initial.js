@@ -31,7 +31,7 @@ exports.up = function(knex) {
     })
     .createTable('saved_birds', (table) => {
       table.increments('id').primary();
-      table.string('speciesCode').unsigned().unique();
+      table.string('speciesCode').unsigned();
       table.integer('user_id').unsigned();
       table.integer('bird_id').unsigned();
       table.foreign('speciesCode').references('birds.speciesCode');
