@@ -8,9 +8,9 @@ const db = require('knex')(configuration)
 
 module.exports = async (req, res) => {
   const user = req.query;
-  console.log(user)
+  
   try {
-    await db('users').where(user.email).update({
+    await db('users').where({email: user.email}).update({
       // username: user.name,
       // password: user.password,
       location: user.location,
@@ -19,8 +19,10 @@ module.exports = async (req, res) => {
       // state: user.state,
       updated_at: new Date()
     });
+
     res.status(200).json(user);
   } catch (error) {
+    console.error('Error updating user:', error)
     res.status(500).json({ error });
   }
 };
