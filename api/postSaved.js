@@ -8,21 +8,18 @@ const db = require('knex')(configuration)
 
 module.exports = async (req, res) => {
   try {
+    console.log('POST req.query', req.query)
     const birdData = req.query
-    const userEmail = req.query.email
+    const userID = req.query.user_id
 
     await db.transaction(async (trx) => {
       const existingBird = await trx('birds')
         .where('speciesCode', birdData.speciesCode)
         .first();
 
-      const user = await trx('users')
-        .where('email', userEmail)
-        .first();
-
       if (existingBird) {
         await trx('saved_birds').insert({
-          user_id: user.id,
+          user_id: userID,
           bird_id: existingBird.id,
           speciesCode: existingBird.speciesCode,
         });
@@ -30,7 +27,7 @@ module.exports = async (req, res) => {
       } else {
         const newBirdId = await insertBird(birdData, trx);
         await trx('saved_birds').insert({
-          user_id,
+          user_id: userID,
           bird_id: newBirdId,
           speciesCode: birdData.speciesCode,
         });
