@@ -7,8 +7,10 @@ const configuration = require('../knexfile')[environment]
 const db = require('knex')(configuration)
 
 module.exports = async (req, res) => {
+  const { id } = req.query
+  
   try {
-    const birdIds = await db('saved_birds').where('user_id', 1).select('bird_id');
+    const birdIds = await db('saved_birds').where('user_id', id).select('bird_id')
     const birdPromises = birdIds.map(birdId => {
       return db('birds').where('id', birdId.bird_id).first();
     });
