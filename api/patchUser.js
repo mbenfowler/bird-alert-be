@@ -8,7 +8,7 @@ const db = require('knex')(configuration)
 
 module.exports = async (req, res) => {
   const user = req.query;
-
+  console.log(user)
   try {
     await db('users').where(user.email).update({
       username: user.name,
