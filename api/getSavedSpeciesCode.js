@@ -8,10 +8,11 @@ const db = require('knex')(configuration)
 
 module.exports = async (req, res) => {
   try {
-    const speciesCode = req.query.speciesCode; // Change to query parameter
+    const speciesCode = req.query.speciesCode
+    const userID = req.query.user_id
     const bird = await db('saved_birds')
       .where('speciesCode', speciesCode)
-      .where('user_id', 1)
+      .where('user_id', userID)
       .first();
 
     res.status(200).json(!!bird);
