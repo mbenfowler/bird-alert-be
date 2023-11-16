@@ -20,6 +20,10 @@ module.exports = async (req, res) => {
 
     res.status(200).json({ success: true })
   } catch (error) {
+    console.error("Error creating user:", error);
+    if (error.response && error.response.body) {
+      console.log("Response body:", error.response.body);
+    }
     res.status(500).json({ error })
   }
 }
