@@ -1,4 +1,5 @@
 const { configDotenv } = require("dotenv")
+import getUserExists from "./getUserExists"
 
 configDotenv()
 
@@ -7,15 +8,17 @@ const configuration = require('../knexfile')[environment]
 const db = require('knex')(configuration)
 
 module.exports = async (req, res) => {
-  console.log('Received createUser request:', {
-    method: req.method,
-    url: req.url,
-    headers: req.headers,
-    body: req.body,
-    timestamp: new Date().toISOString(),
-  });
   
   const { email, password } = req.query
+
+  const isDuplicate = await getUserExists(email)
+
+  if (isDuplicate) {
+    // Handle duplicate email error on the frontend
+    console.error('Duplicate email detected');
+    return;
+  }
+
   try {
     await db('users').insert({
       email,
