@@ -37,6 +37,7 @@ exports.up = function(knex) {
       table.foreign('speciesCode').references('birds.speciesCode');
       table.foreign('user_id').references('users.id');
       table.foreign('bird_id').references('birds.id');
+      table.unique(['user_id', 'bird_id']);
       table.timestamps(true, true);
     });
 };
