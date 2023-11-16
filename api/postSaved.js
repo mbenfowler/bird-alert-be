@@ -8,32 +8,33 @@ const db = require('knex')(configuration)
 
 module.exports = async (req, res) => {
   try {
-    console.log('POST req.query', req.query)
-    const birdData = req.query
-    const userID = req.query.user_id
+    if (req.method === 'POST') {
+      const birdData = req.query
+      const userID = req.query.user_id
 
-    await db.transaction(async (trx) => {
-      const existingBird = await trx('birds')
-        .where('speciesCode', birdData.speciesCode)
-        .first();
+      await db.transaction(async (trx) => {
+        const existingBird = await trx('birds')
+          .where('speciesCode', birdData.speciesCode)
+          .first();
 
-      if (existingBird) {
-        await trx('saved_birds').insert({
-          user_id: userID,
-          bird_id: existingBird.id,
-          speciesCode: existingBird.speciesCode,
-        });
-        return existingBird;
-      } else {
-        const newBirdId = await insertBird(birdData, trx);
-        await trx('saved_birds').insert({
-          user_id: userID,
-          bird_id: newBirdId,
-          speciesCode: birdData.speciesCode,
-        });
-        return birdData;
-      }
-    });
+        if (existingBird) {
+          await trx('saved_birds').insert({
+            user_id: userID,
+            bird_id: existingBird.id,
+            speciesCode: existingBird.speciesCode,
+          });
+          return existingBird;
+        } else {
+          const newBirdId = await insertBird(birdData, trx);
+          await trx('saved_birds').insert({
+            user_id: userID,
+            bird_id: newBirdId,
+            speciesCode: birdData.speciesCode,
+          });
+          return birdData;
+        }
+      });
+    }
 
     res.status(201).json(birdData);
   } catch (error) {

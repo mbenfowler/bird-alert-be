@@ -7,7 +7,7 @@ const configuration = require('../knexfile')[environment]
 const db = require('knex')(configuration)
 
 module.exports = async (req, res) => {
-  console.log('DELETE req.query', req.query)
+
   try {
     const speciesCode = req.query.speciesCode
     const userID = req.query.user_id
