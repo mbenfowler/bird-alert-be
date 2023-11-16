@@ -7,6 +7,14 @@ const configuration = require('../knexfile')[environment]
 const db = require('knex')(configuration)
 
 module.exports = async (req, res) => {
+  console.log('Received createUser request:', {
+    method: req.method,
+    url: req.url,
+    headers: req.headers,
+    body: req.body,
+    timestamp: new Date().toISOString(),
+  });
+  
   const { email, password } = req.query
   try {
     await db('users').insert({
