@@ -10,15 +10,18 @@ module.exports = async (req, res) => {
   const { email, password } = req.query
 
   try {
-    await db('users').insert({
-      email,
-      password,
-      username: '',
-      phone: '',
-      location: '',
-      state: ''
+    await db.transaction(async (trx) => {
+      await trx('users').insert({
+        email,
+        password,
+        username: '',
+        phone: '',
+        location: '',
+        state: ''
+      })
     })
 
+    console.log('Exiting createUser transaction block successfully.')
     res.status(200).json({ success: true })
   } catch (error) {
     console.error("Error creating user:", error);
