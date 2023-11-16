@@ -12,7 +12,7 @@ module.exports = async (req, res) => {
   const { email, password } = req.query
 
   const isDuplicate = await getUserExists(email)
-
+  console.log('isDuplicate:', isDuplicate);
   if (isDuplicate.userExists) {
     // Handle duplicate email error on the frontend
     console.error('Duplicate email detected');
