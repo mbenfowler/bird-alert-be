@@ -8,8 +8,8 @@ const db = require('knex')(configuration)
 
 module.exports = async (req, res) => {
   try {
+    const birdData = req.query
     if (req.method === 'POST') {
-      const birdData = req.query
       const userID = req.query.user_id
 
       await db.transaction(async (trx) => {
