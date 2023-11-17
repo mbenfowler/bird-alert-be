@@ -56,6 +56,7 @@ const insertBird = async (birdData, trx) => {
         familyComName: birdData.familyComName,
         familySciName: birdData.familySciName,
         wikiURL: birdData.wikiURL,
+        birdImg: birdData.birdImg,
         taxonOrder: birdData.taxonOrder
       }, 'id');
     return newBirdId.id;
