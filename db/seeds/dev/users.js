@@ -27,7 +27,7 @@ exports.seed = async function(knex) {
       familyCode: 'anatid1',
       familyComName: 'Ducks, Geese, and Waterfowl',
       familySciName: 'Anatidae',
-      birdImg: 'https://images.unsplash.com/photo-1542252223-c7f5b1142f93',
+      birdImg: 'https://images.unsplash.com/photo-1542252223-c7f5b1142f93?q=75&fm=jpg&w=400&fit=max',
       wikiURL: 'https://en.wikipedia.org/?curid=199013',
       taxonOrder: 256
     }, ['id', 'speciesCode'])
