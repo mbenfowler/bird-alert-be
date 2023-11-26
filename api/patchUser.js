@@ -16,7 +16,7 @@ module.exports = async (req, res) => {
       location: user.location,
       email: user.email,
       phone: user.phone,
-      // state: user.state,
+      state: user.state,
       updated_at: new Date()
     });
 
