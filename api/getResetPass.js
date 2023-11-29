@@ -1,5 +1,7 @@
 const nodemailer = require('nodemailer');
-require('dotenv').config();
+const { configDotenv } = require("dotenv")
+
+configDotenv()
 
 const sendResetPasswordEmail = async (email) => {
   const transporter = nodemailer.createTransport({
