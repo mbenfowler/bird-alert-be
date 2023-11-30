@@ -6,10 +6,16 @@ configDotenv()
 const sendResetPasswordEmail = async (email) => {
   const transporter = nodemailer.createTransport({
     service: 'gmail',
+    port: 465,
+    secure: true,
     auth: {
-      user: 'birdalert.info@gmail.com',
-      pass: process.env.APP_PW,
-    },
+        type: 'OAuth2',
+        user: process.env.APP_EMAIL,
+        clientId: process.env.APP_CLIENT_ID,
+        clientSecret: process.env.APP_CLIENT_SECRET,
+        refreshToken: process.env.APP_REFRESH_TOKEN,
+        accessToken: process.env.APP_ACCESS_TOKEN
+    }
   });
 
   try {
