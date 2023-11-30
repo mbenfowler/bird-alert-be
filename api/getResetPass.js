@@ -1,9 +1,15 @@
-const nodemailer = require('nodemailer');
+const nodemailer = require('nodemailer')
+const { google } = require('googleapis')
 const { configDotenv } = require("dotenv")
 
 configDotenv()
 
+const redirectURI = 'https://developers.google.com/oauthplayground'
+const oAuthClient2 = new google.auth.OAuth2(process.env.APP_CLIENT_ID, process.env.APP_CLIENT_SECRET, redirectURI)
+oAuthClient2.setCredentials({ refresh_token: process.env.APP_REFRESH_TOKEN })
+
 const sendResetPasswordEmail = async (email) => {
+  const accessToken = await oAuthClient2.getAccessToken()
   const transporter = nodemailer.createTransport({
     service: 'gmail',
     port: 465,
@@ -14,7 +20,7 @@ const sendResetPasswordEmail = async (email) => {
         clientId: process.env.APP_CLIENT_ID,
         clientSecret: process.env.APP_CLIENT_SECRET,
         refreshToken: process.env.APP_REFRESH_TOKEN,
-        accessToken: process.env.APP_ACCESS_TOKEN
+        accessToken: accessToken
     }
   });
 
