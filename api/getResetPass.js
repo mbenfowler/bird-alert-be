@@ -32,6 +32,9 @@ const sendResetPasswordEmail = async (email) => {
       text: `Reset password link: https://bird-alert.vercel.app/reset/${email}`,
       html: `<h2>Please click the link to reset your password</h2><p>https://bird-alert.vercel.app/reset/${email}</p><h3>Having trouble?</h3><p> Feel free to reach out with questions by replying to this email.</p>`,
     })
+
+    return info
+
   } catch(error) {
     console.error('Error sending reset password email:', error);
   }
@@ -43,7 +46,9 @@ module.exports = async (req, res) => {
 
     // Add validation logic for the email address if needed
 
-    sendResetPasswordEmail(email);
+    sendResetPasswordEmail(email)
+      .then(info => console.log('Email sent:', info))
+      .catch(error => console.error('Error sending reset password email:', error))
 
     return {
       statusCode: 200,
