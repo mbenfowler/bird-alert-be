@@ -17,8 +17,8 @@ const sendResetPasswordEmail = async (email) => {
       from: '"bird-alert Admin" <birdalert.info@gmail.com>',
       to: email,
       subject: "bird-alert reset password link",
-      text: "Reset password link: https://bird-alert.vercel.app/reset",
-      html: "<h2>Please click the link to reset your password</h2><p>https://bird-alert.vercel.app/reset</p><h3>Having trouble?</h3><p> Feel free to reach out with questions by replying to this email.</p>",
+      text: `Reset password link: https://bird-alert.vercel.app/reset/${email}`,
+      html: `<h2>Please click the link to reset your password</h2><p>https://bird-alert.vercel.app/reset/${email}</p><h3>Having trouble?</h3><p> Feel free to reach out with questions by replying to this email.</p>`,
     })
   } catch(error) {
     console.error('Error sending reset password email:', error);

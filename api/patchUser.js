@@ -10,15 +10,17 @@ module.exports = async (req, res) => {
   const user = req.query;
   
   try {
-    await db('users').where({email: user.email}).update({
-      // username: user.name,
-      // password: user.password,
-      location: user.location,
+    const updateUser = {
       email: user.email,
-      phone: user.phone,
-      state: user.state,
       updated_at: new Date()
-    });
+    };
+
+    user.password && (updateUser.password = user.password)
+    user.state && (updateUser.state = user.state)
+    user.location && (updateUser.location = user.location)
+    user.phone && (updateUser.phone = user.phone)
+
+    await db('users').where({email: user.email}).update(updateUser);
 
     res.status(200).json(user);
   } catch (error) {
