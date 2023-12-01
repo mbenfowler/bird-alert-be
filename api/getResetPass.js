@@ -11,7 +11,7 @@ oAuthClient2.setCredentials({ refresh_token: process.env.APP_REFRESH_TOKEN })
 const sendResetPasswordEmail = async (email) => {
   const accessToken = await oAuthClient2.getAccessToken()
   const transporter = nodemailer.createTransport({
-    service: 'gmail',
+    host: 'smtp.gmail.com',
     port: 465,
     secure: true,
     auth: {
@@ -26,9 +26,9 @@ const sendResetPasswordEmail = async (email) => {
 
   try {
     const info = await transporter.sendMail({
-      from: '"bird-alert Admin" <birdalert.info@gmail.com>',
+      from: 'bird-alert Admin <birdalert.info@gmail.com>',
       to: email,
-      subject: "bird-alert reset password link",
+      subject: 'bird-alert reset password link',
       text: `Reset password link: https://bird-alert.vercel.app/reset/${email}`,
       html: `<h2>Please click the link to reset your password</h2><p>https://bird-alert.vercel.app/reset/${email}</p><h3>Having trouble?</h3><p> Feel free to reach out with questions by replying to this email.</p>`,
     })
@@ -46,14 +46,13 @@ module.exports = async (req, res) => {
 
     // Add validation logic for the email address if needed
 
-    sendResetPasswordEmail(email)
-      .then(info => console.log('Email sent:', info))
-      .catch(error => console.error('Error sending reset password email:', error))
-
-    return {
-      statusCode: 200,
-      body: JSON.stringify({ message: 'Reset password email sent successfully.' }),
-    };
+    const info = await sendResetPasswordEmail(email)
+    if (info.accepted.length) {
+      return {
+        statusCode: 200,
+        body: JSON.stringify({ message: 'Reset password email sent successfully.' }),
+      };
+    }
   } catch (error) {
     console.error('Error sending reset password email:', error);
     return {
