@@ -12,12 +12,12 @@ module.exports = async (req, res) => {
   try {
     const updateUser = {
       email: user.email,
+      state: user.state,
+      location: user.location,
       updated_at: new Date()
     };
 
     user.password && (updateUser.password = user.password)
-    user.state && (updateUser.state = user.state)
-    user.location && (updateUser.location = user.location)
     user.phone && (updateUser.phone = user.phone)
 
     await db('users').where({email: user.email}).update(updateUser);

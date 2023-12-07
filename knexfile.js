@@ -6,7 +6,7 @@ require('dotenv').config()
 module.exports = {
   development: {
     client: 'pg',
-    connection: process.env.PROD_PG_URL,
+    connection: process.env.DEV_PG_URL,
     pool: {
       min: 2,
       max: 20
