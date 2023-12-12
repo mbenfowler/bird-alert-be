@@ -26,7 +26,10 @@ const sendAlertDigestEmail = async (email, alerts) => {
         clientSecret: process.env.APP_CLIENT_SECRET,
         refreshToken: process.env.APP_REFRESH_TOKEN,
         accessToken: accessToken
-    }
+    },
+    connectionTimeout: 5000,
+    greetingTimeout: 5000,
+    socketTimeout: 5000
   });
 
   const birdInfo = alerts.map(alert => {
