@@ -49,7 +49,7 @@ const sendAlertDigestEmail = async (email, alerts) => {
     return info
 
   } catch(error) {
-    console.error('Error sending reset password email:', error);
+    console.error('Error sending alert digest emails:', error);
   }
 }
 
