@@ -83,7 +83,9 @@ module.exports = async (req, res) => {
 
         const filteredAlertedBirds = alertedBirds.filter(alertedBird => alertedBird !== null);
 
-        await sendAlertDigestEmail(email, filteredAlertedBirds);
+        if (filteredAlertedBirds.length > 0) {
+          await sendAlertDigestEmail(email, filteredAlertedBirds);
+        }
       }
     }));
 
