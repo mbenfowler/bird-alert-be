@@ -46,7 +46,7 @@ const sendAlertDigestEmail = async (email, alerts) => {
       to: email,
       subject: 'Your daily Bird Alert digest!',
       text: `Review your alerts in-app: https://bird-alert.vercel.app/`,
-      html: `<h2>Birds on your watch list have been spotted nearby!</h2>${birdInfo}<h3>Having trouble?</h3><p> Feel free to reach out with questions by replying to this email.</p>`,
+      html: `<h2>Birds on your watch list have been spotted nearby!</h2>${birdInfo.join('')}<h3>Having trouble?</h3><p> Feel free to reach out with questions by replying to this email.</p>`,
     })
 
     return info
