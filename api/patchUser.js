@@ -12,15 +12,19 @@ module.exports = async (req, res) => {
   try {
     const updateUser = {
       email: user.email,
-      state: user.state,
-      location: user.location,
       updated_at: new Date()
     };
 
+    user.state && (updateUser.state = user.state)
+    user.location && (updateUser.location = user.location)
+    const confirmedBool = user.confirmed === 'true' ? true : false
+    user.confirmed && (updateUser.email_confirmed = confirmedBool)
+    user.alert_digest_email_enabled && (updateUser.alert_digest_email_enabled = user.alert_digest_email_enabled)
+    user.rare_sightings_email_enabled && (updateUser.rare_sightings_email_enabled = user.rare_sightings_email_enabled)
     user.password && (updateUser.password = user.password)
     user.phone && (updateUser.phone = user.phone)
 
-    await db('users').where({email: user.email}).update(updateUser);
+    await db('users').where({email: user.emailLookup}).update(updateUser);
 
     res.status(200).json(user);
   } catch (error) {
