@@ -46,7 +46,7 @@ const sendAlertDigestEmail = async (email, alerts) => {
       to: email,
       subject: 'Your daily Bird Alert digest!',
       text: `Review your alerts in-app: https://bird-alert.vercel.app/`,
-      html: `<h2>Birds on your watch list have been spotted nearby!</h2>${birdInfo.join('')}<h3>Having trouble?</h3><p> Feel free to reach out with questions by replying to this email.</p>`,
+      html: `<h2>Birds on your watch list have been spotted nearby!</h2>${birdInfo.join('')}<h3>Having trouble?</h3><p>Feel free to reach out with questions by replying to this email.</p><p>Click <a href="https://bird-alert.vercel.app/unsubscribe/${email}/alert_digest_email_enabled">here</a> to unsubscribe from this digest</p>`,
     })
 
     return info
@@ -58,7 +58,7 @@ const sendAlertDigestEmail = async (email, alerts) => {
 
 module.exports = async (req, res) => {
   try {
-    const allUsers = await db('users').select();
+    const allUsers = await db('users').select().where('alert_digest_email_enabled', true);
     await Promise.all(allUsers.map(async user => {
       const { email, location } = user;
       const savedBirds = await db('saved_birds').where('user_id', user.id).select('speciesCode');
