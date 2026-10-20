@@ -8,6 +8,7 @@ const {
 } = require('../../lib/auth')
 const { verifyToken, passwordVersion } = require('../../lib/tokens')
 const { sendConfirmationEmail, sendPasswordResetEmail } = require('../../lib/mailer')
+const { assertNotThrottled, recordAttempt, clearAttempts } = require('../../lib/throttle')
 
 const EMAIL_PREFERENCES = ['alert_digest_email_enabled', 'rare_sightings_email_enabled']
 
@@ -32,7 +33,7 @@ const actions = {
       if (await findUserByEmail(email)) throw new HttpError(409, 'An account with that email already exists')
 
       const [user] = await db('users')
-        .insert({ email, password_hash: await hashPassword(password), username: '', phone: '', location: '', state: '' })
+        .insert({ email, password_hash: await hashPassword(password), phone: '', location: '', state: '' })
         .returning('*')
 
       createSession(res, user)
@@ -45,10 +46,16 @@ const actions = {
   login: {
     methods: ['POST'],
     handler: async (req, res) => {
-      const { email, password } = body(req)
+      const email = normalizeEmail(body(req).email)
+      const { password } = body(req)
+      await assertNotThrottled('login', email)
       const user = await findUserByEmail(email)
       const ok = user && (await verifyPassword(String(password || ''), user.password_hash))
-      if (!ok) throw new HttpError(401, 'Incorrect email or password')
+      if (!ok) {
+        await recordAttempt('login', email)
+        throw new HttpError(401, 'Incorrect email or password')
+      }
+      await clearAttempts('login', email)
       createSession(res, user)
       res.status(200).json(sanitizeUser(user))
     }
@@ -77,7 +84,10 @@ const actions = {
   forgot: {
     methods: ['POST'],
     handler: async (req, res) => {
-      const user = await findUserByEmail(body(req).email)
+      const email = normalizeEmail(body(req).email)
+      await assertNotThrottled('forgot', email)
+      await recordAttempt('forgot', email)
+      const user = await findUserByEmail(email)
       if (user) await sendPasswordResetEmail(user)
       res.status(200).json({ ok: true })
     }

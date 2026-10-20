@@ -29,7 +29,8 @@ All request and response bodies are JSON. Authenticated routes read an `HttpOnly
 | GET | `/api/ebird/notable?region=&back=` | no | notable observations, `back` 1–30 days (cached 5 min) |
 | GET | `/api/ebird/species-observations?region=&code=&back=` | no | recent observations of one species (cached 5 min) |
 | GET | `/api/ebird/regions?state=` | no | eBird subregions for a US state (cached a week) |
-| GET | `/api/alertDigestMailer` | cron | daily digest; requires `Authorization: Bearer $CRON_SECRET` when that variable is set |
+| GET | `/api/alertDigestMailer` | cron | daily watch-list digest (one eBird call per region); requires `Authorization: Bearer $CRON_SECRET` when that variable is set |
+| GET | `/api/rareSightingsMailer` | cron | daily notable-sightings email for users who opted in; same auth |
 
 Email links (`/confirm/:token`, `/reset/:token`, `/unsubscribe/:token`) carry signed, purpose-scoped tokens. Reset tokens are bound to the current password hash, so each works once.
 
@@ -45,6 +46,10 @@ npm run dev            # vercel dev on http://localhost:3001
 
 Outside production, email is printed to the dev server log instead of sent, so confirmation and reset links can be copied from there. Set `FORCE_SEND_MAIL=true` to send for real.
 
+## Maintenance
+
+`node scripts/backfill-images.js` fills in pictures for stored birds that have none (Nuthatch, then Wikipedia's lead image). Prefix with `NODE_ENV=production PROD_PG_URL=...` to run against production.
+
 ## Deploying
 
-Set these in the Vercel project: `PROD_PG_URL`, `SESSION_SECRET`, `CRON_SECRET`, `APP_BASE_URL`, `EBIRD_API_KEY`, `NUTHATCH_API_KEY` (bird images; optional), and the four `APP_*` Gmail OAuth values. Run `NODE_ENV=production npx knex migrate:latest` against the production database before the first deploy of a migration.
+Set these in the Vercel project: `PROD_PG_URL`, `SESSION_SECRET`, `CRON_SECRET`, `APP_BASE_URL`, `EBIRD_API_KEY`, `NUTHATCH_API_KEY` (bird images; optional), and `APP_EMAIL` plus `APP_PW` (a Gmail app password). Run `NODE_ENV=production npx knex migrate:latest` against the production database before the first deploy of a migration.
