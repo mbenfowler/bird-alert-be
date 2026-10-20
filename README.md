@@ -29,6 +29,12 @@ All request and response bodies are JSON. Authenticated routes read an `HttpOnly
 | GET | `/api/ebird/notable?region=&back=` | no | notable observations, `back` 1–30 days (cached 5 min) |
 | GET | `/api/ebird/species-observations?region=&code=&back=` | no | recent observations of one species (cached 5 min) |
 | GET | `/api/ebird/regions?state=` | no | eBird subregions for a US state (cached a week) |
+| GET | `/api/push/public-key` | no | VAPID public key for subscribing |
+| POST | `/api/push/subscribe` | yes | browser push subscription → stored per device (idempotent) |
+| POST | `/api/push/unsubscribe` | yes | `{ endpoint }` |
+| GET | `/api/push/status?endpoint=` | yes | `{ subscribed, devices }` |
+| POST | `/api/push/test` | yes | sends a test notification to the user's devices |
+| GET | `/api/push/alerts` | cron | hourly (GitHub Actions): pushes new watch-list sightings; each observation announced once via `push_log`; also prunes old throttle and log rows |
 | GET | `/api/alertDigestMailer` | cron | daily watch-list digest (one eBird call per region; each send logged in `digest_log`, never twice a day); requires `Authorization: Bearer $CRON_SECRET` when that variable is set |
 | GET | `/api/rareSightingsMailer` | cron | daily notable-sightings email for users who opted in; same auth |
 
@@ -65,4 +71,4 @@ pg_restore --clean --if-exists --no-owner --dbname "$TARGET_PG_URL" restore.dump
 
 ## Deploying
 
-Set these in the Vercel project: `PROD_PG_URL`, `SESSION_SECRET`, `CRON_SECRET`, `APP_BASE_URL`, `EBIRD_API_KEY`, `NUTHATCH_API_KEY` (bird images; optional), and `APP_EMAIL` plus `APP_PW` (a Gmail app password). Run `NODE_ENV=production npx knex migrate:latest` against the production database before the first deploy of a migration.
+Set these in the Vercel project: `PROD_PG_URL`, `SESSION_SECRET`, `CRON_SECRET`, `APP_BASE_URL`, `EBIRD_API_KEY`, `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY`, `VAPID_SUBJECT` (web push; generate the keys with `npx web-push generate-vapid-keys`), `NUTHATCH_API_KEY` (bird images; optional), and `APP_EMAIL` plus `APP_PW` (a Gmail app password). Run `NODE_ENV=production npx knex migrate:latest` against the production database before the first deploy of a migration.

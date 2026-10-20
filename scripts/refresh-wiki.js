@@ -4,7 +4,7 @@
 // image get the current thumbnail.
 // Usage: node scripts/refresh-wiki.js            (DEV_PG_URL)
 //        NODE_ENV=production PROD_PG_URL=... node scripts/refresh-wiki.js
-require('dotenv').config()
+require('dotenv').config({ quiet: true })
 const db = require('../lib/db')
 const { fetchWiki, isSpecies } = require('../lib/enrich')
 

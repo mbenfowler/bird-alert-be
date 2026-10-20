@@ -8,7 +8,8 @@
     "jsonwebtoken": "^9.0.3",
     "knex": "^3.0.1",
     "nodemailer": "^10.1.2",
-    "pg": "^8.11.3"
+    "pg": "^8.11.3",
+    "web-push": "^3.6.7"
   },
   "engines": {
     "node": "22.x"

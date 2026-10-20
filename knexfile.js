@@ -1,4 +1,4 @@
-require('dotenv').config()
+require('dotenv').config({ quiet: true })
 
 /**
  * @type { Object.<string, import("knex").Knex.Config> }
