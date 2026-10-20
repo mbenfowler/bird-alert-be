@@ -33,7 +33,7 @@ const actions = {
       if (await findUserByEmail(email)) throw new HttpError(409, 'An account with that email already exists')
 
       const [user] = await db('users')
-        .insert({ email, password_hash: await hashPassword(password), phone: '', location: '', state: '' })
+        .insert({ email, password_hash: await hashPassword(password), location: '', state: '' })
         .returning('*')
 
       createSession(res, user)
