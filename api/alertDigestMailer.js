@@ -7,7 +7,8 @@ const { sendAlertDigestEmail } = require('../lib/mailer')
 // GET /api/alertDigestMailer (daily cron) -> emails subscribed, confirmed users whose watch-list birds were seen yesterday
 module.exports = route(['GET'], async (req, res) => {
   assertCronCaller(req)
-  const summary = await runDigest({
+  const result = await runDigest({
+    kind: 'watchlist',
     preference: 'alert_digest_email_enabled',
     fetchSightings: (region) => ebird.recentObservations(region, 1),
     select: async (user, sightings) => {
@@ -16,5 +17,5 @@ module.exports = route(['GET'], async (req, res) => {
     },
     send: sendAlertDigestEmail
   })
-  res.status(200).json({ sent: summary.length, summary })
+  res.status(200).json(result)
 })

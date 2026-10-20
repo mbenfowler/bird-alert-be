@@ -12,7 +12,6 @@ exports.seed = async function(knex) {
     await knex('users').insert({
       password_hash,
       email: 'robinware456@gmail.com',
-      phone: '555-555-5555',
       location: '',
       state: '',
       email_confirmed: false,
@@ -22,7 +21,6 @@ exports.seed = async function(knex) {
     await knex('users').insert({
       password_hash,
       email: 'mbfowler@gmail.com',
-      phone: '555-555-5556',
       location: 'US-GA-139',
       state: 'GA',
       email_confirmed: true,
@@ -32,7 +30,6 @@ exports.seed = async function(knex) {
     await knex('users').insert({
       password_hash,
       email: 'joyce.fowler@bellsouth.net',
-      phone: '',
       location: 'US-GA-139',
       state: 'GA',
       email_confirmed: true,
