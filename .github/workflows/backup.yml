@@ -29,6 +29,22 @@ jobs:
           gpg --batch --yes --symmetric --cipher-algo AES256 --passphrase "$BACKUP_PASSPHRASE" "bird-alert-$stamp.dump"
           rm "bird-alert-$stamp.dump"
           ls -la *.gpg
+      - name: Verify the encrypted file decrypts and restores
+        env:
+          BACKUP_PASSPHRASE: ${{ secrets.BACKUP_PASSPHRASE }}
+        run: |
+          file=$(ls *.dump.gpg)
+          gpg --batch --yes --pinentry-mode loopback --passphrase "$BACKUP_PASSPHRASE" --output verify.dump --decrypt "$file"
+          pg_restore --list verify.dump > toc.txt
+          for table in users birds saved_birds digest_log knex_migrations; do
+            grep -q "TABLE DATA public $table " toc.txt || { echo "missing table $table in dump"; exit 1; }
+          done
+          echo "dump contains: $(grep -c 'TABLE DATA' toc.txt) tables with data"
+          for table in users birds saved_birds; do
+            rows=$(pg_restore --data-only --table="$table" -f - verify.dump | awk '/^COPY/{f=1;next} /^\\\.$/{f=0} f' | wc -l)
+            echo "  $table: $rows rows"
+          done
+          rm -f verify.dump toc.txt
       - uses: actions/upload-artifact@v4
         with:
           name: bird-alert-db-${{ github.run_id }}
