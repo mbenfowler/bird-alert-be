@@ -67,7 +67,7 @@ const actions = {
     }
   },
 
-  // POST /api/push/test -> sends a test notification to all of the user's devices
+  // POST /api/push/test { endpoint? } -> sends a test notification to this device (or all of the user's devices)
   test: {
     methods: ['POST'],
     handler: async (req, res) => {
@@ -89,12 +89,13 @@ const actions = {
           console.error('Test preview sighting failed, sending a plain test:', error.message)
         }
       }
+      const { endpoint } = body(req)
       const result = await push.sendToUser(user.id, payload || {
         title: 'Bird Alert notifications are on',
         body: 'You will hear from us when a bird on your watch list is reported nearby.',
         tag: 'bird-alert-test',
         data: { url: '/' }
-      })
+      }, { endpoint: typeof endpoint === 'string' ? endpoint : undefined })
       res.status(200).json(result)
     }
   },
