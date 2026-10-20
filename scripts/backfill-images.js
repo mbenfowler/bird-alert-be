@@ -2,7 +2,7 @@
 // Fills in birdImg for stored birds that have none, using Nuthatch then Wikipedia.
 // Usage: node scripts/backfill-images.js            (DEV_PG_URL)
 //        NODE_ENV=production PROD_PG_URL=... node scripts/backfill-images.js
-require('dotenv').config()
+require('dotenv').config({ quiet: true })
 const db = require('../lib/db')
 const { lookupImage } = require('../lib/enrich')
 

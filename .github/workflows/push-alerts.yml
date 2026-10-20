@@ -1,0 +1,21 @@
+name: Push alerts
+
+# Vercel Hobby crons run at most daily, so GitHub drives the hourly watch-list push.
+# Needs the CRON_SECRET repository secret, equal to the backend's CRON_SECRET env var.
+on:
+  schedule:
+    - cron: '17 * * * *'
+  workflow_dispatch:
+
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Call the push alerts endpoint
+        env:
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+        run: |
+          test -n "$CRON_SECRET" || { echo "CRON_SECRET secret is not set"; exit 1; }
+          curl --fail-with-body --silent --show-error --max-time 120 \
+            -H "Authorization: Bearer $CRON_SECRET" \
+            https://bird-alert-be.vercel.app/api/push/alerts
