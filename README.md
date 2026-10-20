@@ -33,7 +33,7 @@ All request and response bodies are JSON. Authenticated routes read an `HttpOnly
 | POST | `/api/push/subscribe` | yes | browser push subscription → stored per device (idempotent) |
 | POST | `/api/push/unsubscribe` | yes | `{ endpoint }` |
 | GET | `/api/push/status?endpoint=` | yes | `{ subscribed, devices }` |
-| POST | `/api/push/test` | yes | sends a test notification to the user's devices |
+| POST | `/api/push/test` | yes | `{ endpoint? }` sends a test notification to that device, or all of the user's devices |
 | GET | `/api/push/alerts` | cron | hourly (GitHub Actions): pushes new watch-list and/or notable sightings per the user's push preferences, one rich notification per sighting (bird photo, map, actions) up to four per run plus a summary for the rest; each observation announced once via `push_log` whichever feed it came from; notable-only news goes out immediately, or at most every 6 hours for users who chose batching; also prunes old throttle and log rows |
 | GET | `/api/map?lat=&lng=&zoom=` | no | JPEG map with a pin, stitched from OpenStreetMap tiles; the picture on push notifications (cached a month) |
 | GET | `/api/alertDigestMailer` | cron | daily watch-list digest (one eBird call per region; each send logged in `digest_log`, never twice a day); requires `Authorization: Bearer $CRON_SECRET` when that variable is set |
