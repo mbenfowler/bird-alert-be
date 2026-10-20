@@ -9,7 +9,7 @@ const { lookupImage } = require('../lib/enrich')
 const CONCURRENCY = 4
 
 const main = async () => {
-  const birds = await db('birds').whereNull('birdImg').orWhere('birdImg', '').select('id', 'comName', 'sciName', 'speciesCode')
+  const birds = await db('birds').whereNull('birdImg').orWhere('birdImg', '').select('id', 'comName', 'sciName', 'speciesCode', 'category')
   console.log(`${birds.length} birds without an image`)
   let found = 0
   for (let i = 0; i < birds.length; i += CONCURRENCY) {
