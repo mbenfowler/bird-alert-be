@@ -18,7 +18,7 @@ All request and response bodies are JSON. Authenticated routes read an `HttpOnly
 | POST | `/api/auth/confirm` | no | `{ token }` marks the email confirmed |
 | POST | `/api/auth/resend-confirmation` | yes | re-sends the confirmation email |
 | POST | `/api/auth/unsubscribe` | no | `{ token }` turns off one email preference |
-| PATCH | `/api/user` | yes | update `email`, `state`, `location`, `alert_digest_email_enabled`, `rare_sightings_email_enabled`, `push_watchlist_enabled`, `push_notable_enabled` |
+| PATCH | `/api/user` | yes | update `email`, `state`, `location`, `alert_digest_email_enabled`, `rare_sightings_email_enabled`, `push_watchlist_enabled`, `push_notable_enabled`, `push_notable_batched` |
 | GET | `/api/saved` | yes | the user's watch list |
 | POST | `/api/saved` | yes | `{ speciesCode }` → adds to watch list, resolving unknown codes first (idempotent) |
 | DELETE | `/api/saved?speciesCode=` | yes | removes from watch list |
@@ -34,7 +34,7 @@ All request and response bodies are JSON. Authenticated routes read an `HttpOnly
 | POST | `/api/push/unsubscribe` | yes | `{ endpoint }` |
 | GET | `/api/push/status?endpoint=` | yes | `{ subscribed, devices }` |
 | POST | `/api/push/test` | yes | sends a test notification to the user's devices |
-| GET | `/api/push/alerts` | cron | hourly (GitHub Actions): pushes new watch-list and/or notable sightings per the user's push preferences, merged into one notification; each observation announced once via `push_log` whichever feed it came from; notable-only news waits 6 hours between pushes; also prunes old throttle and log rows |
+| GET | `/api/push/alerts` | cron | hourly (GitHub Actions): pushes new watch-list and/or notable sightings per the user's push preferences, merged into one notification; each observation announced once via `push_log` whichever feed it came from; notable-only news goes out immediately, or at most every 6 hours for users who chose batching; also prunes old throttle and log rows |
 | GET | `/api/alertDigestMailer` | cron | daily watch-list digest (one eBird call per region; each send logged in `digest_log`, never twice a day); requires `Authorization: Bearer $CRON_SECRET` when that variable is set |
 | GET | `/api/rareSightingsMailer` | cron | daily notable-sightings email for users who opted in; same auth |
 
