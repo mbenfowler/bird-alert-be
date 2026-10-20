@@ -4,6 +4,8 @@ const { requireUser } = require('../../lib/auth')
 const { assertCronCaller } = require('../../lib/digest')
 const push = require('../../lib/push')
 const { runPushAlerts } = require('../../lib/pushAlerts')
+const { sightingNotification } = require('../../lib/notifications')
+const ebird = require('../../lib/ebird')
 
 const assertConfigured = () => {
   if (!push.configured) throw new HttpError(503, 'Push notifications are not configured on the server')
@@ -71,11 +73,27 @@ const actions = {
     handler: async (req, res) => {
       assertConfigured()
       const user = await requireUser(req)
-      const result = await push.sendToUser(user.id, {
+      // Preview with a real recent sighting from the user's region when there is one, so the test
+      // looks exactly like the real thing: photo, map and actions.
+      let payload = null
+      if (user.location) {
+        try {
+          const [latest] = await ebird.recentObservations(user.location, 7)
+          if (latest) {
+            const bird = await db('birds').where({ speciesCode: latest.speciesCode }).first()
+            payload = sightingNotification({ ...latest, kind: 'watchlist' }, bird)
+            payload.title = `Test: ${payload.title}`
+            payload.tag = 'bird-alert-test'
+          }
+        } catch (error) {
+          console.error('Test preview sighting failed, sending a plain test:', error.message)
+        }
+      }
+      const result = await push.sendToUser(user.id, payload || {
         title: 'Bird Alert notifications are on',
         body: 'You will hear from us when a bird on your watch list is reported nearby.',
         tag: 'bird-alert-test',
-        url: '/'
+        data: { url: '/' }
       })
       res.status(200).json(result)
     }
