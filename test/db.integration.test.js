@@ -9,10 +9,14 @@ const { runDigest } = require('../lib/digest')
 let userId
 before(async () => {
   await db.migrate.latest()
+  // Fresh slate whether or not the database is reused between runs.
   await db('digest_log').del()
+  await db('push_log').del()
+  await db('push_subscriptions').del()
   await db('saved_birds').del()
   await db('auth_throttle').del()
   await db('users').del()
+  await db('birds').del()
   ;[{ id: userId }] = await db('users').insert({
     email: 'tester@example.com', password_hash: 'x', location: 'US-GA-139', state: 'GA', email_confirmed: true
   }).returning('id')
