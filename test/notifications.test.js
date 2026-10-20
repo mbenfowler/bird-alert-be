@@ -39,7 +39,7 @@ test('tile maths matches the slippy-map convention', () => {
   // At zoom 0 the world is one tile; the equator/prime meridian sits at its centre.
   assert.equal(lonToX(0, 0), 0.5)
   assert.ok(Math.abs(latToY(0, 0) - 0.5) < 1e-9)
-  // Lake Lanier at zoom 14 lands in tile column 4373, row 6529 (checked against tile.openstreetmap.org).
+  // Lake Lanier at zoom 14 lands in tile column 4373, row 6530 (checked against tile.openstreetmap.org).
   assert.equal(Math.floor(lonToX(-83.9014, 14)), 4373)
-  assert.equal(Math.floor(latToY(34.2695, 14)), 6529)
+  assert.equal(Math.floor(latToY(34.2695, 14)), 6530)
 })
