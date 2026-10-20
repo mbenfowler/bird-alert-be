@@ -20,10 +20,15 @@ All request and response bodies are JSON. Authenticated routes read an `HttpOnly
 | POST | `/api/auth/unsubscribe` | no | `{ token }` turns off one email preference |
 | PATCH | `/api/user` | yes | update `email`, `state`, `location`, `phone`, `alert_digest_email_enabled`, `rare_sightings_email_enabled` |
 | GET | `/api/saved` | yes | the user's watch list |
-| POST | `/api/saved` | yes | bird object → adds to watch list (idempotent) |
+| POST | `/api/saved` | yes | `{ speciesCode }` → adds to watch list, resolving unknown codes first (idempotent) |
 | DELETE | `/api/saved?speciesCode=` | yes | removes from watch list |
-| GET | `/api/birds?codes=a,b,c` | no | known birds by eBird species code (max 50) |
+| GET | `/api/birds?codes=a,b,c` | no | birds by eBird species code, in request order (max 50); unknown codes are resolved from eBird taxonomy plus image and Wikipedia lookups and stored |
 | GET | `/api/birds?q=term` | no | common-name search (max 50) |
+| GET | `/api/ebird/species-list?region=` | no | eBird species codes for a region (CDN-cached a day) |
+| GET | `/api/ebird/observations?region=` | no | recent observations (cached 5 min) |
+| GET | `/api/ebird/notable?region=&back=` | no | notable observations, `back` 1–30 days (cached 5 min) |
+| GET | `/api/ebird/species-observations?region=&code=&back=` | no | recent observations of one species (cached 5 min) |
+| GET | `/api/ebird/regions?state=` | no | eBird subregions for a US state (cached a week) |
 | GET | `/api/alertDigestMailer` | cron | daily digest; requires `Authorization: Bearer $CRON_SECRET` when that variable is set |
 
 Email links (`/confirm/:token`, `/reset/:token`, `/unsubscribe/:token`) carry signed, purpose-scoped tokens. Reset tokens are bound to the current password hash, so each works once.
@@ -42,4 +47,4 @@ Outside production, email is printed to the dev server log instead of sent, so c
 
 ## Deploying
 
-Set these in the Vercel project: `PROD_PG_URL`, `SESSION_SECRET`, `CRON_SECRET`, `APP_BASE_URL`, `EBIRD_API_KEY`, and the four `APP_*` Gmail OAuth values. Run `NODE_ENV=production npx knex migrate:latest` against the production database before the first deploy of a migration.
+Set these in the Vercel project: `PROD_PG_URL`, `SESSION_SECRET`, `CRON_SECRET`, `APP_BASE_URL`, `EBIRD_API_KEY`, `NUTHATCH_API_KEY` (bird images; optional), and the four `APP_*` Gmail OAuth values. Run `NODE_ENV=production npx knex migrate:latest` against the production database before the first deploy of a migration.

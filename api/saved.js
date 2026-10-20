@@ -1,11 +1,8 @@
 const { route, body, HttpError } = require('../lib/http')
 const db = require('../lib/db')
 const { requireUser } = require('../lib/auth')
-
-const BIRD_FIELDS = [
-  'comName', 'sciName', 'speciesCode', 'category', 'order', 'familyCode',
-  'familyComName', 'familySciName', 'birdImg', 'wikiURL', 'taxonOrder'
-]
+const { assertSpecies } = require('../lib/ebird')
+const { findOrCreateBirds } = require('../lib/enrich')
 
 const savedBirdsFor = (userId) =>
   db('saved_birds')
@@ -15,7 +12,7 @@ const savedBirdsFor = (userId) =>
     .orderBy('birds.taxonOrder')
 
 // GET    /api/saved                      -> bird[]
-// POST   /api/saved { ...bird }          -> bird (idempotent)
+// POST   /api/saved { speciesCode }      -> bird (idempotent; unknown codes are resolved and stored)
 // DELETE /api/saved?speciesCode=         -> 204 (idempotent)
 module.exports = route(['GET', 'POST', 'DELETE'], async (req, res) => {
   const user = await requireUser(req)
@@ -25,24 +22,14 @@ module.exports = route(['GET', 'POST', 'DELETE'], async (req, res) => {
   }
 
   if (req.method === 'POST') {
-    const input = body(req)
-    if (!input.speciesCode || !input.comName || !input.sciName) {
-      throw new HttpError(400, 'speciesCode, comName and sciName are required')
-    }
-    const birdData = Object.fromEntries(
-      BIRD_FIELDS.filter((field) => input[field] !== undefined && input[field] !== null && input[field] !== 'undefined')
-        .map((field) => [field, field === 'taxonOrder' ? Number(input[field]) || null : String(input[field])])
-    )
-
-    const bird = await db.transaction(async (trx) => {
-      await trx('birds').insert(birdData).onConflict('speciesCode').ignore()
-      const row = await trx('birds').where({ speciesCode: birdData.speciesCode }).first()
-      await trx('saved_birds')
-        .insert({ user_id: user.id, bird_id: row.id, speciesCode: row.speciesCode })
-        .onConflict(['user_id', 'bird_id'])
-        .ignore()
-      return row
-    })
+    const { speciesCode } = body(req)
+    if (!speciesCode) throw new HttpError(400, 'speciesCode is required')
+    const [bird] = await findOrCreateBirds([assertSpecies(String(speciesCode))])
+    if (!bird) throw new HttpError(404, `Unknown species code ${speciesCode}`)
+    await db('saved_birds')
+      .insert({ user_id: user.id, bird_id: bird.id, speciesCode: bird.speciesCode })
+      .onConflict(['user_id', 'bird_id'])
+      .ignore()
     return res.status(201).json(bird)
   }
 
