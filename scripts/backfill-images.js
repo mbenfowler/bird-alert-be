@@ -6,7 +6,9 @@ require('dotenv').config()
 const db = require('../lib/db')
 const { lookupImage } = require('../lib/enrich')
 
-const CONCURRENCY = 4
+// Wikipedia and Nuthatch rate-limit bursts; one lookup at a time with a short pause stays under it.
+const PAUSE_MS = 250
+const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms))
 
 const main = async () => {
   // Older rows stored the literal string 'undefined' when a lookup found nothing.
@@ -15,14 +17,13 @@ const main = async () => {
   const birds = await db('birds').whereNull('birdImg').select('id', 'comName', 'sciName', 'speciesCode', 'category')
   console.log(`${birds.length} birds without an image`)
   let found = 0
-  for (let i = 0; i < birds.length; i += CONCURRENCY) {
-    await Promise.all(birds.slice(i, i + CONCURRENCY).map(async (bird) => {
-      const image = await lookupImage(bird)
-      if (!image) return
-      await db('birds').where({ id: bird.id }).update({ birdImg: image, updated_at: new Date() })
-      found += 1
-      console.log(`  ${bird.speciesCode} ${bird.comName}: ${image.slice(0, 70)}`)
-    }))
+  for (const bird of birds) {
+    const image = await lookupImage(bird)
+    await sleep(PAUSE_MS)
+    if (!image) continue
+    await db('birds').where({ id: bird.id }).update({ birdImg: image, updated_at: new Date() })
+    found += 1
+    console.log(`  ${bird.speciesCode} ${bird.comName}: ${image.slice(0, 70)}`)
   }
   console.log(`done: ${found} of ${birds.length} filled in`)
   await db.destroy()
