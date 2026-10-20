@@ -8,6 +8,7 @@ All request and response bodies are JSON. Authenticated routes read an `HttpOnly
 
 | Method | Path | Auth | Purpose |
 |---|---|---|---|
+| GET | `/api` | no | health: `{ ok, db, latencyMs }`; the hourly GitHub workflow checks it and emails on failure |
 | GET | `/api/auth/exists?email=` | no | `{ userExists }` |
 | POST | `/api/auth/signup` | no | `{ email, password }` → user, sets cookie, sends confirmation email |
 | POST | `/api/auth/login` | no | `{ email, password }` → user, sets cookie |
@@ -18,7 +19,7 @@ All request and response bodies are JSON. Authenticated routes read an `HttpOnly
 | POST | `/api/auth/confirm` | no | `{ token }` marks the email confirmed |
 | POST | `/api/auth/resend-confirmation` | yes | re-sends the confirmation email |
 | POST | `/api/auth/unsubscribe` | no | `{ token }` turns off one email preference |
-| PATCH | `/api/user` | yes | update `email`, `state`, `location`, `alert_digest_email_enabled`, `rare_sightings_email_enabled`, `push_watchlist_enabled`, `push_notable_enabled`, `push_notable_batched` |
+| PATCH | `/api/user` | yes | update `email`, `state`, `location`, `alert_digest_email_enabled`, `rare_sightings_email_enabled`, `push_watchlist_enabled`, `push_notable_enabled`, `push_notable_batched`, `push_quiet_start`, `push_quiet_end` (hours 0-23 or null), `timezone` (IANA name the browser reports) |
 | GET | `/api/saved` | yes | the user's watch list |
 | POST | `/api/saved` | yes | `{ speciesCode }` → adds to watch list, resolving unknown codes first (idempotent) |
 | DELETE | `/api/saved?speciesCode=` | yes | removes from watch list |
@@ -32,11 +33,11 @@ All request and response bodies are JSON. Authenticated routes read an `HttpOnly
 | GET | `/api/push/public-key` | no | VAPID public key for subscribing |
 | POST | `/api/push/subscribe` | yes | browser push subscription → stored per device (idempotent) |
 | POST | `/api/push/unsubscribe` | yes | `{ endpoint }` |
-| GET | `/api/push/status?endpoint=` | yes | `{ subscribed, devices }` |
+| GET | `/api/push/status?endpoint=` | yes | `{ subscribed, devices, lastRun }` (lastRun: when the hourly push job last ran and what it did) |
 | POST | `/api/push/test` | yes | `{ endpoint? }` sends a test notification to that device, or all of the user's devices |
-| GET | `/api/push/alerts` | cron | hourly (GitHub Actions): pushes new watch-list and/or notable sightings per the user's push preferences, one rich notification per sighting (bird photo, map, actions) up to four per run plus a summary for the rest; each observation announced once via `push_log` whichever feed it came from; notable-only news goes out immediately, or at most every 6 hours for users who chose batching; also prunes old throttle and log rows |
+| GET | `/api/push/alerts` | cron | hourly (GitHub Actions): pushes new watch-list and/or notable sightings per the user's push preferences, one rich notification per sighting (bird photo, map, actions) up to four per run plus a summary for the rest; nothing during the user's quiet hours (sent on the first run after); each observation announced once via `push_log` whichever feed it came from; notable-only news goes out immediately, or at most every 6 hours for users who chose batching; also prunes old throttle and log rows |
 | GET | `/api/map?lat=&lng=&zoom=` | no | JPEG map with a pin, stitched from OpenStreetMap tiles; the picture on push notifications (cached a month) |
-| GET | `/api/alertDigestMailer` | cron | daily watch-list digest (one eBird call per region; each send logged in `digest_log`, never twice a day); requires `Authorization: Bearer $CRON_SECRET` when that variable is set |
+| GET | `/api/alertDigestMailer` | cron | daily watch-list digest with photos, maps and eBird links, skipping sightings already pushed (one eBird call per region; each send logged in `digest_log`, never twice a day); requires `Authorization: Bearer $CRON_SECRET` when that variable is set |
 | GET | `/api/rareSightingsMailer` | cron | daily notable-sightings email for users who opted in; same auth |
 
 Email links (`/confirm/:token`, `/reset/:token`, `/unsubscribe/:token`) carry signed, purpose-scoped tokens. Reset tokens are bound to the current password hash, so each works once.

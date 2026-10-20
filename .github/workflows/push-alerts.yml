@@ -1,6 +1,7 @@
 name: Push alerts
 
-# Vercel Hobby crons run at most daily, so GitHub drives the hourly watch-list push.
+# Vercel Hobby crons run at most daily, so GitHub drives the hourly watch-list push. The health step
+# doubles as an uptime monitor: a failed run emails the repository owner.
 # Needs the CRON_SECRET repository secret, equal to the backend's CRON_SECRET env var.
 on:
   schedule:
@@ -11,6 +12,11 @@ jobs:
   run:
     runs-on: ubuntu-latest
     steps:
+      - name: Health check (API and app)
+        run: |
+          curl --fail-with-body --silent --show-error --max-time 30 https://bird-alert-be.vercel.app/api
+          echo
+          curl --fail --silent --show-error --max-time 30 -o /dev/null -w 'app: HTTP %{http_code}\n' https://bird-alert.vercel.app/
       - name: Call the push alerts endpoint
         env:
           CRON_SECRET: ${{ secrets.CRON_SECRET }}

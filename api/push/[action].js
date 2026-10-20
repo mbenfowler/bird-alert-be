@@ -4,6 +4,7 @@ const { requireUser } = require('../../lib/auth')
 const { assertCronCaller } = require('../../lib/digest')
 const push = require('../../lib/push')
 const { runPushAlerts } = require('../../lib/pushAlerts')
+const { lastRun } = require('../../lib/jobRuns')
 const { sightingNotification } = require('../../lib/notifications')
 const ebird = require('../../lib/ebird')
 
@@ -56,14 +57,21 @@ const actions = {
     }
   },
 
-  // GET /api/push/status?endpoint= -> { subscribed, devices }
+  // GET /api/push/status?endpoint= -> { subscribed, devices, lastRun: { at, notified, heldForQuietHours } | null }
   status: {
     methods: ['GET'],
     handler: async (req, res) => {
       const user = await requireUser(req)
-      const rows = await db('push_subscriptions').where({ user_id: user.id }).select('endpoint')
+      const [rows, run] = await Promise.all([
+        db('push_subscriptions').where({ user_id: user.id }).select('endpoint'),
+        lastRun('push')
+      ])
       const subscribed = typeof req.query.endpoint === 'string' && rows.some((row) => row.endpoint === req.query.endpoint)
-      res.status(200).json({ subscribed, devices: rows.length })
+      res.status(200).json({
+        subscribed,
+        devices: rows.length,
+        lastRun: run ? { at: run.ran_at, ...(run.detail || {}) } : null
+      })
     }
   },
 

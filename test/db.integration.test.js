@@ -49,3 +49,28 @@ test('a digest is sent once per user per day and logged', async () => {
   assert.equal(sent.length, 1)
   assert.equal(await db('digest_log').where({ user_id: userId, kind: 'watchlist' }).count('* as n').first().then((r) => Number(r.n)), 1)
 })
+
+test('a pushed observation is logged and never pushed again', async () => {
+  const ebird = require('../lib/ebird')
+  const { runPushAlerts } = require('../lib/pushAlerts')
+  const original = ebird.recentObservations
+  ebird.recentObservations = async () => [{ speciesCode: 'cangoo', comName: 'Canada Goose', locName: 'Lake', obsDt: '2026-10-20 08:00', lat: 34.2, lng: -83.9, subId: 'S77' }]
+  try {
+    await db('push_subscriptions').insert({ user_id: userId, endpoint: 'https://push.example/dev1', p256dh: 'k', auth: 'a' })
+    await db('saved_birds').insert({ user_id: userId, speciesCode: 'cangoo', bird_id: (await db('birds').insert({ speciesCode: 'cangoo', comName: 'Canada Goose', sciName: 'Branta canadensis' }).returning('id'))[0].id })
+    await db('users').where({ id: userId }).update({ push_watchlist_enabled: true, push_quiet_start: null, push_quiet_end: null })
+    const sent = []
+    const send = async (id, payload) => { sent.push(payload.title); return { sent: 1, gone: 0 } }
+
+    const first = await runPushAlerts({ send })
+    assert.equal(first.notified, 1)
+    assert.deepEqual(sent, ['⭐ Canada Goose spotted nearby!'])
+    assert.equal(Number((await db('push_log').where({ user_id: userId, sub_id: 'S77' }).count('* as n').first()).n), 1)
+
+    const second = await runPushAlerts({ send })
+    assert.equal(second.notified, 0, 'same observation must not be pushed twice')
+    assert.equal(sent.length, 1)
+  } finally {
+    ebird.recentObservations = original
+  }
+})
