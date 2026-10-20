@@ -52,7 +52,7 @@ Outside production, email is printed to the dev server log instead of sent, so c
 
 ## Backups
 
-A GitHub Actions workflow dumps the production database every Monday (and on demand from the Actions tab), encrypts it with a passphrase, and keeps it as a workflow artifact for 90 days. It needs two repository secrets: `BACKUP_PG_URL` (the non-pooled connection string) and `BACKUP_PASSPHRASE`. To restore: download the artifact, then
+A GitHub Actions workflow dumps the production database every Monday (and on demand from the Actions tab), encrypts it with a passphrase, and keeps it as a workflow artifact for 90 days. It needs two repository secrets: `BACKUP_PG_URL` (the non-pooled connection string) and `BACKUP_PASSPHRASE`. Each run decrypts its own artifact and lists the dump as a check. To restore: download the artifact (you need `gpg`, e.g. `brew install gnupg`, and a `pg_restore` at least as new as the server), then
 
 ```bash
 gpg --decrypt bird-alert-YYYY-MM-DD.dump.gpg > restore.dump
