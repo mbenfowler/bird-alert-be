@@ -3,6 +3,10 @@
     {
       "path": "/api/alertDigestMailer",
       "schedule": "0 15 * * *"
+    },
+    {
+      "path": "/api/rareSightingsMailer",
+      "schedule": "0 16 * * *"
     }
   ]
 }
