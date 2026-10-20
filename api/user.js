@@ -3,6 +3,7 @@ const db = require('../lib/db')
 const { requireUser } = require('../lib/auth')
 const { normalizeEmail, assertValidEmail, findUserByEmail, sanitizeUser } = require('../lib/users')
 const { sendConfirmationEmail } = require('../lib/mailer')
+const { isValidTimezone } = require('../lib/quietHours')
 
 const STRING_FIELDS = ['state', 'location']
 const BOOLEAN_FIELDS = ['alert_digest_email_enabled', 'rare_sightings_email_enabled', 'push_watchlist_enabled', 'push_notable_enabled', 'push_notable_batched']
@@ -24,6 +25,19 @@ module.exports = route(['PATCH'], async (req, res) => {
       if (typeof input[field] !== 'boolean') throw new HttpError(400, `${field} must be true or false`)
       changes[field] = input[field]
     }
+  }
+
+  // Quiet hours: an hour 0-23 or null to disable; the time zone is whatever the browser reports.
+  for (const field of ['push_quiet_start', 'push_quiet_end']) {
+    if (field in input) {
+      const value = input[field]
+      if (value !== null && !(Number.isInteger(value) && value >= 0 && value <= 23)) throw new HttpError(400, `${field} must be an hour from 0 to 23, or null`)
+      changes[field] = value
+    }
+  }
+  if ('timezone' in input) {
+    if (!isValidTimezone(input.timezone)) throw new HttpError(400, 'timezone must be an IANA time zone name')
+    changes.timezone = input.timezone
   }
 
   let emailChanged = false
