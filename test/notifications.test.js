@@ -18,7 +18,8 @@ test('a watch-list sighting carries photo, map, actions and the essentials in th
   assert.equal(n.icon, 'https://img/snogoo.jpg')
   assert.match(n.image, /\/api\/map\?lat=34\.2695&lng=-83\.9014&zoom=14$/)
   assert.equal(n.tag, 'sighting-snogoo-S1')
-  assert.deepEqual(n.actions.map((a) => a.action), ['map', 'app'])
+  assert.deepEqual(n.actions.map((a) => a.action), ['map', 'ebird'])
+  assert.equal(n.data.ebirdUrl, 'https://ebird.org/checklist/S1')
   assert.equal(n.data.lat, 34.2695)
 })
 
