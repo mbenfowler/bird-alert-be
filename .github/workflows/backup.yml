@@ -1,0 +1,37 @@
+name: Database backup
+
+# Weekly logical backup of the production database, encrypted and kept as a workflow artifact for
+# 90 days. Needs two repository secrets: BACKUP_PG_URL (the non-pooled Postgres URL) and
+# BACKUP_PASSPHRASE (anything long and random; it is the only way to decrypt the files).
+on:
+  schedule:
+    - cron: '0 9 * * 1'
+  workflow_dispatch:
+
+jobs:
+  dump:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Install a pg_dump new enough for the server
+        run: |
+          sudo apt-get install -y postgresql-common
+          sudo /usr/share/postgresql-common/pgdg/apt.postgresql.org.sh -y
+          sudo apt-get install -y postgresql-client-17
+      - name: Dump and encrypt
+        env:
+          BACKUP_PG_URL: ${{ secrets.BACKUP_PG_URL }}
+          BACKUP_PASSPHRASE: ${{ secrets.BACKUP_PASSPHRASE }}
+        run: |
+          test -n "$BACKUP_PG_URL" || { echo "BACKUP_PG_URL secret is not set"; exit 1; }
+          test -n "$BACKUP_PASSPHRASE" || { echo "BACKUP_PASSPHRASE secret is not set"; exit 1; }
+          stamp=$(date -u +%Y-%m-%d)
+          pg_dump "$BACKUP_PG_URL" --no-owner --no-privileges --format=custom --file="bird-alert-$stamp.dump"
+          gpg --batch --yes --symmetric --cipher-algo AES256 --passphrase "$BACKUP_PASSPHRASE" "bird-alert-$stamp.dump"
+          rm "bird-alert-$stamp.dump"
+          ls -la *.gpg
+      - uses: actions/upload-artifact@v4
+        with:
+          name: bird-alert-db-${{ github.run_id }}
+          path: '*.dump.gpg'
+          retention-days: 90
+          if-no-files-found: error

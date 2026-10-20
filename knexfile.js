@@ -19,6 +19,13 @@ module.exports = {
     },
     useNullAsDefault: true
   },
+  test: {
+    client: 'pg',
+    connection: process.env.TEST_PG_URL,
+    pool: { min: 0, max: 5 },
+    migrations: { directory: __dirname + '/db/migrations' },
+    useNullAsDefault: true
+  },
   production: {
     client: 'pg',
     connection: process.env.PROD_PG_URL,

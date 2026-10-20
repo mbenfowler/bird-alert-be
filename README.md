@@ -46,6 +46,19 @@ npm run dev            # vercel dev on http://localhost:3001
 
 Outside production, email is printed to the dev server log instead of sent, so confirmation and reset links can be copied from there. Set `FORCE_SEND_MAIL=true` to send for real.
 
+## Tests
+
+`npm test` runs the unit tests and, when `TEST_PG_URL` points at a Postgres database, the database-backed ones (migrations are applied to it and its tables emptied). CI does the same against a throwaway Postgres on every pull request.
+
+## Backups
+
+A GitHub Actions workflow dumps the production database every Monday (and on demand from the Actions tab), encrypts it with a passphrase, and keeps it as a workflow artifact for 90 days. It needs two repository secrets: `BACKUP_PG_URL` (the non-pooled connection string) and `BACKUP_PASSPHRASE`. To restore: download the artifact, then
+
+```bash
+gpg --decrypt bird-alert-YYYY-MM-DD.dump.gpg > restore.dump
+pg_restore --clean --if-exists --no-owner --dbname "$TARGET_PG_URL" restore.dump
+```
+
 ## Maintenance
 
 `node scripts/backfill-images.js` fills in pictures for stored birds that have none (Nuthatch, then Wikipedia's lead image). Prefix with `NODE_ENV=production PROD_PG_URL=...` to run against production.
