@@ -31,7 +31,8 @@ module.exports = route(['GET'], async (req, res) => {
       .whereILike('comName', `%${term.replace(/[%_]/g, '\\$&')}%`)
       .orderBy('comName')
       .limit(MAX_RESULTS)
-    res.setHeader('Cache-Control', 'public, max-age=300')
+    // Short, because a bird stored by an enrichment moments ago should turn up in search promptly.
+    res.setHeader('Cache-Control', 'public, max-age=60, s-maxage=60')
     return res.status(200).json(birds)
   }
 
