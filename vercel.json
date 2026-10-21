@@ -8,5 +8,10 @@
       "path": "/api/rareSightingsMailer",
       "schedule": "0 16 * * *"
     }
-  ]
+  ],
+  "functions": {
+    "api/**/*.js": {
+      "maxDuration": 60
+    }
+  }
 }
