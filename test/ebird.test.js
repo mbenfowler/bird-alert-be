@@ -35,3 +35,15 @@ test('a failing eBird call becomes a 502, not a crash', async () => {
     })
   } finally { console.error = quiet }
 })
+
+test('the upstream status survives the 502 wrapper', async () => {
+  const quiet = console.error
+  console.error = () => {}
+  try {
+    await withFetch(() => new Response('slow down', { status: 429 }), async () => {
+      await assert.rejects(ebird.historicObservations('US-GA-139', '2026-10-13'), (error) => error.status === 502 && error.upstream === 429)
+    })
+  } finally {
+    console.error = quiet
+  }
+})
