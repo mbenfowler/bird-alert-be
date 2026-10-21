@@ -8,7 +8,7 @@
  */
 require('dotenv').config({ quiet: true })
 const db = require('../lib/db')
-const { backfill } = require('../lib/seasonality')
+const { backfill, coverage, today, addDays } = require('../lib/seasonality')
 
 const main = async () => {
   const regions = process.argv.slice(2).length
@@ -16,8 +16,9 @@ const main = async () => {
     : await db('users').whereNot('location', '').whereNotNull('location').distinct('location').pluck('location')
   for (const region of regions) {
     const started = Date.now()
-    const { fetched, remaining, failed } = await backfill(region, { pause: 200 })
-    console.log(`${region}: fetched ${fetched} days in ${Math.round((Date.now() - started) / 1000)}s, ${remaining} remaining${failed ? `, ${failed} failed (run again)` : ''}`)
+    const { fetched, remaining, failed } = await backfill(region, { pause: 400 })
+    const onFile = await coverage(region, addDays(today(), -492), today())
+    console.log(`${region}: fetched ${fetched} days in ${Math.round((Date.now() - started) / 1000)}s, ${remaining} remaining${failed ? `, ${failed} failed (run again)` : ''}; ${onFile} of 491 days on file`)
   }
 }
 
