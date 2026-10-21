@@ -55,18 +55,24 @@ test('a pushed observation is logged and never pushed again', async () => {
   const ebird = require('../lib/ebird')
   const { runPushAlerts } = require('../lib/pushAlerts')
   const original = ebird.recentObservations
-  ebird.recentObservations = async () => [{ speciesCode: 'cangoo', comName: 'Canada Goose', locName: 'Lake', obsDt: '2026-10-20 08:00', lat: 34.2, lng: -83.9, subId: 'S77' }]
+  ebird.recentObservations = async () => [
+    { speciesCode: 'cangoo', comName: 'Canada Goose', locName: 'Lake', obsDt: '2026-10-20 08:00', lat: 34.2, lng: -83.9, subId: 'S77' },
+    { speciesCode: 'snogoo', comName: 'Snow Goose', locName: 'Dam', obsDt: '2026-10-20 09:30', lat: 34.2, lng: -83.9, subId: 'S78' }
+  ]
   try {
     await db('push_subscriptions').insert({ user_id: userId, endpoint: 'https://push.example/dev1', p256dh: 'k', auth: 'a' })
-    await db('saved_birds').insert({ user_id: userId, speciesCode: 'cangoo', bird_id: (await db('birds').insert({ speciesCode: 'cangoo', comName: 'Canada Goose', sciName: 'Branta canadensis' }).returning('id'))[0].id })
+    for (const [speciesCode, comName, sciName] of [['cangoo', 'Canada Goose', 'Branta canadensis'], ['snogoo', 'Snow Goose', 'Anser caerulescens']]) {
+      await db('saved_birds').insert({ user_id: userId, speciesCode, bird_id: (await db('birds').insert({ speciesCode, comName, sciName }).returning('id'))[0].id })
+    }
     await db('users').where({ id: userId }).update({ push_watchlist_enabled: true, push_quiet_start: null, push_quiet_end: null })
     const sent = []
-    const send = async (id, payload) => { sent.push(payload.title); return { sent: 1, gone: 0 } }
+    const send = async (id, payload) => { sent.push(payload); return { sent: 1, gone: 0 } }
 
     const first = await runPushAlerts({ send })
     assert.equal(first.notified, 1)
-    assert.deepEqual(sent, ['⭐ Canada Goose spotted nearby!'])
-    assert.equal(Number((await db('push_log').where({ user_id: userId, sub_id: 'S77' }).count('* as n').first()).n), 1)
+    assert.deepEqual(sent.map((n) => n.title), ['⭐ 2 watch list birds spotted nearby'], 'watch-list birds travel together')
+    assert.equal(sent[0].body, 'Canada Goose · Lake · Oct 20, 8:00 AM\nSnow Goose · Dam · Oct 20, 9:30 AM')
+    assert.equal(Number((await db('push_log').where({ user_id: userId }).whereIn('sub_id', ['S77', 'S78']).count('* as n').first()).n), 2)
 
     const second = await runPushAlerts({ send })
     assert.equal(second.notified, 0, 'same observation must not be pushed twice')
