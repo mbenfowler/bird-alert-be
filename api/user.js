@@ -6,9 +6,9 @@ const { sendConfirmationEmail } = require('../lib/mailer')
 const { isValidTimezone } = require('../lib/quietHours')
 
 const STRING_FIELDS = ['state', 'location']
-const BOOLEAN_FIELDS = ['alert_digest_email_enabled', 'rare_sightings_email_enabled', 'push_watchlist_enabled', 'push_notable_enabled', 'push_notable_batched']
+const BOOLEAN_FIELDS = ['alert_digest_email_enabled', 'rare_sightings_email_enabled', 'push_watchlist_enabled', 'push_notable_enabled', 'push_notable_batched', 'push_first_of_season', 'migration_email_enabled']
 
-// PATCH /api/user { email?, state?, location?, alert_digest_email_enabled?, rare_sightings_email_enabled?, push_watchlist_enabled?, push_notable_enabled?, push_notable_batched? }
+// PATCH /api/user { email?, state?, location?, alert_digest_email_enabled?, rare_sightings_email_enabled?, push_watchlist_enabled?, push_notable_enabled?, push_notable_batched?, push_first_of_season?, migration_email_enabled? }
 module.exports = route(['PATCH'], async (req, res) => {
   const user = await requireUser(req)
   const input = body(req)

@@ -10,7 +10,7 @@ const { verifyToken, passwordVersion } = require('../../lib/tokens')
 const { sendConfirmationEmail, sendPasswordResetEmail } = require('../../lib/mailer')
 const { assertNotThrottled, recordAttempt, clearAttempts } = require('../../lib/throttle')
 
-const EMAIL_PREFERENCES = ['alert_digest_email_enabled', 'rare_sightings_email_enabled']
+const EMAIL_PREFERENCES = ['alert_digest_email_enabled', 'rare_sightings_email_enabled', 'migration_email_enabled']
 
 const actions = {
   // GET /api/auth/exists?email= -> { userExists }

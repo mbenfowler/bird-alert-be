@@ -44,3 +44,12 @@ test('tile maths matches the slippy-map convention', () => {
   assert.equal(Math.floor(lonToX(-83.9014, 14)), 4373)
   assert.equal(Math.floor(latToY(34.2695, 14)), 6530)
 })
+
+test('a first of the season says so, with when it was last around', () => {
+  const n = sightingNotification({ ...sighting, kind: 'season', lastSeenOn: '2026-04-12' })
+  assert.equal(n.title, '🍂 First Snow Goose of the season!')
+  assert.equal(n.body, 'Lake Lanier · Oct 20, 1:49 PM · 3 seen · first since Apr 12')
+  const spring = sightingNotification({ ...sighting, obsDt: '2026-03-30 09:00', kind: 'season' })
+  assert.match(spring.title, /^🌱 First/)
+  assert.match(spring.body, /first in over a year$/)
+})
