@@ -1,6 +1,6 @@
 const { test } = require('node:test')
 const assert = require('node:assert/strict')
-const { sightingNotification, summaryNotification, formatObsDt } = require('../lib/notifications')
+const { sightingNotification, watchlistNotification, summaryNotification, formatObsDt } = require('../lib/notifications')
 const { lonToX, latToY } = require('../lib/staticMap')
 
 const sighting = { speciesCode: 'snogoo', comName: 'Snow Goose', locName: 'Lake Lanier', obsDt: '2026-10-20 13:49', howMany: 3, lat: 34.2695, lng: -83.9014, subId: 'S1', kind: 'watchlist' }
@@ -52,4 +52,31 @@ test('a first of the season says so, with when it was last around', () => {
   const spring = sightingNotification({ ...sighting, obsDt: '2026-03-30 09:00', kind: 'season' })
   assert.match(spring.title, /^🌱 First/)
   assert.match(spring.body, /first in over a year$/)
+})
+
+test('watch-list sightings share one notification with a line per bird and no map', () => {
+  const second = { ...sighting, speciesCode: 'cangoo', comName: 'Canada Goose', locName: 'Clarks Bridge', obsDt: '2026-10-20 15:10', subId: 'S2' }
+  const n = watchlistNotification([sighting, second], new Map([['snogoo', { birdImg: 'https://img/snogoo.jpg' }]]))
+  assert.equal(n.title, '⭐ 2 watch list birds spotted nearby')
+  assert.equal(n.body, 'Snow Goose · Lake Lanier · Oct 20, 1:49 PM\nCanada Goose · Clarks Bridge · Oct 20, 3:10 PM')
+  assert.equal(n.image, undefined)
+  assert.ok(n.icon.endsWith('/images/bird.png'), 'a list shows the app icon')
+  assert.deepEqual(n.actions.map((a) => a.action), ['app'])
+  assert.deepEqual(n.data.speciesCodes, ['snogoo', 'cangoo'])
+  assert.equal(n.data.kind, 'watchlist')
+})
+
+test('a lone watch-list bird keeps its photo and the usual title', () => {
+  const n = watchlistNotification([sighting], new Map([['snogoo', { birdImg: 'https://img/snogoo.jpg' }]]))
+  assert.equal(n.title, '⭐ Snow Goose spotted nearby!')
+  assert.equal(n.icon, 'https://img/snogoo.jpg')
+  assert.equal(n.image, undefined)
+})
+
+test('a long watch-list run names six birds and counts the rest', () => {
+  const many = Array.from({ length: 9 }, (_, i) => ({ ...sighting, speciesCode: `b${i}`, comName: `Bird ${i}`, subId: `S${i}` }))
+  const n = watchlistNotification(many)
+  assert.equal(n.title, '⭐ 9 watch list birds spotted nearby')
+  assert.equal(n.body.split('\n').length, 7)
+  assert.ok(n.body.endsWith('and 3 more'))
 })
