@@ -100,10 +100,18 @@ test('seasonality: history is fetched once, arrivals are judged by last year, an
     { speciesCode: 'summer', comName: 'Summer Tanager', sciName: 'S t', category: 'species' }
   ])
   try {
+    // One day answers 502 once, then succeeds on the retry.
+    let flaked = false
+    const flaky = ebird.historicObservations
+    ebird.historicObservations = async (r, day) => {
+      if (!flaked && fetched.length === 10) { flaked = true; const e = new Error('eBird responded with 502'); e.status = 502; throw e }
+      return flaky(r, day)
+    }
     const first = await seasonality.backfill(region)
-    assert.equal(first.remaining, 0)
+    assert.deepEqual(first, { fetched: 491, remaining: 0, failed: 0 })
     assert.equal(fetched.length, 491)
-    assert.deepEqual(await seasonality.backfill(region), { fetched: 0, remaining: 0 }, 'fetched days are never asked for again')
+    assert.ok(flaked)
+    assert.deepEqual(await seasonality.backfill(region), { fetched: 0, remaining: 0, failed: 0 }, 'fetched days are never asked for again')
 
     live.push({ speciesCode: 'resident', comName: 'Resident Wren', obsDt: `${today} 08:00`, subId: 'S1', locName: 'Yard', lat: 1, lng: 1 })
     const { arrivals, learning } = await seasonality.arrivingSoon(region)

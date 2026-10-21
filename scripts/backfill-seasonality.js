@@ -16,8 +16,8 @@ const main = async () => {
     : await db('users').whereNot('location', '').whereNotNull('location').distinct('location').pluck('location')
   for (const region of regions) {
     const started = Date.now()
-    const { fetched, remaining } = await backfill(region, { pause: 200 })
-    console.log(`${region}: fetched ${fetched} days in ${Math.round((Date.now() - started) / 1000)}s, ${remaining} remaining`)
+    const { fetched, remaining, failed } = await backfill(region, { pause: 200 })
+    console.log(`${region}: fetched ${fetched} days in ${Math.round((Date.now() - started) / 1000)}s, ${remaining} remaining${failed ? `, ${failed} failed (run again)` : ''}`)
   }
 }
 
