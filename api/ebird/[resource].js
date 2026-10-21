@@ -1,6 +1,7 @@
 const { route, HttpError } = require('../../lib/http')
 const ebird = require('../../lib/ebird')
 const db = require('../../lib/db')
+const { arrivingSoon, seasonality } = require('../../lib/seasonality')
 
 const DAY = 86400
 const WEEK = 7 * DAY
@@ -29,6 +30,16 @@ const resources = {
     handler: ({ region, code, back }) =>
       ebird.speciesObservations(ebird.assertRegion(region), ebird.assertSpecies(code), clampBack(back)),
     cacheControl: cache(300, 3600)
+  },
+  // GET /api/ebird/arriving?region= -> { arrivals: [{ speciesCode, comName, birdImg, daysLastYear, windowDays, firstLastYear }], learning }
+  arriving: {
+    handler: ({ region }) => arrivingSoon(ebird.assertRegion(region)),
+    cacheControl: cache(3600, DAY)
+  },
+  // GET /api/ebird/seasonality?region=&code= -> { months: [{ month, reported, covered }] } for the last year
+  seasonality: {
+    handler: ({ region, code }) => seasonality(ebird.assertRegion(region), ebird.assertSpecies(code)),
+    cacheControl: cache(DAY, WEEK)
   },
   // GET /api/ebird/regions?state=GA -> { code, name }[]
   regions: {

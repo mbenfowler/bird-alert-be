@@ -35,3 +35,8 @@ test('only the newest observation per species survives', () => {
   const list = [{ speciesCode: 'a', subId: 'S2' }, { speciesCode: 'b', subId: 'S3' }, { speciesCode: 'a', subId: 'S1' }]
   assert.deepEqual(newestPerSpecies(list).map((o) => o.subId), ['S2', 'S3'])
 })
+
+test('a first of the season keeps that tag even when the bird is also on the watch list', () => {
+  const merged = mergeSightings({ watchlist: [obs('whtspa', 'S1')], season: [{ ...obs('whtspa', 'S1'), lastSeenOn: '2026-04-12' }, obs('winwre', 'S2')] })
+  assert.deepEqual(merged.map((s) => [s.speciesCode, s.kind, s.lastSeenOn]), [['whtspa', 'season', '2026-04-12'], ['winwre', 'season', undefined]])
+})

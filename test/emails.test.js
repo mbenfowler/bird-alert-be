@@ -28,3 +28,24 @@ test('the shell has the header, the body and footer links', () => {
   assert.match(html, /<h1[^>]*>Hello<\/h1>/)
   assert.match(html, /href="https:\/\/x\/u"/)
 })
+
+test('the migration email has a section per movement, links out and an unsubscribe link', () => {
+  const { migrationMessage } = require('../lib/mailer')
+  const user = { id: 1, email: 'a@b.c', location: 'US-GA-139' }
+  const report = {
+    arrived: [{ speciesCode: 'whtspa', comName: 'White-throated Sparrow', birdImg: 'https://img/w.jpg', daysThisWeek: 3, firstSeen: '2026-10-15' }],
+    departed: [{ speciesCode: 'rthhum', comName: 'Ruby-throated Hummingbird', daysBefore: 12, lastSeen: '2026-10-02' }],
+    coming: [{ speciesCode: 'winwre', comName: 'Winter Wren', daysLastYear: 9, windowDays: 15, firstLastYear: '2025-10-25' }]
+  }
+  const message = migrationMessage(user, report, 'Hall')
+  assert.equal(message.subject, 'Migration this week in Hall: 1 arrival, 1 moved on, 1 to watch for')
+  assert.match(message.html, /White-throated Sparrow/)
+  assert.match(message.html, /Back since October 15, reported on 3 days this week/)
+  assert.match(message.html, /Last reported October 2, after 12 days in the month before/)
+  assert.match(message.html, /reported on 9 of 15 days, from October 25/)
+  assert.match(message.html, /dashboard\.birdcast\.info\/region\/US-GA-139/)
+  assert.match(message.html, /\/map\?code=whtspa/)
+  assert.match(message.html, /\/unsubscribe\//)
+  assert.match(message.text, /- Winter Wren \(9 of 15 days this time last year\)/)
+  assert.equal(migrationMessage(user, { arrived: [], departed: [], coming: [] }, null).subject, 'Migration this week in your area: a quiet week')
+})

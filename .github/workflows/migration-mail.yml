@@ -1,0 +1,21 @@
+name: Weekly migration email
+
+# Vercel Hobby allows two cron jobs and both are taken by the daily digests, so GitHub sends the
+# Sunday migration summary. Needs the CRON_SECRET repository secret, equal to the backend's env var.
+on:
+  schedule:
+    - cron: '0 13 * * 0'
+  workflow_dispatch:
+
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Call the migration mailer
+        env:
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+        run: |
+          test -n "$CRON_SECRET" || { echo "CRON_SECRET secret is not set"; exit 1; }
+          curl --fail-with-body --silent --show-error --max-time 300 \
+            -H "Authorization: Bearer $CRON_SECRET" \
+            https://bird-alert-be.vercel.app/api/migrationMailer
