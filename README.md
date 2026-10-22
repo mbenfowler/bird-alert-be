@@ -45,6 +45,7 @@ All request and response bodies are JSON. Authenticated routes read an `HttpOnly
 | GET | `/api/map?lat=&lng=&zoom=` | no | JPEG map with a pin, stitched from OpenStreetMap tiles; the picture on push notifications (cached a month) |
 | GET | `/api/alertDigestMailer` | cron | daily watch-list digest with photos, maps and eBird links, skipping sightings already pushed (one eBird call per region; each send logged in `digest_log`, never twice a day); requires `Authorization: Bearer $CRON_SECRET` when that variable is set |
 | GET | `/api/rareSightingsMailer` | cron | daily notable-sightings email for users who opted in; same auth |
+| POST | `/api/mailPreview` | yes | `{ kind: 'watchlist' \| 'rare' \| 'migration' }` sends that email to the caller right now, outside the schedule and the once-a-day log, so they can see it; `{ sent: false, reason }` when there is nothing to send, the address is unconfirmed, or no county is set |
 | GET | `/api/migrationMailer` | cron | Sunday (GitHub Actions) migration summary per region: species back after a month or more away, regulars gone quiet, and what last year says to expect over the next two weeks; same auth |
 
 ### Seasonality
