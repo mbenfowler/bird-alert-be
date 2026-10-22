@@ -4,7 +4,7 @@ const { requireUser } = require('../../lib/auth')
 const { assertCronCaller } = require('../../lib/digest')
 const push = require('../../lib/push')
 const { runPushAlerts } = require('../../lib/pushAlerts')
-const { lastRun } = require('../../lib/jobRuns')
+const { lastRun, recordRun } = require('../../lib/jobRuns')
 const { testNotification } = require('../../lib/notifications')
 const ebird = require('../../lib/ebird')
 
@@ -103,6 +103,22 @@ const actions = {
         data: { url: '/' }
       }, { endpoint: typeof endpoint === 'string' ? endpoint : undefined })
       res.status(200).json(result)
+    }
+  },
+
+  // POST /api/push/trace { event, ... } -> remembers the last 30 things this user's service worker and
+  // app did with notifications, so a tap that goes nowhere on a phone can be read back from the server.
+  trace: {
+    methods: ['POST'],
+    handler: async (req, res) => {
+      const user = await requireUser(req)
+      const detail = body(req)
+      if (!detail || typeof detail.event !== 'string') throw new HttpError(400, 'An event is required')
+      const kind = `sw-trace:${user.id}`
+      const previous = (await lastRun(kind))?.detail?.events || []
+      const entry = { ...JSON.parse(JSON.stringify(detail).slice(0, 4000)), at: new Date().toISOString() }
+      await recordRun(kind, { events: [...previous, entry].slice(-30) })
+      res.status(204).end()
     }
   },
 
