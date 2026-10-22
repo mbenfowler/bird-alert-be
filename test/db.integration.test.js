@@ -11,7 +11,7 @@ const seasonality = require('../lib/seasonality')
 let userId
 before(async () => {
   await db.migrate.latest()
-  for (const table of ['digest_log', 'push_log', 'push_subscriptions', 'saved_birds', 'auth_throttle', 'season_firsts', 'region_species_days', 'region_days', 'job_runs', 'users', 'birds']) await db(table).del()
+  for (const table of ['digest_log', 'push_handoff', 'push_log', 'push_subscriptions', 'saved_birds', 'auth_throttle', 'season_firsts', 'region_species_days', 'region_days', 'job_runs', 'users', 'birds']) await db(table).del()
   // Nothing in here may reach eBird; the hourly job's history fetch is a no-op unless a test says otherwise.
   ebird.historicObservations = async () => []
   ;[{ id: userId }] = await db('users').insert({
@@ -81,6 +81,38 @@ test('a pushed observation is logged and never pushed again', async () => {
   } finally {
     ebird.recentObservations = original
   }
+})
+
+test('a push is handed to the open app through the server: offered, tapped, opened', async () => {
+  const handoff = require('../lib/handoff')
+  const url = 'https://bird-alert.vercel.app/sightings?s=cangoo:S1'
+  await handoff.recordSent(userId, { title: '⭐ Canada Goose spotted nearby!', data: { url } })
+  let push = await handoff.pending(userId)
+  assert.equal(push.url, url)
+  assert.equal(push.tappedAt, null)
+  assert.equal(push.offeredAt, null)
+
+  await handoff.ack(userId, { offered: true })
+  assert.ok((await handoff.pending(userId)).offeredAt, 'the toast was offered')
+
+  assert.equal(await handoff.markTapped(userId, 'https://bird-alert.vercel.app/'), 0, 'a tap on some other notification is ignored')
+  assert.equal(await handoff.markTapped(userId, url), 1)
+  push = await handoff.pending(userId)
+  assert.ok(push.tappedAt)
+  assert.equal(push.openedAt, null)
+
+  await handoff.ack(userId, { opened: true })
+  assert.ok((await handoff.pending(userId)).openedAt)
+
+  await handoff.recordSent(userId, { title: 'Newer', data: { url: 'https://bird-alert.vercel.app/' } })
+  push = await handoff.pending(userId)
+  assert.equal(push.title, 'Newer', 'a newer push replaces the old one')
+  assert.equal(push.tappedAt, null, 'with a clean slate')
+
+  await db('push_handoff').where({ user_id: userId }).update({ sent_at: db.raw("now() - interval '11 minutes'") })
+  assert.equal(await handoff.pending(userId), null, 'old pushes are not offered')
+  await handoff.recordSent(userId, { title: 'No link' })
+  assert.equal(await handoff.pending(userId), null, 'a push without an app link is not recorded')
 })
 
 // A year of made-up history for one county: a resident reported daily, a migrant that arrived on
