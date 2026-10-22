@@ -58,7 +58,8 @@ test('watch-list sightings share one notification with a line per bird and no ma
   const second = { ...sighting, speciesCode: 'cangoo', comName: 'Canada Goose', locName: 'Clarks Bridge', obsDt: '2026-10-20 15:10', subId: 'S2' }
   const n = watchlistNotification([sighting, second], new Map([['snogoo', { birdImg: 'https://img/snogoo.jpg' }]]))
   assert.equal(n.title, '⭐ 2 watch list birds spotted nearby')
-  assert.equal(n.body, 'Snow Goose · Lake Lanier · Oct 20, 1:49 PM\nCanada Goose · Clarks Bridge · Oct 20, 3:10 PM')
+  assert.equal(n.body, 'Snow Goose, Canada Goose\nSnow Goose · Lake Lanier · Oct 20, 1:49 PM\nCanada Goose · Clarks Bridge · Oct 20, 3:10 PM')
+  assert.ok(n.data.url.endsWith('/sightings?s=' + encodeURIComponent('snogoo:S1,cangoo:S2')), n.data.url)
   assert.equal(n.image, undefined)
   assert.ok(n.icon.endsWith('/images/bird.png'), 'a list shows the app icon')
   assert.deepEqual(n.actions.map((a) => a.action), ['app'])
@@ -71,12 +72,14 @@ test('a lone watch-list bird keeps its photo and the usual title', () => {
   assert.equal(n.title, '⭐ Snow Goose spotted nearby!')
   assert.equal(n.icon, 'https://img/snogoo.jpg')
   assert.equal(n.image, undefined)
+  assert.equal(n.body, 'Snow Goose · Lake Lanier · Oct 20, 1:49 PM', 'one bird needs no names line')
+  assert.ok(n.data.url.endsWith('/sightings?s=' + encodeURIComponent('snogoo:S1')))
 })
 
 test('a long watch-list run names six birds and counts the rest', () => {
   const many = Array.from({ length: 9 }, (_, i) => ({ ...sighting, speciesCode: `b${i}`, comName: `Bird ${i}`, subId: `S${i}` }))
   const n = watchlistNotification(many)
   assert.equal(n.title, '⭐ 9 watch list birds spotted nearby')
-  assert.equal(n.body.split('\n').length, 7)
+  assert.equal(n.body.split('\n').length, 8, 'names line, six birds, and the count of the rest')
   assert.ok(n.body.endsWith('and 3 more'))
 })
