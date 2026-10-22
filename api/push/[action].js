@@ -6,6 +6,7 @@ const push = require('../../lib/push')
 const { runPushAlerts } = require('../../lib/pushAlerts')
 const { lastRun, recordRun } = require('../../lib/jobRuns')
 const { testNotification } = require('../../lib/notifications')
+const handoff = require('../../lib/handoff')
 const ebird = require('../../lib/ebird')
 
 const assertConfigured = () => {
@@ -103,6 +104,40 @@ const actions = {
         data: { url: '/' }
       }, { endpoint: typeof endpoint === 'string' ? endpoint : undefined })
       res.status(200).json(result)
+    }
+  },
+
+  // GET /api/push/pending -> { push: { title, url, sentAt, tappedAt, offeredAt, openedAt } | null }
+  // The latest push of the last ten minutes. The open app polls this: a tapped push is navigated to,
+  // an unoffered one becomes an in-app toast.
+  pending: {
+    methods: ['GET'],
+    handler: async (req, res) => {
+      const user = await requireUser(req)
+      res.setHeader('Cache-Control', 'no-store')
+      res.status(200).json({ push: await handoff.pending(user.id) })
+    }
+  },
+
+  // POST /api/push/tap { url } -> the service worker saw a tap on the latest push
+  tap: {
+    methods: ['POST'],
+    handler: async (req, res) => {
+      const user = await requireUser(req)
+      const { url } = body(req)
+      if (typeof url !== 'string') throw new HttpError(400, 'A url is required')
+      res.status(200).json({ marked: (await handoff.markTapped(user.id, url)) > 0 })
+    }
+  },
+
+  // POST /api/push/ack { offered?, opened? } -> the app offered the push as a toast and/or navigated to it
+  ack: {
+    methods: ['POST'],
+    handler: async (req, res) => {
+      const user = await requireUser(req)
+      const { offered, opened } = body(req)
+      await handoff.ack(user.id, { offered: offered === true, opened: opened === true })
+      res.status(204).end()
     }
   },
 
