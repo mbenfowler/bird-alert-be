@@ -12,9 +12,10 @@ test('fitZoom picks the closest zoom that keeps every pin inside the frame', () 
   assert.equal(fitZoom([{ lat: 10, lng: 10 }, { lat: -10, lng: -170 }], 640, 360), 3, 'never below the floor')
 })
 
-test('pins at one spot merge into one pin whose label lists them', () => {
-  const merged = mergePins([{ lat: 34.26951, lng: -83.90141, label: '1' }, { lat: 34.26949, lng: -83.90139, label: '2' }, { lat: 34.3, lng: -83.8, label: '3' }])
-  assert.deepEqual(merged.map((p) => p.label), ['1,2', '3'])
+test('pins that would overlap on screen merge into one pin whose label lists them', () => {
+  const pins = [{ lat: 34.2695, lng: -83.9014, label: '1' }, { lat: 34.2696, lng: -83.9013, label: '2' }, { lat: 34.3, lng: -83.8, label: '3' }]
+  assert.deepEqual(mergePins(pins, 13).map((p) => p.label), ['1,2', '3'], 'a street apart at zoom 13 is one pin')
+  assert.deepEqual(mergePins(pins, 18).map((p) => p.label), ['1', '2', '3'], 'zoomed right in they separate')
 })
 
 test('a multi-pin map renders as a JPEG of the requested size with the tiles it needs', async () => {
