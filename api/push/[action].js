@@ -5,7 +5,7 @@ const { assertCronCaller } = require('../../lib/digest')
 const push = require('../../lib/push')
 const { runPushAlerts } = require('../../lib/pushAlerts')
 const { lastRun } = require('../../lib/jobRuns')
-const { sightingNotification } = require('../../lib/notifications')
+const { testNotification } = require('../../lib/notifications')
 const ebird = require('../../lib/ebird')
 
 const assertConfigured = () => {
@@ -81,18 +81,16 @@ const actions = {
     handler: async (req, res) => {
       assertConfigured()
       const user = await requireUser(req)
-      // Preview with a real recent sighting from the user's region when there is one, so the test
-      // looks exactly like the real thing: photo, map and actions.
+      // Preview with the user's own birds from the region's recent reports, so the test looks and
+      // taps exactly like a real watch-list alert: names first, and the sightings page behind it.
       let payload = null
       if (user.location) {
         try {
-          const [latest] = await ebird.recentObservations(user.location, 7)
-          if (latest) {
-            const bird = await db('birds').where({ speciesCode: latest.speciesCode }).first()
-            payload = sightingNotification({ ...latest, kind: 'watchlist' }, bird)
-            payload.title = `Test: ${payload.title}`
-            payload.tag = 'bird-alert-test'
-          }
+          const recent = await ebird.recentObservations(user.location, 7)
+          const saved = new Set(await db('saved_birds').where('user_id', user.id).pluck('speciesCode'))
+          const codes = [...new Set(recent.slice(0, 20).map((obs) => obs.speciesCode))]
+          const birds = codes.length ? await db('birds').whereIn('speciesCode', codes) : []
+          payload = testNotification(recent, saved, new Map(birds.map((b) => [b.speciesCode, b])))
         } catch (error) {
           console.error('Test preview sighting failed, sending a plain test:', error.message)
         }

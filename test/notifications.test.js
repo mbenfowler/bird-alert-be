@@ -1,6 +1,6 @@
 const { test } = require('node:test')
 const assert = require('node:assert/strict')
-const { sightingNotification, watchlistNotification, summaryNotification, formatObsDt } = require('../lib/notifications')
+const { sightingNotification, watchlistNotification, testNotification, summaryNotification, formatObsDt } = require('../lib/notifications')
 const { lonToX, latToY } = require('../lib/staticMap')
 
 const sighting = { speciesCode: 'snogoo', comName: 'Snow Goose', locName: 'Lake Lanier', obsDt: '2026-10-20 13:49', howMany: 3, lat: 34.2695, lng: -83.9014, subId: 'S1', kind: 'watchlist' }
@@ -82,4 +82,19 @@ test('a long watch-list run names six birds and counts the rest', () => {
   assert.equal(n.title, '⭐ 9 watch list birds spotted nearby')
   assert.equal(n.body.split('\n').length, 8, 'names line, six birds, and the count of the rest')
   assert.ok(n.body.endsWith('and 3 more'))
+})
+
+test('the test notification previews the user\'s own birds as a watch-list batch', () => {
+  const recent = ['a', 'b', 'c', 'd', 'e'].map((c, i) => ({ ...sighting, speciesCode: c, comName: `Bird ${c}`, subId: `S${i}` }))
+  const n = testNotification(recent, new Set(['b', 'd']))
+  assert.equal(n.title, 'Test: ⭐ 2 watch list birds spotted nearby')
+  assert.equal(n.tag, 'bird-alert-test')
+  assert.deepEqual(n.data.speciesCodes, ['b', 'd'])
+  assert.ok(n.data.url.endsWith('/sightings?s=' + encodeURIComponent('b:S1,d:S3')))
+})
+
+test('with none of the user\'s birds about, the test previews the newest three reports', () => {
+  const recent = ['a', 'b', 'c', 'd'].map((c, i) => ({ ...sighting, speciesCode: c, comName: `Bird ${c}`, subId: `S${i}` }))
+  assert.deepEqual(testNotification(recent, new Set()).data.speciesCodes, ['a', 'b', 'c'])
+  assert.equal(testNotification([], new Set()), null, 'nothing recent means the plain test goes out')
 })
