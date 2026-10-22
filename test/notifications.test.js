@@ -30,8 +30,15 @@ test('a notable sighting is labelled and falls back to the app icon without a ph
   assert.match(n.icon, /\/images\/bird\.png$/)
 })
 
+test('a sighting notification opens the sighting page; without a checklist it opens the app', () => {
+  assert.ok(sightingNotification(sighting).data.url.endsWith('/sighting/snogoo/S1'))
+  assert.ok(sightingNotification({ ...sighting, subId: undefined }).data.url.endsWith('/'))
+  assert.ok(sightingNotification({ ...sighting, kind: 'season', lastSeenOn: '2026-04-12' }).data.url.endsWith('/sighting/snogoo/S1'))
+})
+
 test('overflow becomes one summary', () => {
   const n = summaryNotification(['A', 'B', 'C', 'D', 'E'].map((c) => ({ comName: c })))
+  assert.ok(n.data.url.endsWith('/map'), 'the summary opens the region map')
   assert.equal(n.title, '5 more sightings nearby')
   assert.equal(n.body, 'A, B, C and 2 more.')
 })
