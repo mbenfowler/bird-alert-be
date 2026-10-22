@@ -7,13 +7,31 @@ const num = (value, min, max, label) => {
   return n
 }
 
-// GET /api/map?lat=&lng=&zoom=14 -> JPEG map centred on the point with a pin. Used as the picture on
-// push notifications. Cached hard: the same sighting always renders the same map.
+const MAX_PINS = 12
+
+/** `pins=lat,lng,label;lat,lng,label` -> [{ lat, lng, label }]; labels are short and plain. */
+const parsePins = (value) => {
+  const pins = String(value).split(';').filter(Boolean).map((part) => {
+    const [lat, lng, label = ''] = part.split(',')
+    return { lat: Number(num(lat, -85, 85, 'pin latitude').toFixed(4)), lng: Number(num(lng, -180, 180, 'pin longitude').toFixed(4)), label: label.replace(/[^0-9A-Za-z]/g, '').slice(0, 3) }
+  })
+  if (!pins.length || pins.length > MAX_PINS) throw new HttpError(400, `Between 1 and ${MAX_PINS} pins`)
+  return pins
+}
+
+// GET /api/map?lat=&lng=&zoom=14 -> JPEG map centred on the point with a pin: the picture on push
+// notifications. GET /api/map?pins=lat,lng,1;lat,lng,2 -> one map framed around several labelled
+// pins: the map in email digests. Cached hard: the same places always render the same map.
 module.exports = route(['GET'], async (req, res) => {
-  const lat = num(req.query.lat, -85, 85, 'lat')
-  const lng = num(req.query.lng, -180, 180, 'lng')
-  const zoom = Math.round(num(req.query.zoom ?? '14', 3, 17, 'zoom'))
-  const jpeg = await renderMap({ lat: Number(lat.toFixed(4)), lng: Number(lng.toFixed(4)), zoom })
+  let jpeg
+  if (req.query.pins !== undefined) {
+    jpeg = await renderMap({ pins: parsePins(req.query.pins) })
+  } else {
+    const lat = num(req.query.lat, -85, 85, 'lat')
+    const lng = num(req.query.lng, -180, 180, 'lng')
+    const zoom = Math.round(num(req.query.zoom ?? '14', 3, 17, 'zoom'))
+    jpeg = await renderMap({ lat: Number(lat.toFixed(4)), lng: Number(lng.toFixed(4)), zoom })
+  }
   res.setHeader('Content-Type', 'image/jpeg')
   res.setHeader('Cache-Control', 'public, max-age=86400, s-maxage=2592000, immutable')
   res.status(200).send(jpeg)
