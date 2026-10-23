@@ -18,4 +18,4 @@ jobs:
           test -n "$CRON_SECRET" || { echo "CRON_SECRET secret is not set"; exit 1; }
           curl --fail-with-body --silent --show-error --max-time 300 \
             -H "Authorization: Bearer $CRON_SECRET" \
-            https://bird-alert-be.vercel.app/api/migrationMailer
+            https://bird-alert-be.vercel.app/api/mail/migration
