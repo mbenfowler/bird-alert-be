@@ -1,25 +1,45 @@
 const { test } = require('node:test')
 const assert = require('node:assert/strict')
-const { layout, sightingCards } = require('../lib/mailer')
+const { layout, sightingsBody, byChecklist } = require('../lib/mailer')
 
 const sighting = { speciesCode: 'snogoo', comName: 'Snow <Goose>', locName: 'Lake Lanier', obsDt: '2026-10-20 13:49', howMany: 3, lat: 34.2695, lng: -83.9014, subId: 'S123' }
 
-test('sighting cards carry photo, map, place, time and both links, with HTML escaped', () => {
-  const html = sightingCards([sighting], new Map([['snogoo', { birdImg: 'https://img/snogoo.jpg' }]]))
-  assert.match(html, /Snow &lt;Goose&gt;/)
-  assert.match(html, /https:\/\/img\/snogoo\.jpg/)
-  assert.match(html, /\/api\/map\?lat=34\.2695&lng=-83\.9014/)
-  assert.match(html, /Lake Lanier &middot; Oct 20, 1:49 PM &middot; 3 seen/)
+test('a digest has one map with a pin per checklist, and a card per checklist listing its birds', () => {
+  const sameChecklist = { ...sighting, speciesCode: 'cangoo', comName: 'Canada Goose', howMany: 1 }
+  const elsewhere = { ...sighting, speciesCode: 'tunswa', comName: 'Tundra Swan', locName: 'Clarks Bridge', lat: 34.3001, lng: -83.8002, subId: 'S2', obsDt: '2026-10-20 15:10' }
+  const html = sightingsBody([sighting, sameChecklist, elsewhere], new Map([['snogoo', { birdImg: 'https://img/snogoo.jpg' }]]))
+  const maps = html.match(/\/api\/map\?pins=[^"]+/g) || []
+  assert.equal(maps.length, 1, 'one map for the digest')
+  assert.equal(decodeURIComponent(maps[0]), '/api/map?pins=34.2695,-83.9014,1;34.3001,-83.8002,2')
+  assert.equal((html.match(/View checklist on eBird/g) || []).length, 2, 'one checklist button per checklist')
   assert.match(html, /ebird\.org\/checklist\/S123/)
-  assert.match(html, /google\.com\/maps\/search/)
+  assert.match(html, /ebird\.org\/checklist\/S2/)
+  assert.match(html, /https:\/\/img\/snogoo\.jpg/)
+  assert.match(html, /Snow &lt;Goose&gt;/, 'bird names are escaped')
+  assert.match(html, /3 seen/)
+  assert.match(html, /Canada Goose/)
+  assert.ok(html.indexOf('Lake Lanier') < html.indexOf('Clarks Bridge'), 'checklists keep their order')
+  assert.doesNotMatch(html, /lat=34\.2695&lng=/, 'no per-bird maps')
 })
 
-test('maps are limited to the first few cards and the list is capped', () => {
-  const many = Array.from({ length: 30 }, (_, i) => ({ ...sighting, speciesCode: `b${i}`, comName: `Bird ${i}`, subId: `S${i}` }))
-  const html = sightingCards(many)
-  assert.equal((html.match(/\/api\/map\?/g) || []).length, 8)
-  assert.equal((html.match(/View on eBird/g) || []).length, 25)
+test('html in names and places is escaped', () => {
+  const html = sightingsBody([{ ...sighting, comName: 'Snow <b>Goose</b>', locName: 'Lake & Dam' }])
+  assert.match(html, /Snow &lt;b&gt;Goose&lt;\/b&gt;/)
+  assert.match(html, /Lake &amp; Dam/)
+})
+
+test('pins stop at twelve checklists and the list is capped', () => {
+  const many = Array.from({ length: 30 }, (_, i) => ({ ...sighting, speciesCode: `b${i}`, comName: `Bird ${i}`, subId: `S${i}`, lat: 34 + i / 100, lng: -83 - i / 100 }))
+  const html = sightingsBody(many)
+  const pins = decodeURIComponent((html.match(/\/api\/map\?pins=[^"]+/) || [''])[0]).split(';')
+  assert.equal(pins.length, 12)
+  assert.equal((html.match(/View checklist on eBird/g) || []).length, 25)
   assert.match(html, /and 5 more/)
+})
+
+test('the plain-text digest is grouped by checklist too', () => {
+  const groups = byChecklist([sighting, { ...sighting, speciesCode: 'cangoo', comName: 'Canada Goose' }, { ...sighting, subId: 'S2', locName: 'Dam', lat: 34.31, lng: -83.81 }])
+  assert.deepEqual(groups.map((g) => [g.pin, g.subId, g.sightings.length]), [['1', 'S123', 2], ['2', 'S2', 1]])
 })
 
 test('the shell has the header, the body and footer links', () => {

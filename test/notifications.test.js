@@ -1,6 +1,6 @@
 const { test } = require('node:test')
 const assert = require('node:assert/strict')
-const { sightingNotification, summaryNotification, formatObsDt } = require('../lib/notifications')
+const { sightingNotification, watchlistNotification, testNotification, summaryNotification, formatObsDt } = require('../lib/notifications')
 const { lonToX, latToY } = require('../lib/staticMap')
 
 const sighting = { speciesCode: 'snogoo', comName: 'Snow Goose', locName: 'Lake Lanier', obsDt: '2026-10-20 13:49', howMany: 3, lat: 34.2695, lng: -83.9014, subId: 'S1', kind: 'watchlist' }
@@ -30,8 +30,15 @@ test('a notable sighting is labelled and falls back to the app icon without a ph
   assert.match(n.icon, /\/images\/bird\.png$/)
 })
 
+test('a sighting notification opens the sighting page; without a checklist it opens the app', () => {
+  assert.ok(sightingNotification(sighting).data.url.endsWith('/sighting/snogoo/S1'))
+  assert.ok(sightingNotification({ ...sighting, subId: undefined }).data.url.endsWith('/'))
+  assert.ok(sightingNotification({ ...sighting, kind: 'season', lastSeenOn: '2026-04-12' }).data.url.endsWith('/sighting/snogoo/S1'))
+})
+
 test('overflow becomes one summary', () => {
   const n = summaryNotification(['A', 'B', 'C', 'D', 'E'].map((c) => ({ comName: c })))
+  assert.ok(n.data.url.endsWith('/map'), 'the summary opens the region map')
   assert.equal(n.title, '5 more sightings nearby')
   assert.equal(n.body, 'A, B, C and 2 more.')
 })
@@ -52,4 +59,49 @@ test('a first of the season says so, with when it was last around', () => {
   const spring = sightingNotification({ ...sighting, obsDt: '2026-03-30 09:00', kind: 'season' })
   assert.match(spring.title, /^🌱 First/)
   assert.match(spring.body, /first in over a year$/)
+})
+
+test('watch-list sightings share one notification with a line per bird and no map', () => {
+  const second = { ...sighting, speciesCode: 'cangoo', comName: 'Canada Goose', locName: 'Clarks Bridge', obsDt: '2026-10-20 15:10', subId: 'S2' }
+  const n = watchlistNotification([sighting, second], new Map([['snogoo', { birdImg: 'https://img/snogoo.jpg' }]]))
+  assert.equal(n.title, '⭐ 2 watch list birds spotted nearby')
+  assert.equal(n.body, 'Snow Goose, Canada Goose\nSnow Goose · Lake Lanier · Oct 20, 1:49 PM\nCanada Goose · Clarks Bridge · Oct 20, 3:10 PM')
+  assert.ok(n.data.url.endsWith('/sightings?s=' + encodeURIComponent('snogoo:S1,cangoo:S2')), n.data.url)
+  assert.equal(n.image, undefined)
+  assert.ok(n.icon.endsWith('/images/bird.png'), 'a list shows the app icon')
+  assert.deepEqual(n.actions.map((a) => a.action), ['app'])
+  assert.deepEqual(n.data.speciesCodes, ['snogoo', 'cangoo'])
+  assert.equal(n.data.kind, 'watchlist')
+})
+
+test('a lone watch-list bird keeps its photo and the usual title', () => {
+  const n = watchlistNotification([sighting], new Map([['snogoo', { birdImg: 'https://img/snogoo.jpg' }]]))
+  assert.equal(n.title, '⭐ Snow Goose spotted nearby!')
+  assert.equal(n.icon, 'https://img/snogoo.jpg')
+  assert.equal(n.image, undefined)
+  assert.equal(n.body, 'Snow Goose · Lake Lanier · Oct 20, 1:49 PM', 'one bird needs no names line')
+  assert.ok(n.data.url.endsWith('/sightings?s=' + encodeURIComponent('snogoo:S1')))
+})
+
+test('a long watch-list run names six birds and counts the rest', () => {
+  const many = Array.from({ length: 9 }, (_, i) => ({ ...sighting, speciesCode: `b${i}`, comName: `Bird ${i}`, subId: `S${i}` }))
+  const n = watchlistNotification(many)
+  assert.equal(n.title, '⭐ 9 watch list birds spotted nearby')
+  assert.equal(n.body.split('\n').length, 8, 'names line, six birds, and the count of the rest')
+  assert.ok(n.body.endsWith('and 3 more'))
+})
+
+test('the test notification previews the user\'s own birds as a watch-list batch', () => {
+  const recent = ['a', 'b', 'c', 'd', 'e'].map((c, i) => ({ ...sighting, speciesCode: c, comName: `Bird ${c}`, subId: `S${i}` }))
+  const n = testNotification(recent, new Set(['b', 'd']))
+  assert.equal(n.title, 'Test: ⭐ 2 watch list birds spotted nearby')
+  assert.equal(n.tag, 'bird-alert-test')
+  assert.deepEqual(n.data.speciesCodes, ['b', 'd'])
+  assert.ok(n.data.url.endsWith('/sightings?s=' + encodeURIComponent('b:S1,d:S3')))
+})
+
+test('with none of the user\'s birds about, the test previews the newest three reports', () => {
+  const recent = ['a', 'b', 'c', 'd'].map((c, i) => ({ ...sighting, speciesCode: c, comName: `Bird ${c}`, subId: `S${i}` }))
+  assert.deepEqual(testNotification(recent, new Set()).data.speciesCodes, ['a', 'b', 'c'])
+  assert.equal(testNotification([], new Set()), null, 'nothing recent means the plain test goes out')
 })

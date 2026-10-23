@@ -4,8 +4,9 @@ const { requireUser } = require('../../lib/auth')
 const { assertCronCaller } = require('../../lib/digest')
 const push = require('../../lib/push')
 const { runPushAlerts } = require('../../lib/pushAlerts')
-const { lastRun } = require('../../lib/jobRuns')
-const { sightingNotification } = require('../../lib/notifications')
+const { lastRun, recordRun } = require('../../lib/jobRuns')
+const { testNotification } = require('../../lib/notifications')
+const handoff = require('../../lib/handoff')
 const ebird = require('../../lib/ebird')
 
 const assertConfigured = () => {
@@ -81,18 +82,16 @@ const actions = {
     handler: async (req, res) => {
       assertConfigured()
       const user = await requireUser(req)
-      // Preview with a real recent sighting from the user's region when there is one, so the test
-      // looks exactly like the real thing: photo, map and actions.
+      // Preview with the user's own birds from the region's recent reports, so the test looks and
+      // taps exactly like a real watch-list alert: names first, and the sightings page behind it.
       let payload = null
       if (user.location) {
         try {
-          const [latest] = await ebird.recentObservations(user.location, 7)
-          if (latest) {
-            const bird = await db('birds').where({ speciesCode: latest.speciesCode }).first()
-            payload = sightingNotification({ ...latest, kind: 'watchlist' }, bird)
-            payload.title = `Test: ${payload.title}`
-            payload.tag = 'bird-alert-test'
-          }
+          const recent = await ebird.recentObservations(user.location, 7)
+          const saved = new Set(await db('saved_birds').where('user_id', user.id).pluck('speciesCode'))
+          const codes = [...new Set(recent.slice(0, 20).map((obs) => obs.speciesCode))]
+          const birds = codes.length ? await db('birds').whereIn('speciesCode', codes) : []
+          payload = testNotification(recent, saved, new Map(birds.map((b) => [b.speciesCode, b])))
         } catch (error) {
           console.error('Test preview sighting failed, sending a plain test:', error.message)
         }
@@ -105,6 +104,56 @@ const actions = {
         data: { url: '/' }
       }, { endpoint: typeof endpoint === 'string' ? endpoint : undefined })
       res.status(200).json(result)
+    }
+  },
+
+  // GET /api/push/pending -> { push: { title, url, sentAt, tappedAt, offeredAt, openedAt } | null }
+  // The latest push of the last ten minutes. The open app polls this: a tapped push is navigated to,
+  // an unoffered one becomes an in-app toast.
+  pending: {
+    methods: ['GET'],
+    handler: async (req, res) => {
+      const user = await requireUser(req)
+      res.setHeader('Cache-Control', 'no-store')
+      res.status(200).json({ push: await handoff.pending(user.id) })
+    }
+  },
+
+  // POST /api/push/tap { url } -> the service worker saw a tap on the latest push
+  tap: {
+    methods: ['POST'],
+    handler: async (req, res) => {
+      const user = await requireUser(req)
+      const { url } = body(req)
+      if (typeof url !== 'string') throw new HttpError(400, 'A url is required')
+      res.status(200).json({ marked: (await handoff.markTapped(user.id, url)) > 0 })
+    }
+  },
+
+  // POST /api/push/ack { offered?, opened? } -> the app offered the push as a toast and/or navigated to it
+  ack: {
+    methods: ['POST'],
+    handler: async (req, res) => {
+      const user = await requireUser(req)
+      const { offered, opened } = body(req)
+      await handoff.ack(user.id, { offered: offered === true, opened: opened === true })
+      res.status(204).end()
+    }
+  },
+
+  // POST /api/push/trace { event, ... } -> remembers the last 30 things this user's service worker and
+  // app did with notifications, so a tap that goes nowhere on a phone can be read back from the server.
+  trace: {
+    methods: ['POST'],
+    handler: async (req, res) => {
+      const user = await requireUser(req)
+      const detail = body(req)
+      if (!detail || typeof detail.event !== 'string') throw new HttpError(400, 'An event is required')
+      const kind = `sw-trace:${user.id}`
+      const previous = (await lastRun(kind))?.detail?.events || []
+      const entry = { ...JSON.parse(JSON.stringify(detail).slice(0, 4000)), at: new Date().toISOString() }
+      await recordRun(kind, { events: [...previous, entry].slice(-30) })
+      res.status(204).end()
     }
   },
 

@@ -11,7 +11,7 @@ const seasonality = require('../lib/seasonality')
 let userId
 before(async () => {
   await db.migrate.latest()
-  for (const table of ['digest_log', 'push_log', 'push_subscriptions', 'saved_birds', 'auth_throttle', 'season_firsts', 'region_species_days', 'region_days', 'job_runs', 'users', 'birds']) await db(table).del()
+  for (const table of ['bird_sounds', 'digest_log', 'push_handoff', 'push_log', 'push_subscriptions', 'saved_birds', 'auth_throttle', 'season_firsts', 'region_species_days', 'region_days', 'job_runs', 'users', 'birds']) await db(table).del()
   // Nothing in here may reach eBird; the hourly job's history fetch is a no-op unless a test says otherwise.
   ebird.historicObservations = async () => []
   ;[{ id: userId }] = await db('users').insert({
@@ -55,18 +55,25 @@ test('a pushed observation is logged and never pushed again', async () => {
   const ebird = require('../lib/ebird')
   const { runPushAlerts } = require('../lib/pushAlerts')
   const original = ebird.recentObservations
-  ebird.recentObservations = async () => [{ speciesCode: 'cangoo', comName: 'Canada Goose', locName: 'Lake', obsDt: '2026-10-20 08:00', lat: 34.2, lng: -83.9, subId: 'S77' }]
+  ebird.recentObservations = async () => [
+    { speciesCode: 'cangoo', comName: 'Canada Goose', locName: 'Lake', obsDt: '2026-10-20 08:00', lat: 34.2, lng: -83.9, subId: 'S77' },
+    { speciesCode: 'snogoo', comName: 'Snow Goose', locName: 'Dam', obsDt: '2026-10-20 09:30', lat: 34.2, lng: -83.9, subId: 'S78' }
+  ]
   try {
     await db('push_subscriptions').insert({ user_id: userId, endpoint: 'https://push.example/dev1', p256dh: 'k', auth: 'a' })
-    await db('saved_birds').insert({ user_id: userId, speciesCode: 'cangoo', bird_id: (await db('birds').insert({ speciesCode: 'cangoo', comName: 'Canada Goose', sciName: 'Branta canadensis' }).returning('id'))[0].id })
+    for (const [speciesCode, comName, sciName] of [['cangoo', 'Canada Goose', 'Branta canadensis'], ['snogoo', 'Snow Goose', 'Anser caerulescens']]) {
+      await db('saved_birds').insert({ user_id: userId, speciesCode, bird_id: (await db('birds').insert({ speciesCode, comName, sciName }).returning('id'))[0].id })
+    }
     await db('users').where({ id: userId }).update({ push_watchlist_enabled: true, push_quiet_start: null, push_quiet_end: null })
     const sent = []
-    const send = async (id, payload) => { sent.push(payload.title); return { sent: 1, gone: 0 } }
+    const send = async (id, payload) => { sent.push(payload); return { sent: 1, gone: 0 } }
 
     const first = await runPushAlerts({ send })
     assert.equal(first.notified, 1)
-    assert.deepEqual(sent, ['⭐ Canada Goose spotted nearby!'])
-    assert.equal(Number((await db('push_log').where({ user_id: userId, sub_id: 'S77' }).count('* as n').first()).n), 1)
+    assert.deepEqual(sent.map((n) => n.title), ['⭐ 2 watch list birds spotted nearby'], 'watch-list birds travel together')
+    assert.equal(sent[0].body, 'Canada Goose, Snow Goose\nCanada Goose · Lake · Oct 20, 8:00 AM\nSnow Goose · Dam · Oct 20, 9:30 AM')
+    assert.ok(sent[0].data.url.endsWith('/sightings?s=' + encodeURIComponent('cangoo:S77,snogoo:S78')))
+    assert.equal(Number((await db('push_log').where({ user_id: userId }).whereIn('sub_id', ['S77', 'S78']).count('* as n').first()).n), 2)
 
     const second = await runPushAlerts({ send })
     assert.equal(second.notified, 0, 'same observation must not be pushed twice')
@@ -74,6 +81,38 @@ test('a pushed observation is logged and never pushed again', async () => {
   } finally {
     ebird.recentObservations = original
   }
+})
+
+test('a push is handed to the open app through the server: offered, tapped, opened', async () => {
+  const handoff = require('../lib/handoff')
+  const url = 'https://bird-alert.vercel.app/sightings?s=cangoo:S1'
+  await handoff.recordSent(userId, { title: '⭐ Canada Goose spotted nearby!', data: { url } })
+  let push = await handoff.pending(userId)
+  assert.equal(push.url, url)
+  assert.equal(push.tappedAt, null)
+  assert.equal(push.offeredAt, null)
+
+  await handoff.ack(userId, { offered: true })
+  assert.ok((await handoff.pending(userId)).offeredAt, 'the toast was offered')
+
+  assert.equal(await handoff.markTapped(userId, 'https://bird-alert.vercel.app/'), 0, 'a tap on some other notification is ignored')
+  assert.equal(await handoff.markTapped(userId, url), 1)
+  push = await handoff.pending(userId)
+  assert.ok(push.tappedAt)
+  assert.equal(push.openedAt, null)
+
+  await handoff.ack(userId, { opened: true })
+  assert.ok((await handoff.pending(userId)).openedAt)
+
+  await handoff.recordSent(userId, { title: 'Newer', data: { url: 'https://bird-alert.vercel.app/' } })
+  push = await handoff.pending(userId)
+  assert.equal(push.title, 'Newer', 'a newer push replaces the old one')
+  assert.equal(push.tappedAt, null, 'with a clean slate')
+
+  await db('push_handoff').where({ user_id: userId }).update({ sent_at: db.raw("now() - interval '11 minutes'") })
+  assert.equal(await handoff.pending(userId), null, 'old pushes are not offered')
+  await handoff.recordSent(userId, { title: 'No link' })
+  assert.equal(await handoff.pending(userId), null, 'a push without an app link is not recorded')
 })
 
 // A year of made-up history for one county: a resident reported daily, a migrant that arrived on
@@ -149,4 +188,30 @@ test('seasonality: history is fetched once, arrivals are judged by last year, an
     ebird.historicObservations = originals.historic
     ebird.recentObservations = originals.recent
   }
+})
+
+test('a species sound is looked up on xeno-canto once and then served from the table', async () => {
+  const { soundFor } = require('../lib/sounds')
+  const { withFetch, jsonResponse } = require('./helpers')
+  process.env.XENO_CANTO_KEY = 'test-key'
+  await db('birds').insert({ speciesCode: 'snogoo', comName: 'Snow Goose', sciName: 'Anser caerulescens' }).onConflict('speciesCode').ignore()
+  const calls = []
+  const recording = { id: '4242', file: 'https://xeno-canto.org/4242/download', 'file-name': 'XC4242.mp3', type: 'call', q: 'A', length: '0:12', cnt: 'United States', rec: 'A Birder', lic: 'https://creativecommons.org/licenses/by-nc-sa/4.0/' }
+  const sound = await withFetch((url) => { calls.push(url); return jsonResponse({ recordings: [recording] }) }, () => soundFor('snogoo'))
+  assert.equal(calls.length, 1)
+  assert.match(calls[0], /query=sp%3A%22Anser\+caerulescens%22\+q%3AA/)
+  assert.ok(calls[0].includes('key=test-key'))
+  assert.deepEqual({ found: sound.found, xcId: sound.xcId, url: sound.url, page: sound.page, licenseName: sound.licenseName, length: sound.length },
+    { found: true, xcId: 4242, url: recording.file, page: 'https://xeno-canto.org/4242', licenseName: 'CC BY-NC-SA 4.0', length: 12 })
+  const again = await withFetch(() => { throw new Error('should not fetch') }, () => soundFor('snogoo'))
+  assert.equal(again.xcId, 4242)
+
+  // Nothing suitable: A then B are tried, the miss is remembered, and no third search follows.
+  await db('birds').insert({ speciesCode: 'emgoo1', comName: 'Emperor Goose', sciName: 'Anser canagicus' }).onConflict('speciesCode').ignore()
+  const misses = []
+  const none = await withFetch((url) => { misses.push(url); return jsonResponse({ recordings: [] }) }, () => soundFor('emgoo1'))
+  assert.equal(none.found, false)
+  assert.equal(misses.length, 2)
+  const stillNone = await withFetch(() => { throw new Error('should not fetch') }, () => soundFor('emgoo1'))
+  assert.equal(stillNone.found, false)
 })
