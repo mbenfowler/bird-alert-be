@@ -1,13 +1,19 @@
 {
   "crons": [
     {
-      "path": "/api/alertDigestMailer",
+      "path": "/api/mail/watchlist",
       "schedule": "0 15 * * *"
     },
     {
-      "path": "/api/rareSightingsMailer",
+      "path": "/api/mail/rare",
       "schedule": "0 16 * * *"
     }
+  ],
+  "rewrites": [
+    { "source": "/api/alertDigestMailer", "destination": "/api/mail/watchlist" },
+    { "source": "/api/rareSightingsMailer", "destination": "/api/mail/rare" },
+    { "source": "/api/migrationMailer", "destination": "/api/mail/migration" },
+    { "source": "/api/mailPreview", "destination": "/api/mail/preview" }
   ],
   "functions": {
     "api/**/*.js": {
