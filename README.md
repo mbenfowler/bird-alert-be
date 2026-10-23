@@ -32,6 +32,7 @@ All request and response bodies are JSON. Authenticated routes read an `HttpOnly
 | GET | `/api/ebird/regions?state=` | no | eBird subregions for a US state (cached a week) |
 | GET | `/api/ebird/arriving?region=` | no | `{ arrivals, learning }`: species reported this time last year but not in the last two weeks, judged as returning migrants once enough history is on file (cached an hour) |
 | GET | `/api/ebird/seasonality?region=&code=` | no | `{ months: [{ month, reported, covered }] }`: days per month the species was reported in the region over the last year (cached a day) |
+| GET | `/api/sound?code=` | no | one representative xeno-canto recording for the species: `{ found, url, page, type, length, recordist, license, licenseName }`; chosen once per species (song over call, short clean mp3 from this continent preferred) and kept in `bird_sounds` for 90 days; `found: false` when xeno-canto has nothing usable (cached a day) |
 | GET | `/api/push/public-key` | no | VAPID public key for subscribing |
 | POST | `/api/push/subscribe` | yes | browser push subscription → stored per device (idempotent) |
 | POST | `/api/push/unsubscribe` | yes | `{ endpoint }` |
