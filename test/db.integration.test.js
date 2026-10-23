@@ -11,7 +11,7 @@ const seasonality = require('../lib/seasonality')
 let userId
 before(async () => {
   await db.migrate.latest()
-  for (const table of ['digest_log', 'push_handoff', 'push_log', 'push_subscriptions', 'saved_birds', 'auth_throttle', 'season_firsts', 'region_species_days', 'region_days', 'job_runs', 'users', 'birds']) await db(table).del()
+  for (const table of ['bird_sounds', 'digest_log', 'push_handoff', 'push_log', 'push_subscriptions', 'saved_birds', 'auth_throttle', 'season_firsts', 'region_species_days', 'region_days', 'job_runs', 'users', 'birds']) await db(table).del()
   // Nothing in here may reach eBird; the hourly job's history fetch is a no-op unless a test says otherwise.
   ebird.historicObservations = async () => []
   ;[{ id: userId }] = await db('users').insert({
@@ -188,4 +188,30 @@ test('seasonality: history is fetched once, arrivals are judged by last year, an
     ebird.historicObservations = originals.historic
     ebird.recentObservations = originals.recent
   }
+})
+
+test('a species sound is looked up on xeno-canto once and then served from the table', async () => {
+  const { soundFor } = require('../lib/sounds')
+  const { withFetch, jsonResponse } = require('./helpers')
+  process.env.XENO_CANTO_KEY = 'test-key'
+  await db('birds').insert({ speciesCode: 'snogoo', comName: 'Snow Goose', sciName: 'Anser caerulescens' }).onConflict('speciesCode').ignore()
+  const calls = []
+  const recording = { id: '4242', file: 'https://xeno-canto.org/4242/download', 'file-name': 'XC4242.mp3', type: 'call', q: 'A', length: '0:12', cnt: 'United States', rec: 'A Birder', lic: 'https://creativecommons.org/licenses/by-nc-sa/4.0/' }
+  const sound = await withFetch((url) => { calls.push(url); return jsonResponse({ recordings: [recording] }) }, () => soundFor('snogoo'))
+  assert.equal(calls.length, 1)
+  assert.match(calls[0], /query=sp%3A%22Anser\+caerulescens%22\+q%3AA/)
+  assert.ok(calls[0].includes('key=test-key'))
+  assert.deepEqual({ found: sound.found, xcId: sound.xcId, url: sound.url, page: sound.page, licenseName: sound.licenseName, length: sound.length },
+    { found: true, xcId: 4242, url: recording.file, page: 'https://xeno-canto.org/4242', licenseName: 'CC BY-NC-SA 4.0', length: 12 })
+  const again = await withFetch(() => { throw new Error('should not fetch') }, () => soundFor('snogoo'))
+  assert.equal(again.xcId, 4242)
+
+  // Nothing suitable: A then B are tried, the miss is remembered, and no third search follows.
+  await db('birds').insert({ speciesCode: 'emgoo1', comName: 'Emperor Goose', sciName: 'Anser canagicus' }).onConflict('speciesCode').ignore()
+  const misses = []
+  const none = await withFetch((url) => { misses.push(url); return jsonResponse({ recordings: [] }) }, () => soundFor('emgoo1'))
+  assert.equal(none.found, false)
+  assert.equal(misses.length, 2)
+  const stillNone = await withFetch(() => { throw new Error('should not fetch') }, () => soundFor('emgoo1'))
+  assert.equal(stillNone.found, false)
 })
