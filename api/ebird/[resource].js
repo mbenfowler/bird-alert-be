@@ -2,6 +2,8 @@ const { route, HttpError } = require('../../lib/http')
 const ebird = require('../../lib/ebird')
 const db = require('../../lib/db')
 const { arrivingSoon, seasonality } = require('../../lib/seasonality')
+const { syncChecklists, userRegions } = require('../../lib/checklists')
+const { assertCronCaller } = require('../../lib/digest')
 
 const DAY = 86400
 const WEEK = 7 * DAY
@@ -45,6 +47,22 @@ const resources = {
   regions: {
     handler: ({ state }) => ebird.subregions(ebird.assertState(state)),
     cacheControl: cache(WEEK, 4 * WEEK)
+  },
+  // GET /api/ebird/sync-checklists[?region=] (hourly, GitHub Actions; cron auth) -> per region, what was
+  // listed, added and fetched in full. Keeps the checklists tables current within the function's time budget.
+  'sync-checklists': {
+    handler: async ({ region }, req) => {
+      assertCronCaller(req)
+      const regions = region ? [ebird.assertRegion(region)] : await userRegions()
+      const deadline = Date.now() + 45_000
+      const results = []
+      for (const code of regions) {
+        if (Date.now() > deadline) break
+        results.push(await syncChecklists(code, { detailLimit: 40, deadline }))
+      }
+      return { regions: results }
+    },
+    cacheControl: 'no-store'
   }
 }
 
@@ -69,7 +87,7 @@ const clampBack = (value) => {
 module.exports = route(['GET'], async (req, res) => {
   const resource = resources[req.query.resource]
   if (!resource) throw new HttpError(404, 'Not found')
-  const data = await resource.handler(req.query)
+  const data = await resource.handler(req.query, req)
   res.setHeader('Cache-Control', resource.cacheControl)
   res.status(200).json(data)
 })

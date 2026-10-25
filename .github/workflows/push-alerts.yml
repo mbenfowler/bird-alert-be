@@ -25,3 +25,10 @@ jobs:
           curl --fail-with-body --silent --show-error --max-time 120 \
             -H "Authorization: Bearer $CRON_SECRET" \
             https://bird-alert-be.vercel.app/api/push/alerts
+      - name: Sync the regions' checklists
+        env:
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+        run: |
+          curl --fail-with-body --silent --show-error --max-time 120 \
+            -H "Authorization: Bearer $CRON_SECRET" \
+            "https://bird-alert-be.vercel.app/api/ebird/sync-checklists"
