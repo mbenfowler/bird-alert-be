@@ -11,7 +11,7 @@ const seasonality = require('../lib/seasonality')
 let userId
 before(async () => {
   await db.migrate.latest()
-  for (const table of ['bird_sounds', 'digest_log', 'push_handoff', 'push_log', 'push_subscriptions', 'saved_birds', 'auth_throttle', 'season_firsts', 'region_species_days', 'region_days', 'job_runs', 'users', 'birds']) await db(table).del()
+  for (const table of ['checklist_species', 'checklists', 'bird_sounds', 'digest_log', 'push_handoff', 'push_log', 'push_subscriptions', 'saved_birds', 'auth_throttle', 'season_firsts', 'region_species_days', 'region_days', 'job_runs', 'users', 'birds']) await db(table).del()
   // Nothing in here may reach eBird; the hourly job's history fetch is a no-op unless a test says otherwise.
   ebird.historicObservations = async () => []
   ;[{ id: userId }] = await db('users').insert({
@@ -214,4 +214,58 @@ test('a species sound is looked up on xeno-canto once and then served from the t
   assert.equal(misses.length, 2)
   const stillNone = await withFetch(() => { throw new Error('should not fetch') }, () => soundFor('emgoo1'))
   assert.equal(stillNone.found, false)
+})
+
+test('history days gain locations: new fetches keep them, old days are refetched once', async () => {
+  const { ensureDays, backfillLocations } = seasonality
+  ebird.historicObservations = async (_region, day) => [{ speciesCode: 'reshaw', locId: 'L2664464', locName: 'Lanier Village Estates', obsDt: `${day} 08:10`, subId: 'S77' }]
+  await ensureDays('US-GA-121', ['2026-09-01'])
+  let row = await db('region_species_days').where({ region: 'US-GA-121', day: '2026-09-01', speciesCode: 'reshaw' }).first()
+  assert.equal(row.locId, 'L2664464')
+  assert.equal(row.obsTime, '08:10')
+  assert.equal((await db('region_days').where({ region: 'US-GA-121' }).first()).has_locations, true)
+
+  // A day stored before locations were kept.
+  await db('region_days').where({ region: 'US-GA-121' }).update({ has_locations: false })
+  await db('region_species_days').where({ region: 'US-GA-121' }).update({ locId: null, locName: null, obsTime: null, subId: null })
+  let calls = 0
+  ebird.historicObservations = async (_region, day) => { calls += 1; return [{ speciesCode: 'reshaw', locId: 'L1', locName: 'Somewhere', obsDt: `${day} 07:00`, subId: 'S78' }] }
+  assert.deepEqual(await backfillLocations('US-GA-121'), { fetched: 1, failed: 0, remaining: 0 })
+  row = await db('region_species_days').where({ region: 'US-GA-121', day: '2026-09-01', speciesCode: 'reshaw' }).first()
+  assert.equal(row.locId, 'L1')
+  assert.deepEqual(await backfillLocations('US-GA-121'), { fetched: 0, failed: 0, remaining: 0 })
+  assert.equal(calls, 1)
+  ebird.historicObservations = async () => []
+})
+
+test('checklists are listed once, fetched in full newest first, and not fetched again', async () => {
+  const { syncChecklists } = require('../lib/checklists')
+  const listed = [
+    { locId: 'L1', subId: 'S200', userDisplayName: 'B', numSpecies: 2, obsDt: '25 Oct 2026', obsTime: '09:00', isoObsDate: '2026-10-25 09:00', loc: { locName: 'Park', latitude: 34.3, longitude: -83.7, isHotspot: true } },
+    { locId: 'L1', subId: 'S100', userDisplayName: 'A', numSpecies: 1, obsDt: '24 Oct 2026', obsTime: '08:00', isoObsDate: '2026-10-24 08:00', loc: { locName: 'Park', latitude: 34.3, longitude: -83.7, isHotspot: true } }
+  ]
+  const views = {
+    S200: { numSpecies: 2, numObservers: 1, durationHrs: 1.5, obs: [{ speciesCode: 'cangoo', howManyAtleast: 4, comments: 'north ramp', mediaCounts: { P: 1 } }, { speciesCode: 'norcar', howManyAtleast: 1 }] },
+    S100: { numSpecies: 1, obs: [{ speciesCode: 'cangoo', howManyAtleast: 2 }] }
+  }
+  const fetched = []
+  ebird.recentChecklists = async () => listed
+  ebird.checklistView = async (subId) => { fetched.push(subId); return views[subId] }
+
+  const first = await syncChecklists('US-GA-139', { detailLimit: 1, pause: 0 })
+  assert.deepEqual(first, { region: 'US-GA-139', listed: 2, added: 2, detailed: 1, failed: 0, pending: 1 })
+  assert.deepEqual(fetched, ['S200'])
+  const s200 = await db('checklists').where({ sub_id: 'S200' }).first()
+  assert.equal(s200.loc_name, 'Park')
+  assert.equal(Number(s200.duration_hrs), 1.5)
+  assert.ok(s200.detail_fetched_at)
+  const species = await db('checklist_species').where({ sub_id: 'S200' }).orderBy('species_code')
+  assert.deepEqual(species.map((r) => [r.species_code, r.how_many, r.comments, r.photos]), [['cangoo', 4, 'north ramp', 1], ['norcar', 1, null, 0]])
+
+  const second = await syncChecklists('US-GA-139', { detailLimit: 10, pause: 0 })
+  assert.deepEqual(second, { region: 'US-GA-139', listed: 2, added: 0, detailed: 1, failed: 0, pending: 0 })
+  assert.deepEqual(fetched, ['S200', 'S100'])
+  const third = await syncChecklists('US-GA-139', { detailLimit: 10, pause: 0 })
+  assert.equal(third.detailed, 0)
+  assert.equal(fetched.length, 2)
 })
