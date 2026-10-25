@@ -1,0 +1,2202 @@
+{
+ "acafly": {
+  "habitat": "Shaded ravines, creek bottoms and swamp forest in summer.",
+  "look": "Listen for the explosive 'peet-sah' from the understory along streams; the nest hangs from a low beech or hemlock branch.",
+  "time": "Morning"
+ },
+ "afcdov1": {
+  "habitat": "Suburbs; escapes that mix with Eurasian Collared-Doves.",
+  "look": "Paler and smaller than Eurasian Collared-Dove, with a different, laughing call; study calls closely.",
+  "time": "Any time"
+ },
+ "aldfly": {
+  "habitat": "Wet thickets and shrubby edges in migration.",
+  "look": "Only safely identified by voice: a burry 'free-beer'. Check willow and alder thickets in late May.",
+  "time": "Morning"
+ },
+ "allhum": {
+  "habitat": "Winter feeders; very rare and hard to separate from Rufous.",
+  "look": "A Rufous-type hummingbird at a winter feeder; confirmation usually needs a bander.",
+  "time": "Morning at feeders"
+ },
+ "ambduc": {
+  "habitat": "Wooded swamps, beaver ponds and secluded marshes, usually with Mallards.",
+  "look": "Pick through Mallard flocks for a uniformly dark body with a paler head and an olive-yellow bill; in flight the underwing flashes white.",
+  "time": "Morning"
+ },
+ "ameavo": {
+  "habitat": "Shallow coastal impoundments and lagoons; rare inland.",
+  "look": "Flocks sweeping upturned bills through shallow water; scan impoundments and coastal ponds in winter.",
+  "time": "Any time"
+ },
+ "amebit": {
+  "habitat": "Freshwater marshes with dense cattails and wet meadows.",
+  "look": "Walk dike edges slowly and scan the cattail edge for a streaked brown heron frozen with bill pointed up; most often seen when it flies between patches.",
+  "time": "Early morning and dusk"
+ },
+ "amecro": {
+  "habitat": "Everywhere: fields, towns, woods and roadsides.",
+  "look": "Big roosts in winter; follow mobbing crows to roosting owls.",
+  "time": "Any time"
+ },
+ "amegfi": {
+  "habitat": "Weedy fields, feeders and sweetgums.",
+  "look": "Bouncing flight with 'po-ta-to-chip' calls; thistle feeders in winter.",
+  "time": "Any time"
+ },
+ "amekes": {
+  "habitat": "Open fields, pastures, airports; perches on wires.",
+  "look": "Small falcon on roadside wires bobbing its tail, or hovering over a field.",
+  "time": "Any time, best winter"
+ },
+ "ameoys": {
+  "habitat": "Shell bars, oyster beds and beaches on the coast.",
+  "look": "Scan exposed shell rakes at low tide; the heavy orange bill is visible far away. Roosts on sandbars at high tide.",
+  "time": "Low tide"
+ },
+ "amepip": {
+  "habitat": "Plowed fields, sod farms, mudflats and reservoir shores in winter.",
+  "look": "Scan bare fields for slim brown birds walking and bobbing their tails; flocks flush with 'pi-pit' calls.",
+  "time": "Morning"
+ },
+ "amered": {
+  "habitat": "Deciduous woods, edges and thickets; common in migration.",
+  "look": "Watch for a bird constantly fanning its tail and wings to flush insects in mid-level foliage.",
+  "time": "Morning"
+ },
+ "amerob": {
+  "habitat": "Lawns, parks, woods and berry trees; huge winter roosts.",
+  "look": "Everywhere on lawns; in winter check holly and cedar stands for feeding flocks with waxwings.",
+  "time": "Any time"
+ },
+ "amewig": {
+  "habitat": "Lakes, ponds, golf-course water and nearby lawns where they graze.",
+  "look": "Listen for the whistled three-note call; flocks graze on grass near water and steal from diving coots.",
+  "time": "Any time in winter"
+ },
+ "amewoo": {
+  "habitat": "Wet thickets and young woods by day; fields and clearings at dusk in late winter.",
+  "look": "Visit a brushy field edge at dusk from January to March and listen for the nasal 'peent' and the twittering display flight.",
+  "time": "Dusk, 20 to 40 minutes after sunset"
+ },
+ "amgplo": {
+  "habitat": "Sod farms, plowed fields and airports in fall; rarely on beaches.",
+  "look": "Scan turf farms in September and October for a slim plover with a bold eyebrow among Killdeer.",
+  "time": "Morning"
+ },
+ "amhgul1": {
+  "habitat": "Beaches, landfills, large reservoirs and dams in winter.",
+  "look": "The large pink-legged gull; study its plumages to pick out rarer large gulls among them.",
+  "time": "Any time"
+ },
+ "amwpel": {
+  "habitat": "Large reservoirs, coastal lagoons and estuaries in winter.",
+  "look": "Flocks of enormous white birds fishing cooperatively in shallow bays, or soaring in spirals at midday.",
+  "time": "Morning feeding; midday soaring"
+ },
+ "anhing": {
+  "habitat": "Swamps, cypress ponds, lake edges and canals.",
+  "look": "Look for a dark bird drying spread wings on a snag over water, or soaring high with a long tail; swims with only the head above water.",
+  "time": "Morning sunning"
+ },
+ "annhum": {
+  "habitat": "Feeders in winter; a very rare stray.",
+  "look": "A large, stocky hummingbird at a winter feeder; the male's rose crown is distinctive.",
+  "time": "Morning at feeders"
+ },
+ "anpswi": {
+  "habitat": "Caribbean species; extreme rarity in Florida.",
+  "look": "Small swift with a white rump over palms and open areas; needs photos.",
+  "time": "Morning"
+ },
+ "arcter": {
+  "habitat": "Offshore; a rare migrant seen on pelagic trips or after storms.",
+  "look": "Compare with Common Tern: shorter bill, longer tail, translucent wings; very rare from shore.",
+  "time": "After storms"
+ },
+ "astfly": {
+  "habitat": "Dry brushy edges and open woods; a rare late-fall stray.",
+  "look": "A pale Myiarchus in November and December; listen for the 'ka-brick' call and check tail pattern.",
+  "time": "Morning"
+ },
+ "audshe": {
+  "habitat": "Gulf Stream waters; onshore after storms.",
+  "look": "Pelagic trips or post-storm beach walks; a small black-and-white shearwater with fluttery flight.",
+  "time": "After storms"
+ },
+ "babwar": {
+  "habitat": "Treetops in migration, especially in pines and oaks in fall.",
+  "look": "Pick through fall mixed flocks for a plump, greenish warbler with buffy flanks and dark legs; in spring look for the chestnut sides.",
+  "time": "Morning"
+ },
+ "bacspa": {
+  "habitat": "Open longleaf pine with wiregrass, recently burned; also clearcuts.",
+  "look": "Listen in April and May for a clear whistle followed by a trill from a low perch in open pine; nearly impossible to find when silent.",
+  "time": "Early morning"
+ },
+ "bahgoo": {
+  "habitat": "Park ponds with domestic waterfowl; an escape, not a wild bird.",
+  "look": "Pale gray goose with two black bars across the back of the head, usually tame and with other geese.",
+  "time": "Any time"
+ },
+ "bahswa": {
+  "habitat": "Bahamian species; an extreme rarity in South Florida.",
+  "look": "A Tree Swallow-like bird with a deeply forked tail among swallow flocks in the Keys; needs photos.",
+  "time": "Morning"
+ },
+ "baisan": {
+  "habitat": "Dry margins of reservoirs, sod farms and upper beaches in fall.",
+  "look": "Look above the waterline for a long-winged peep with scaly buff upperparts, usually in August and September.",
+  "time": "Morning"
+ },
+ "baleag": {
+  "habitat": "Lakes, reservoirs, rivers and coasts; nests in tall pines near water.",
+  "look": "Scan tall shoreline trees for a white head; nests are huge and reused each winter. Reservoir dams and fish-kill areas draw them.",
+  "time": "Morning"
+ },
+ "balori": {
+  "habitat": "Tall deciduous trees, especially along rivers; winters at feeders in the South.",
+  "look": "Listen for rich whistled phrases from the tops of tall trees in spring; in winter offer grape jelly and oranges.",
+  "time": "Morning"
+ },
+ "banswa": {
+  "habitat": "Sand and gravel pits with vertical banks; over lakes in migration.",
+  "look": "Check swallow flocks over reservoirs in late summer for a small brown swallow with a clean breast band; colonies in sand banks.",
+  "time": "Morning and evening"
+ },
+ "barpet": {
+  "habitat": "Gulf Stream waters; occasionally blown inland by hurricanes.",
+  "look": "After tropical systems, scan reservoirs and lakes for small dark seabirds; most are identified from photos.",
+  "time": "After storms"
+ },
+ "barswa": {
+  "habitat": "Bridges, barns, open fields and water.",
+  "look": "Fork-tailed swallows sweeping low over fields; nests of mud under bridges and eaves.",
+  "time": "Any time"
+ },
+ "batpig1": {
+  "habitat": "Western forests; a very rare stray in the East.",
+  "look": "A large gray pigeon with a white nape crescent and yellow bill, usually at a feeder or in oaks.",
+  "time": "Morning"
+ },
+ "bawwar": {
+  "habitat": "Deciduous and mixed woods; creeps on trunks and limbs.",
+  "look": "Watch large limbs and trunks for a striped bird moving like a nuthatch; the song is a thin squeaky wheel.",
+  "time": "Morning"
+ },
+ "bbwduc": {
+  "habitat": "Shallow freshwater ponds, flooded fields, golf-course lakes and retention ponds, often near trees.",
+  "look": "Listen for the high whistling calls in flight, often at dusk; by day they loaf in tight flocks on banks or perch in trees and on nest boxes.",
+  "time": "Dusk and first light; loafing flocks any time"
+ },
+ "bcnher": {
+  "habitat": "Marsh edges, lake shores, mangroves; roosts by day in dense trees.",
+  "look": "Watch at dusk as hunched gray herons leave roost trees; listen for the loud 'quok' overhead after dark. By day scan dense shoreline trees.",
+  "time": "Dusk"
+ },
+ "belkin1": {
+  "habitat": "Rivers, lake shores, ponds and coastal creeks with perches over water.",
+  "look": "Listen for the loud rattle; scan wires and snags over water, and sandy banks for nest holes in spring.",
+  "time": "Any time"
+ },
+ "belvir": {
+  "habitat": "Dense low thickets; a very rare migrant in the East.",
+  "look": "A drab, small vireo moving quickly through brush with a husky jumbled song; needs careful notes.",
+  "time": "Morning"
+ },
+ "bewwre": {
+  "habitat": "Brushy farmland and woodland edges; now extremely rare in the East.",
+  "look": "A long-tailed wren with a white eyebrow in brush piles; any Eastern sighting needs documentation.",
+  "time": "Morning"
+ },
+ "bkbcuc": {
+  "habitat": "Wooded edges and thickets in migration.",
+  "look": "Secretive; look for the red eye ring and small tail spots when a cuckoo flies across an opening. Most likely in May and September.",
+  "time": "Morning"
+ },
+ "bkbplo": {
+  "habitat": "Beaches, mudflats and sod farms; inland on reservoir shores and turf farms in migration.",
+  "look": "Stands upright on open flats; check sod farms and drawn-down reservoirs in fall. The black axillaries show in flight.",
+  "time": "Low tide; mornings on sod"
+ },
+ "bkbwar": {
+  "habitat": "Hemlocks and tall hardwoods in the mountains in summer; canopy in migration.",
+  "look": "Look at the very tops of tall trees in May for a flaming orange throat; the song is a very high, thin trill.",
+  "time": "Morning"
+ },
+ "bkchum": {
+  "habitat": "Feeders in winter; a rare western stray.",
+  "look": "A wintering hummingbird at a feeder that is maintained through December; tail-pumping while hovering is a clue.",
+  "time": "Morning at feeders"
+ },
+ "bkhgro": {
+  "habitat": "Feeders in winter; a rare western stray.",
+  "look": "A grosbeak with an orange breast and streaked flanks at a sunflower feeder in winter; compare carefully with young Rose-breasted.",
+  "time": "Morning at feeders"
+ },
+ "bkhgul": {
+  "habitat": "Coastal waters and sewage ponds; a rare winter stray among Bonaparte's Gulls.",
+  "look": "Scan Bonaparte's flocks for a slightly larger bird with a red bill and dark underwing primaries.",
+  "time": "Midday"
+ },
+ "bkhpar": {
+  "habitat": "Suburbs and parks along Florida's Gulf coast; feral and established.",
+  "look": "Flocks of green parakeets with black heads screeching over St. Petersburg and Fort Myers; roosts in palms.",
+  "time": "Dawn and dusk"
+ },
+ "bklkit": {
+  "habitat": "Open ocean; onshore after winter storms.",
+  "look": "Scan from piers after strong onshore winds in winter for a buoyant gull with solid black wingtips and a dark collar on young birds.",
+  "time": "After storms"
+ },
+ "bknsti": {
+  "habitat": "Shallow impoundments, salt pans and flooded fields.",
+  "look": "Long pink legs wading in shallow water; noisy and conspicuous at any shallow pool in spring and summer.",
+  "time": "Any time"
+ },
+ "bkpwar": {
+  "habitat": "Treetops in migration, mostly in May in the East.",
+  "look": "Listen for the extremely high, even trill from the canopy in mid-May; in fall rare in the Southeast interior, more on the coast.",
+  "time": "Morning"
+ },
+ "bkwvir": {
+  "habitat": "Mangroves and coastal hammocks of South Florida in summer.",
+  "look": "Listen for a Red-eyed-like song with shorter phrases in mangroves from April to August; look for the dark whisker.",
+  "time": "Morning"
+ },
+ "blbrol1": {
+  "habitat": "African; an escape.",
+  "look": "A brilliant roller on a wire or snag; captive origin.",
+  "time": "Any time"
+ },
+ "blksco2": {
+  "habitat": "Ocean surf and inlets; reservoirs after storms.",
+  "look": "Scan scoter flocks for an all-dark duck with a yellow-orange bill knob; the most likely scoter on big inland lakes in late fall.",
+  "time": "Morning"
+ },
+ "blkski": {
+  "habitat": "Sandy beaches, inlets and coastal lagoons.",
+  "look": "Roosts in tight flocks on sandbars by day; at dusk watch them skim calm water with the lower bill slicing the surface.",
+  "time": "Dusk and dawn for feeding; midday roosts"
+ },
+ "blkswa": {
+  "habitat": "Ornamental ponds; an escape from collections.",
+  "look": "Black swan with a red bill, usually tame and alone on a park lake.",
+  "time": "Any time"
+ },
+ "blkter": {
+  "habitat": "Lakes, reservoirs and coastal waters in late summer migration.",
+  "look": "Small dark tern with buoyant, erratic flight low over water; check reservoirs in August and after storms.",
+  "time": "Morning and evening"
+ },
+ "blkvul": {
+  "habitat": "Open country, roadsides, landfills; roosts on towers and dead trees.",
+  "look": "Short-tailed vulture with quick flaps; gathers at carcasses and communal roosts.",
+  "time": "Late morning onward"
+ },
+ "blugrb1": {
+  "habitat": "Overgrown fields, hedgerows, powerline cuts and brushy edges.",
+  "look": "Listen for a rich, husky warble from a wire or shrub top in May; the heavy bill and rusty wing bars show on the brown female too.",
+  "time": "Morning"
+ },
+ "blujay": {
+  "habitat": "Oak woods, suburbs, parks and feeders.",
+  "look": "Loud and obvious; mobbing calls often lead to an owl or hawk.",
+  "time": "Any time"
+ },
+ "bnhcow": {
+  "habitat": "Fields, feeders, pastures and woodland edges.",
+  "look": "In flocks with other blackbirds; watch for females lurking near songbird nests in spring.",
+  "time": "Any time"
+ },
+ "bnhnut": {
+  "habitat": "Pine stands, especially mature loblolly and longleaf.",
+  "look": "Listen for squeaky-toy calls from the tops of pines; small groups move through pine crowns with chickadees.",
+  "time": "Any time"
+ },
+ "boboli": {
+  "habitat": "Hayfields and grassy marsh in migration; rice fields in fall.",
+  "look": "Listen for 'pink' calls overhead and watch for flocks dropping into tall grass in May and September; males are striking in spring.",
+  "time": "Morning"
+ },
+ "bongul": {
+  "habitat": "Large lakes, dam tailwaters and coastal inlets in winter.",
+  "look": "Small graceful gulls feeding like terns over water below dams and at lake outflows; flocks appear from November.",
+  "time": "Morning and late afternoon"
+ },
+ "botgra": {
+  "habitat": "Salt marsh, beaches, coastal towns and inland lakes in Florida.",
+  "look": "Noisy, long-tailed grackles displaying on marsh edges and parking lots; the females are brown.",
+  "time": "Any time"
+ },
+ "brant": {
+  "habitat": "Coastal bays, mudflats and eelgrass beds; inland a rare storm-blown stray on reservoirs.",
+  "look": "A small dark goose with a white neck patch; scan coastal flats at low tide and reservoirs after coastal storms.",
+  "time": "Low tide on the coast"
+ },
+ "brdowl": {
+  "habitat": "Swamps, river bottoms and mature wooded neighborhoods.",
+  "look": "Listen for 'who cooks for you' at dusk; often answers an imitation. Check the dark side of trunks in big hardwoods by day.",
+  "time": "Dusk and night"
+ },
+ "brebla": {
+  "habitat": "Feedlots, parking lots and fields; a rare winter visitor in the East.",
+  "look": "Pick through blackbird flocks at cattle lots for a yellow-eyed male without rusty edges and a plain gray female.",
+  "time": "Morning"
+ },
+ "briter1": {
+  "habitat": "Offshore Gulf Stream waters; onshore after storms.",
+  "look": "Pelagic trips off the Carolinas in summer, or beaches after hurricanes; a brown-backed tern with a white collar.",
+  "time": "After storms"
+ },
+ "brnboo": {
+  "habitat": "Coastal waters, buoys and channel markers; increasingly regular in Florida.",
+  "look": "Scan navigation markers and piers for a dark booby with a white belly perched in plain view.",
+  "time": "Any time"
+ },
+ "brncre": {
+  "habitat": "Mature woods with large rough-barked trunks in winter.",
+  "look": "Watch tree trunks for a bark-colored bird spiraling up from the base and dropping to the next tree; the song is a high thin whisper.",
+  "time": "Morning"
+ },
+ "brnnod": {
+  "habitat": "Dry Tortugas colonies; a storm stray elsewhere.",
+  "look": "A dark tern with a pale cap on a beach or pier after a hurricane.",
+  "time": "After storms"
+ },
+ "brnowl": {
+  "habitat": "Farmland, marshes and open country; roosts in barns, silos and palms.",
+  "look": "Listen at night for a harsh, drawn-out screech; check old barns, church towers and palm crowns for roosting birds and pellets.",
+  "time": "Night"
+ },
+ "brnpel": {
+  "habitat": "Beaches, piers, inlets and offshore waters.",
+  "look": "Lines gliding inches above the waves; dramatic plunge dives near piers.",
+  "time": "Any time"
+ },
+ "brnthr": {
+  "habitat": "Brushy edges, thickets, hedgerows and yards with dense shrubs.",
+  "look": "Sings doubled phrases from an exposed treetop in spring; otherwise rummages in leaf litter under shrubs.",
+  "time": "Morning"
+ },
+ "brocow": {
+  "habitat": "Feedlots, lawns and feeders in Florida; a rare visitor.",
+  "look": "A heavy cowbird with a thick neck ruff and red eye among Brown-headed Cowbirds.",
+  "time": "Morning"
+ },
+ "brwhaw": {
+  "habitat": "Deep deciduous woods in summer; migrates in kettles over ridges in September.",
+  "look": "Visit a hawk watch in the third week of September on a north-west wind; in summer listen for the thin whistle in mature forest.",
+  "time": "Late morning to early afternoon on hawk-watch days"
+ },
+ "btbwar": {
+  "habitat": "Rhododendron and mountain laurel understory in the mountains; low shrubs in migration.",
+  "look": "Listen for the lazy 'I'm so lazeee' buzz from the understory; the male is unmistakable, the female shows a white wing spot.",
+  "time": "Morning"
+ },
+ "btnwar": {
+  "habitat": "Pines and hemlocks in migration and in the mountains; cypress in the Coastal Plain.",
+  "look": "Listen for the buzzy 'zee-zee-zee-zoo-zee' from mid-canopy; one of the easiest warblers to find by song.",
+  "time": "Morning"
+ },
+ "btywar": {
+  "habitat": "Western species; a rare fall and winter stray to feeders and oaks.",
+  "look": "Check mixed flocks in late fall for a gray warbler with a black-and-white face and a yellow spot before the eye.",
+  "time": "Morning"
+ },
+ "bubsan": {
+  "habitat": "Sod farms, airports and dry short grass in fall.",
+  "look": "Walk sod farms in late August and September looking for a buffy, dove-faced sandpiper with yellow legs among Killdeer and plovers.",
+  "time": "Morning"
+ },
+ "bucpar": {
+  "habitat": "South Florida suburbs and parks.",
+  "look": "Long-tailed green parakeet with a blue crown, in small noisy flocks.",
+  "time": "Dawn and dusk"
+ },
+ "budger": {
+  "habitat": "Suburbs; escapes, once feral on Florida's Gulf coast.",
+  "look": "A small parakeet, often blue or yellow, with House Sparrows or at a feeder.",
+  "time": "Morning"
+ },
+ "buffle": {
+  "habitat": "Lakes, reservoirs, bays and larger ponds.",
+  "look": "Small black-and-white duck that dives constantly; scan sheltered coves and marinas. The white head patch catches the eye.",
+  "time": "Any time in winter"
+ },
+ "bufpar": {
+  "habitat": "South Florida suburbs.",
+  "look": "Amazon with a turquoise forehead among mixed parrot flocks at roosts.",
+  "time": "Dawn and dusk"
+ },
+ "buggna": {
+  "habitat": "Deciduous woods, swamp edges and oak scrub.",
+  "look": "Tiny, long-tailed gray bird constantly flicking its tail in the canopy edge; wheezy, scolding calls.",
+  "time": "Any time"
+ },
+ "buhvir": {
+  "habitat": "Mixed pine-hardwood forest in winter and migration; mountains in summer.",
+  "look": "Sweet, slow phrases from mid-canopy; in winter forages with chickadee flocks in pines and oaks.",
+  "time": "Morning"
+ },
+ "bulori": {
+  "habitat": "Feeders in winter; a rare western stray.",
+  "look": "Check wintering orioles at feeders for a bird with an orange face and black eyeline; female needs careful study.",
+  "time": "Morning at feeders"
+ },
+ "burowl": {
+  "habitat": "Short-grass fields, airports, vacant lots and golf courses in Florida.",
+  "look": "Look for a small owl standing at a burrow mouth in mowed grass, often marked with a perch stake; Cape Coral has many.",
+  "time": "Early morning and evening"
+ },
+ "buwtea": {
+  "habitat": "Shallow marshes, flooded fields, pond edges with mud and emergent vegetation.",
+  "look": "Small ducks tucked along muddy margins; scan the shallow ends of ponds and any flooded field during migration (March to April, August to October).",
+  "time": "Morning"
+ },
+ "buwwar": {
+  "habitat": "Overgrown fields and brushy edges in summer; thickets in migration.",
+  "look": "Listen for the two-note 'bee-buzz' from a shrub top in spring; look for a yellow warbler with a black eyeline.",
+  "time": "Morning"
+ },
+ "cacgoo1": {
+  "habitat": "Wherever Canada Geese gather: lawns, fields, reservoirs.",
+  "look": "Pick through Canada Goose flocks for a noticeably smaller bird with a short neck, steep forehead and stubby bill; compare directly with neighbors.",
+  "time": "Morning and late afternoon"
+ },
+ "calhum": {
+  "habitat": "Winter feeders; a rare stray.",
+  "look": "Tiny short-billed hummingbird at a feeder kept up through winter; often needs banding to confirm.",
+  "time": "Morning at feeders"
+ },
+ "camwar": {
+  "habitat": "Spruce in summer; in migration conifers, flowering trees and sapsucker wells.",
+  "look": "In spring check pines and flowering oaks for a streaked warbler with a chestnut cheek; in fall look in pines and at fruit.",
+  "time": "Morning"
+ },
+ "cangoo": {
+  "habitat": "Lakes, ponds, golf courses, parks and fields; everywhere there is grass near water.",
+  "look": "Unmissable on lawns and shorelines; flocks fly in V formations between roost water and feeding fields.",
+  "time": "Any time"
+ },
+ "canvas": {
+  "habitat": "Deep lakes and reservoirs; in the Southeast scarce and local in winter.",
+  "look": "Scan big rafts of diving ducks for a long, sloping profile with a white body and chestnut head; often far from shore, so use a scope.",
+  "time": "Midday when rafts settle"
+ },
+ "canwar": {
+  "habitat": "Dense shrub layers in moist woods and rhododendron in the mountains; low thickets in migration.",
+  "look": "Look low in shady tangles in May and late August for a gray warbler with a yellow breast and black necklace; the song is a rich jumble.",
+  "time": "Morning"
+ },
+ "carchi": {
+  "habitat": "Woods, yards and feeders.",
+  "look": "Leads mixed flocks in winter; follow the chickadees to find warblers and kinglets.",
+  "time": "Any time"
+ },
+ "carwre": {
+  "habitat": "Yards, brush piles, woods and porches everywhere.",
+  "look": "The loud 'tea-kettle' song all year; investigates garages and flowerpots.",
+  "time": "Any time"
+ },
+ "caster1": {
+  "habitat": "Large reservoirs, rivers and coastal waters.",
+  "look": "The biggest tern, with a thick red bill; listen for the harsh heron-like call. Scan reservoir dams and sandbars in migration.",
+  "time": "Any time"
+ },
+ "categr1": {
+  "habitat": "Pastures with livestock, mowed fields and roadside grass.",
+  "look": "White egrets following cattle or tractors; evening flights to roosts.",
+  "time": "Any time"
+ },
+ "cavswa": {
+  "habitat": "Bridges and culverts in Florida; a fall stray along the Atlantic coast.",
+  "look": "Check Cliff Swallow colonies and swallow flocks in November for a pale-throated, buffy-rumped swallow.",
+  "time": "Morning"
+ },
+ "cedwax": {
+  "habitat": "Berry trees and shrubs: hollies, cedars, privet, hackberry; also over water catching insects.",
+  "look": "Listen for high thin lisps overhead; scan the tops of fruiting trees for tight flocks that arrive and strip a tree.",
+  "time": "Morning"
+ },
+ "cerwar": {
+  "habitat": "Tall mature deciduous forest on ridges and river bluffs.",
+  "look": "Listen for a buzzy rising song from the very top of tall oaks in late April; craning upward is the only way.",
+  "time": "Morning"
+ },
+ "chispa": {
+  "habitat": "Lawns with pines, yards, parks and fields.",
+  "look": "Dry trill from a pine; winter flocks on lawns and field edges.",
+  "time": "Any time"
+ },
+ "chiswi": {
+  "habitat": "Over towns, rivers and woods; roosts in chimneys.",
+  "look": "Cigar-shaped birds twittering overhead; in September watch a large chimney at sunset as hundreds funnel in to roost.",
+  "time": "Evening"
+ },
+ "chswar": {
+  "habitat": "Shrubby regrowth, clearcuts and edges in migration and in the mountains.",
+  "look": "Listen for 'pleased-pleased-pleased-to-MEETCHA' from young growth; in fall a lime-green bird with a gray face and white eye ring.",
+  "time": "Morning"
+ },
+ "chwwid": {
+  "habitat": "Pine and oak woods with openings, especially in the Coastal Plain.",
+  "look": "Listen after dark for the loud 'chuck-will's-WIDOW'; drive quiet back roads with windows down and watch for eyeshine on the road.",
+  "time": "First hour after dark, before dawn"
+ },
+ "cintea": {
+  "habitat": "Shallow freshwater marshes; a rare stray in the East, usually with Blue-winged Teal.",
+  "look": "Check Blue-winged Teal flocks for a rusty-red drake; females are nearly identical to Blue-winged, so focus on drakes.",
+  "time": "Morning"
+ },
+ "clarai11": {
+  "habitat": "Salt marshes and mangroves.",
+  "look": "Listen for clattering calls across the marsh; watch creek edges and openings at low tide and at high spring tides when birds are pushed to the edges.",
+  "time": "Low tide and extreme high tides"
+ },
+ "clcspa": {
+  "habitat": "Weedy edges and brushy fields in fall; a rare migrant.",
+  "look": "Pick through Chipping Sparrow flocks in October for a buffy sparrow with a pale lore and brown rump.",
+  "time": "Morning"
+ },
+ "cliswa": {
+  "habitat": "Bridges and dams over large rivers and reservoirs.",
+  "look": "Look under highway bridges over big water for colonies of gourd-shaped mud nests; square tail and pale rump in flight.",
+  "time": "Morning"
+ },
+ "cockat": {
+  "habitat": "Suburbs; an escaped pet.",
+  "look": "A crested gray-and-yellow parrot calling from a yard tree; escaped.",
+  "time": "Any time"
+ },
+ "cogdov": {
+  "habitat": "Sandy open ground, pine edges, coastal scrub and dirt roads.",
+  "look": "Tiny dove walking on bare sand; flushes low showing rusty wings. Walk sandy tracks and scan field edges.",
+  "time": "Morning"
+ },
+ "comeid": {
+  "habitat": "Ocean inlets, jetties and rocky coast; a rare winter visitor south of the Carolinas.",
+  "look": "Scan jetties and inlet mouths for a large, heavy duck riding the swell; young birds are brown and easy to pass over.",
+  "time": "Morning, calm seas"
+ },
+ "comgal1": {
+  "habitat": "Ponds and marshes with lily pads and emergent plants.",
+  "look": "Swims openly along edges, flicking its white tail; noisy clucks from the reeds.",
+  "time": "Any time"
+ },
+ "comgol": {
+  "habitat": "Large reservoirs, rivers below dams and coastal bays.",
+  "look": "Scan deep open water and dam tailwaters; the drake's round white cheek spot and bright white body stand out among scaup.",
+  "time": "Midday"
+ },
+ "comgra": {
+  "habitat": "Lawns, parking lots, fields and feeders.",
+  "look": "Everywhere; long keel-shaped tail.",
+  "time": "Any time"
+ },
+ "comloo": {
+  "habitat": "Large reservoirs and coastal waters from November to April.",
+  "look": "Scan open water from dams and boat ramps for a large, low diver; in late March listen for yodeling before they leave.",
+  "time": "Morning, calm water"
+ },
+ "commer": {
+  "habitat": "Large clear rivers, reservoirs and dam tailwaters.",
+  "look": "Long, low white-bodied duck on cold rivers; scan fast water below dams and open lake arms in midwinter.",
+  "time": "Morning"
+ },
+ "commyn": {
+  "habitat": "Shopping-center parking lots, fast-food lots and gas stations in Florida.",
+  "look": "Look for a chunky brown bird with a yellow bill and eye patch walking under cars and on signs; nests in letters of store signs. Flashes white wing patches in flight.",
+  "time": "Any time"
+ },
+ "comnig": {
+  "habitat": "Open country, gravel rooftops, pine flats; migrates over towns in late summer.",
+  "look": "Watch the sky at dusk for long-winged, erratic fliers with white wing bars; listen for the nasal 'peent'. Late August evenings bring flocks.",
+  "time": "Dusk"
+ },
+ "compea": {
+  "habitat": "Neighborhoods and parks with feral flocks, especially in Florida.",
+  "look": "Unmistakable; listen for the loud wailing calls and check rooftops and lawns in known neighborhoods.",
+  "time": "Any time"
+ },
+ "comrav": {
+  "habitat": "Mountains, cliffs and increasingly Piedmont towers and landfills.",
+  "look": "Scan ridgelines and quarry walls for a huge, wedge-tailed corvid with a croaking call; also check cell towers in the foothills.",
+  "time": "Morning"
+ },
+ "comter": {
+  "habitat": "Beaches, inlets and large reservoirs in migration.",
+  "look": "Check tern flocks on sandbars and reservoir shores in May and August to September; dark wedge in the outer wing.",
+  "time": "Any time"
+ },
+ "comyel": {
+  "habitat": "Marshes, wet thickets, weedy ditches and brushy fields.",
+  "look": "The 'witchity-witchity' song from low cover; pishing brings the masked male up briefly.",
+  "time": "Any time"
+ },
+ "conwar": {
+  "habitat": "Dense weedy ground cover and thickets in fall migration; very secretive.",
+  "look": "Walk slowly through dense goldenrod and jewelweed in late September and watch the ground for a large, walking warbler with a complete eye ring.",
+  "time": "Early morning"
+ },
+ "coohaw": {
+  "habitat": "Suburbs, woodlots and parks; nests in tall pines and oaks.",
+  "look": "Watch feeders and dove flocks for a long-tailed hawk; listen for the cackling call near nests in spring.",
+  "time": "Morning"
+ },
+ "corshe1": {
+  "habitat": "Offshore Gulf Stream waters.",
+  "look": "Pelagic trips in summer and fall; from shore only during strong onshore winds or after storms.",
+  "time": "After storms"
+ },
+ "cursan": {
+  "habitat": "Coastal flats; a very rare visitor from Eurasia.",
+  "look": "Check Dunlin flocks for a longer-legged, cleaner bird with a white rump; needs documentation.",
+  "time": "Low tide"
+ },
+ "daejun": {
+  "habitat": "Woodland edges, yards and feeders in winter; mountain forests in summer.",
+  "look": "Flocks on the ground under feeders and along edges flashing white outer tail feathers.",
+  "time": "Any time"
+ },
+ "dickci": {
+  "habitat": "Hayfields and weedy fields; a sporadic breeder and rare migrant.",
+  "look": "Listen for 'dick-dick-ciss-ciss' from a weed stalk in a big hayfield in June; in winter check House Sparrow flocks at feeders.",
+  "time": "Morning"
+ },
+ "doccor": {
+  "habitat": "Lakes, rivers, reservoirs, coastal waters; perches on snags and buoys.",
+  "look": "Lines of dark birds flying low over water; large roosts on dead trees and channel markers.",
+  "time": "Any time"
+ },
+ "dowwoo": {
+  "habitat": "Woods, edges and yards; often in mixed flocks.",
+  "look": "Small woodpecker working thin branches with chickadees and titmice.",
+  "time": "Any time"
+ },
+ "dunlin": {
+  "habitat": "Tidal flats and beaches in winter; occasionally reservoir shores inland.",
+  "look": "Hunched gray shorebirds with drooping bills in large winter flocks on flats.",
+  "time": "Low tide"
+ },
+ "eargre": {
+  "habitat": "Lakes, sewage ponds and bays; rare in the East.",
+  "look": "Pick through Horned Grebe flocks for a peaked head, dusky cheek and thin upturned bill.",
+  "time": "Midday"
+ },
+ "easblu": {
+  "habitat": "Open fields with scattered trees, golf courses, pastures and nest boxes.",
+  "look": "Scan wires and fence posts along fields; soft warbling calls in flight.",
+  "time": "Any time"
+ },
+ "easkin": {
+  "habitat": "Open fields, pond edges, orchards and wires in summer.",
+  "look": "Perches upright on fences and wires, chasing insects and crows; the white tail tip is diagnostic.",
+  "time": "Any time"
+ },
+ "easmea": {
+  "habitat": "Pastures, hayfields and airports.",
+  "look": "Scan fence posts for a chunky bird with a yellow breast; the slurred whistle carries across fields.",
+  "time": "Morning"
+ },
+ "easowl1": {
+  "habitat": "Wooded suburbs, parks and woodlots with cavities.",
+  "look": "Listen after dark for the descending whinny and soft trill; check wood duck boxes and cavity entrances on cold sunny afternoons.",
+  "time": "First hours after dark"
+ },
+ "easpho": {
+  "habitat": "Bridges, barns, creek banks and open woodland edges.",
+  "look": "Perches low, pumping its tail; nests under bridges and eaves. Says its name.",
+  "time": "Any time"
+ },
+ "eastow": {
+  "habitat": "Thickets, brushy edges and understory.",
+  "look": "Loud scratching in leaves and the 'drink-your-tea' song; perches up when pished.",
+  "time": "Any time"
+ },
+ "easwpw1": {
+  "habitat": "Dry deciduous and mixed woods with open understory.",
+  "look": "Listen on still spring nights for the endless 'whip-poor-will'; most reliable in the hills on moonlit nights.",
+  "time": "Dusk and moonlit nights"
+ },
+ "eawpew": {
+  "habitat": "Open deciduous and mixed woods with a mid-level understory.",
+  "look": "Listen for the slurred 'pee-a-wee' through the heat of the day; it sallies from a mid-height perch and returns to the same spot.",
+  "time": "Any time, sings all day"
+ },
+ "eawvir1": {
+  "habitat": "Tall riverside trees such as sycamores and cottonwoods.",
+  "look": "Listen for a rapid warbling song from the tops of big riverside trees in May; plain gray-and-white vireo.",
+  "time": "Morning"
+ },
+ "egygoo": {
+  "habitat": "Golf courses, retention ponds and lawns in Florida suburbs.",
+  "look": "Tan goose with a chocolate eye patch, grazing on grass near water, usually in pairs or family groups; loud and conspicuous.",
+  "time": "Morning and late afternoon"
+ },
+ "eleter1": {
+  "habitat": "Pacific species; a very rare stray among Royal and Sandwich Terns.",
+  "look": "Pick through coastal tern roosts for a slimmer, orange-billed tern with a long drooping crest; needs photos.",
+  "time": "Midday roosts"
+ },
+ "eucdov": {
+  "habitat": "Towns, farmyards, grain stores and suburban wires.",
+  "look": "Pale dove with a black neck collar on wires and rooftops; listen for the three-note coo.",
+  "time": "Any time"
+ },
+ "eursta": {
+  "habitat": "Towns, farms and fields; huge winter roosts.",
+  "look": "Everywhere; check flocks for blackbirds mixed in.",
+  "time": "Any time"
+ },
+ "eurwig": {
+  "habitat": "Lakes and ponds; a rare winter stray among American Wigeon.",
+  "look": "Scan wigeon flocks for a drake with a rusty head and buff forehead and gray flanks; compare head color carefully in good light.",
+  "time": "Morning light"
+ },
+ "evegro": {
+  "habitat": "Feeders and box elders in irruption winters; very rare in the Southeast.",
+  "look": "A huge-billed yellow finch at a sunflower feeder in an invasion year; listen for loud 'peer' calls overhead.",
+  "time": "Morning"
+ },
+ "fiespa": {
+  "habitat": "Old fields with scattered saplings and briars.",
+  "look": "The accelerating bouncing-ball song from an overgrown field; pink bill and plain face.",
+  "time": "Morning"
+ },
+ "fiscro": {
+  "habitat": "Rivers, lakes, coasts and increasingly towns and parking lots.",
+  "look": "Separate from American Crow by the nasal 'uh-uh' call; flocks near water and fast-food lots.",
+  "time": "Any time"
+ },
+ "flsjay": {
+  "habitat": "Low oak scrub on sandy soil in central Florida; needs recently burned scrub.",
+  "look": "Visit managed scrub preserves at dawn; family groups perch on top of oaks and are often fearless. Listen for harsh calls.",
+  "time": "Early morning"
+ },
+ "forter": {
+  "habitat": "Lakes, reservoirs, marshes and coastal waters, especially in winter.",
+  "look": "Winter tern with a black ear patch; scan reservoirs and marsh channels for terns diving for small fish.",
+  "time": "Any time"
+ },
+ "fotfly": {
+  "habitat": "Open fields and wires; a rare but regular stray to Florida and the Atlantic coast.",
+  "look": "A black-capped flycatcher with impossibly long tail streamers on a fence or wire; most occur in fall.",
+  "time": "Morning"
+ },
+ "foxspa": {
+  "habitat": "Brushy thickets and woodland edges in winter.",
+  "look": "Listen for loud two-footed scratching in dry leaves under shrubs; a big rusty sparrow often at brush piles after snow.",
+  "time": "Morning"
+ },
+ "fragul": {
+  "habitat": "Sod farms, lakes and coastal flats; a rare migrant from the prairies.",
+  "look": "Check Laughing and Ring-billed Gull flocks in fall for a smaller, pinker-breasted gull with white eye crescents and a bold wingtip pattern.",
+  "time": "Morning"
+ },
+ "fuwduc": {
+  "habitat": "Rice fields, wet prairie and shallow marshes with emergent plants; far less tied to trees than Black-bellied.",
+  "look": "Scan flooded fields and marsh edges for a tawny duck standing tall; most often found by its whistled calls as flocks move at dawn and dusk.",
+  "time": "Dawn and dusk flights"
+ },
+ "gadwal": {
+  "habitat": "Ponds, lake coves and marshes with submerged vegetation.",
+  "look": "A plain gray duck with a black rear end and a white wing patch that shows when it stretches; often with wigeon and coots.",
+  "time": "Any time in winter"
+ },
+ "gbbgul": {
+  "habitat": "Beaches, inlets and landfills; rare inland.",
+  "look": "A huge black-backed gull standing above the others at a coastal roost.",
+  "time": "Any time"
+ },
+ "giwrai1": {
+  "habitat": "South American; an escape in Florida.",
+  "look": "A huge rail walking marsh edges; any sighting is an escaped bird.",
+  "time": "Morning"
+ },
+ "glagul": {
+  "habitat": "Landfills, beaches and reservoir roosts; a rare winter visitor.",
+  "look": "Scan big gull roosts for a very pale, large gull with white wingtips, usually a first-winter bird.",
+  "time": "Late afternoon roosts"
+ },
+ "gloibi": {
+  "habitat": "Freshwater marshes, flooded fields and impoundments.",
+  "look": "Dark ibis flocks feeding in shallow marsh; in good light the chestnut and green gloss shows.",
+  "time": "Morning"
+ },
+ "gnwtea": {
+  "habitat": "Muddy pond edges, flooded fields and shallow marsh.",
+  "look": "Tiny ducks packed along mudflats and shorelines; often overlooked, so scan margins slowly.",
+  "time": "Any time in winter"
+ },
+ "gockin": {
+  "habitat": "Pines, hemlocks and cedars in winter; spruce-fir in the mountains in summer.",
+  "look": "Listen for very high thin 'see-see-see' from conifer tops; look up into pines where small birds hover at branch tips.",
+  "time": "Morning"
+ },
+ "goleag": {
+  "habitat": "Mountain ridges and large reservoirs with waterfowl in winter; very rare.",
+  "look": "Scan ridgelines on hawk-watch days in November and reservoir shores in winter for a huge dark eagle with a golden nape.",
+  "time": "Late morning"
+ },
+ "gowwar": {
+  "habitat": "Shrubby regrowth and old fields in the mountains in summer; woodland edges in migration.",
+  "look": "Listen for a buzzy 'bee-bzz-bzz-bzz' from young growth in May; in migration check mixed flocks for the yellow crown and black face.",
+  "time": "Morning"
+ },
+ "gragoo": {
+  "habitat": "Park ponds and farm ponds; nearly all are domestic escapes.",
+  "look": "A heavy gray goose with an orange bill among park waterfowl; check the tame flocks at urban ponds.",
+  "time": "Any time"
+ },
+ "graspa": {
+  "habitat": "Large grassy fields, hayfields and airports in summer; weedy fields in winter.",
+  "look": "Listen for the insect-like buzz from a weed stalk or fence in spring; in winter walk broomsedge fields and watch for a flat-headed sparrow dropping in.",
+  "time": "Early morning"
+ },
+ "grbani": {
+  "habitat": "Brushy edges and fields; a rare fall stray from the west.",
+  "look": "A loose black bird with a grooved bill in low shrubs or on fences, usually in late fall.",
+  "time": "Morning"
+ },
+ "grbher3": {
+  "habitat": "Any water from creeks to coasts; also fields in winter.",
+  "look": "Everywhere; also hunts rodents in dry fields in winter.",
+  "time": "Any time"
+ },
+ "grcfly": {
+  "habitat": "Deciduous and mixed woods with cavities; wooded suburbs.",
+  "look": "Listen for the rising 'wheep' from the canopy; it stays high, so look for a large flycatcher with a rusty tail at a cavity or snag.",
+  "time": "Morning"
+ },
+ "grecor": {
+  "habitat": "Coastal jetties and pilings in winter; rare south of the Carolinas.",
+  "look": "Scan cormorant roosts on jetties for a bulkier bird with a white throat and yellow chin patch.",
+  "time": "Any time"
+ },
+ "greegr": {
+  "habitat": "Lake edges, marshes, flats and ditches.",
+  "look": "Tall white egret standing motionless at the water's edge; easy anywhere there is shallow water.",
+  "time": "Any time"
+ },
+ "grefla2": {
+  "habitat": "Shallow coastal lagoons and mudflats in South Florida.",
+  "look": "Scan wide shallow flats from a distance; a tall pink bird feeding with head upside down. Beware escaped zoo birds inland.",
+  "time": "Low tide"
+ },
+ "gresca": {
+  "habitat": "Large lakes and coastal bays; rarer inland than Lesser Scaup.",
+  "look": "Pick through scaup rafts for rounder heads with a green gloss and a broader bill nail; identification needs close views.",
+  "time": "Midday"
+ },
+ "greshe": {
+  "habitat": "Offshore waters in summer; onshore after storms.",
+  "look": "After June and July storms scan beaches for a large brown shearwater with a dark cap; sometimes found exhausted on the sand.",
+  "time": "After storms"
+ },
+ "greyel": {
+  "habitat": "Shallow pools, flooded fields, reservoir margins and tidal flats.",
+  "look": "Wades actively, sometimes dashing after fish; the ringing three-note alarm call carries far.",
+  "time": "Any time"
+ },
+ "grhowl": {
+  "habitat": "Woods with open country nearby, including suburbs.",
+  "look": "Listen on winter nights for deep hooting duets; at dusk watch tall snags and the tops of pines for a silhouette with ear tufts.",
+  "time": "Dusk and night, especially December to February"
+ },
+ "grnher": {
+  "habitat": "Wooded pond edges, creeks, docks and ditches.",
+  "look": "Scan overhanging branches and dock pilings for a small hunched heron; flushes with a loud 'skeow'.",
+  "time": "Early morning and evening"
+ },
+ "grwpel1": {
+  "habitat": "Old World species; an escape in Florida.",
+  "look": "A huge pelican with pink skin around the eye among American White Pelicans; zoo origin.",
+  "time": "Any time"
+ },
+ "grycat": {
+  "habitat": "Dense thickets, hedgerows and shrubby edges.",
+  "look": "Listen for the cat-like mew from inside shrubs; it responds to pishing and perches briefly on top.",
+  "time": "Morning"
+ },
+ "grykin": {
+  "habitat": "Coastal wires, mangroves and beach towns in Florida.",
+  "look": "Big gray kingbird with a heavy bill and notched tail on coastal wires from April to September; loud 'pe-cheer-ry'.",
+  "time": "Any time"
+ },
+ "gubter2": {
+  "habitat": "Salt marsh, coastal fields and impoundments.",
+  "look": "A stocky pale tern that hawks insects over marsh and fields rather than diving; black bill and gull-like flight.",
+  "time": "Morning"
+ },
+ "gunhaw1": {
+  "habitat": "Cuban endemic; an astonishing stray to Florida.",
+  "look": "A Cooper's-like hawk in South Florida; only with thorough photos.",
+  "time": "Morning"
+ },
+ "gwfgoo": {
+  "habitat": "Reservoirs, sod farms and agricultural fields, usually with Canada Geese.",
+  "look": "Look for a gray-brown goose with an orange bill, pink-orange legs and barred belly inside goose flocks; scan grazing flocks slowly from a distance.",
+  "time": "Morning and late afternoon on fields"
+ },
+ "gycthr": {
+  "habitat": "Shady woods and thickets in migration, mostly in May and October.",
+  "look": "A cold gray-brown thrush on the ground in dim understory; listen for the thin, nasal flight call at night and the 'queep' by day.",
+  "time": "Early morning"
+ },
+ "haiwoo": {
+  "habitat": "Mature forest with large trunks; less in suburbs.",
+  "look": "Like a large Downy with a long bill; listen for the sharper 'peek' and look on big trunks in older woods.",
+  "time": "Morning"
+ },
+ "helgui": {
+  "habitat": "Farmyards and suburban lots; free-ranging domestic birds.",
+  "look": "Noisy spotted birds walking lawns and road edges in groups.",
+  "time": "Any time"
+ },
+ "henspa": {
+  "habitat": "Weedy fields with dense grass and standing dead stems in winter; pine savanna.",
+  "look": "Walk broomsedge and pine savanna in winter and watch for a flat-headed, olive-faced sparrow that flies low and dives in; rarely seen well.",
+  "time": "Morning"
+ },
+ "herthr": {
+  "habitat": "Woodland understory, thickets and yards with berries in winter.",
+  "look": "Watch leaf litter at wood edges for a thrush that raises and slowly lowers its rusty tail; soft 'chup' call.",
+  "time": "Morning"
+ },
+ "hoomer": {
+  "habitat": "Wooded ponds, beaver swamps, creek mouths and quiet coves.",
+  "look": "Shy; approach cover slowly and scan the shaded back of small ponds. The drake's fan crest flashes white when raised.",
+  "time": "First and last hours of light"
+ },
+ "hooori": {
+  "habitat": "Palms and feeders; a rare winter stray.",
+  "look": "An orange oriole with a black throat at a hummingbird or jelly feeder in winter; nests in palms where it is resident.",
+  "time": "Morning"
+ },
+ "hoowar": {
+  "habitat": "Moist deciduous woods with a dense shrub layer, often near streams.",
+  "look": "Listen for the loud 'weeta-weeta-wee-tee-o' from the understory; it flashes white tail spots as it forages low.",
+  "time": "Morning"
+ },
+ "horgre": {
+  "habitat": "Open water of reservoirs, lakes and bays in winter.",
+  "look": "Scan open water for a small, pale grebe with a clean white cheek; often in loose groups away from shore. Scope from dams and boat ramps.",
+  "time": "Midday, calm water"
+ },
+ "horlar": {
+  "habitat": "Bare plowed fields, sod farms and airports in winter.",
+  "look": "Scan the barest fields for small brown birds walking, not hopping; often found by their tinkling flight calls overhead.",
+  "time": "Morning"
+ },
+ "houfin": {
+  "habitat": "Suburbs, feeders and towns.",
+  "look": "Common at feeders; the streaky red finch with a curved culmen.",
+  "time": "Any time"
+ },
+ "houspa": {
+  "habitat": "Towns, farms, shopping centers and feeders.",
+  "look": "Everywhere near people.",
+  "time": "Any time"
+ },
+ "houwre": {
+  "habitat": "Brushy yards, thickets and woodpiles; winters in dense tangles.",
+  "look": "Bubbling song in spring in the Piedmont and mountains; in winter listen for a harsh chatter from brush piles.",
+  "time": "Morning"
+ },
+ "hrshaw": {
+  "habitat": "Southwestern deserts; in the Southeast an escaped falconry bird.",
+  "look": "A dark hawk with chestnut shoulders, often wearing jesses; report it but expect an escape.",
+  "time": "Any time"
+ },
+ "indbun": {
+  "habitat": "Brushy fields, edges, powerline cuts and roadsides.",
+  "look": "Sings paired phrases from wires and treetops all summer; in fall brown birds gather in weedy fields.",
+  "time": "Any time"
+ },
+ "ivbwoo": {
+  "habitat": "Historically old-growth bottomland swamp; no accepted records in decades.",
+  "look": "Any report requires extraordinary evidence; a Pileated Woodpecker is the expected bird.",
+  "time": "Morning"
+ },
+ "kenwar": {
+  "habitat": "Moist deciduous woods with dense low understory.",
+  "look": "Listen for the rolling 'tory-tory-tory' from the shrub layer in May; it walks on the ground under cover.",
+  "time": "Morning"
+ },
+ "killde": {
+  "habitat": "Gravel lots, fields, pond edges, rooftops; anywhere open.",
+  "look": "Loud, obvious, everywhere; check any Killdeer flock for other plovers hidden with it.",
+  "time": "Any time"
+ },
+ "kinrai4": {
+  "habitat": "Freshwater and brackish marshes with tall cattails and rushes.",
+  "look": "Listen at dawn and dusk for the grunting 'kek-kek-kek' series; walk marsh edges quietly after rain when birds come to openings.",
+  "time": "Dawn and dusk"
+ },
+ "kirwar": {
+  "habitat": "Young jack pine in Michigan; in the Southeast only a rare migrant in scrub and pines.",
+  "look": "A large, tail-pumping gray-and-yellow warbler low in scrub or young pines in late April or October; needs photos.",
+  "time": "Morning"
+ },
+ "laplon": {
+  "habitat": "Bare plowed fields and sod farms in winter, usually with Horned Larks.",
+  "look": "Scan Horned Lark flocks in the barest fields for a chunkier bird with a rusty nape and rattling flight call.",
+  "time": "Morning"
+ },
+ "larspa": {
+  "habitat": "Dry open fields and sandy roads; a rare migrant.",
+  "look": "A large, boldly head-striped sparrow on bare ground in August and September; often with Chipping Sparrows.",
+  "time": "Morning"
+ },
+ "laugul": {
+  "habitat": "Beaches, parking lots, inlets and piers on the coast; occasionally inland reservoirs.",
+  "look": "The common dark-hooded gull of Southern beaches; noisy and tame around people.",
+  "time": "Any time"
+ },
+ "lazbun": {
+  "habitat": "Feeders and weedy fields; a very rare western stray.",
+  "look": "Check Indigo Bunting flocks and feeders for a bird with a turquoise head, orange breast and white wing bars.",
+  "time": "Morning"
+ },
+ "lbbgul": {
+  "habitat": "Beaches, reservoirs, landfills and sod farms in winter.",
+  "look": "Pick through Herring and Ring-billed flocks for a slate-backed gull with yellow legs; increasing every year.",
+  "time": "Late afternoon roosts"
+ },
+ "lcspet": {
+  "habitat": "Offshore; onshore after tropical storms.",
+  "look": "Check beaches, inlets and even inland lakes in the day after a hurricane for a dark storm-petrel with bounding flight.",
+  "time": "After storms"
+ },
+ "leabit": {
+  "habitat": "Cattail and bulrush marshes over water.",
+  "look": "Listen for the soft cooing in spring; watch the reed edge from a dike for a tiny heron climbing stems or making short low flights.",
+  "time": "Early morning and dusk"
+ },
+ "leafly": {
+  "habitat": "Woodland edges, orchards and second growth in migration.",
+  "look": "Small, big-headed Empidonax calling an emphatic 'che-BEK'; check edges in late April and September.",
+  "time": "Morning"
+ },
+ "leasan": {
+  "habitat": "Muddy edges of ponds, ditches, flooded fields and flats.",
+  "look": "The tiny brown peep with yellow legs on mud; often the only peep at small inland puddles.",
+  "time": "Any time"
+ },
+ "leater1": {
+  "habitat": "Sandy beaches, dredge islands and gravel rooftops near water.",
+  "look": "Tiny tern hovering and plunging in shallow water; noisy colonies on protected beaches April to August. Check large flat roofs near the coast.",
+  "time": "Morning"
+ },
+ "lecspa": {
+  "habitat": "Dense broomsedge and damp grassy fields in winter; very secretive.",
+  "look": "Walk tall grass fields in winter and watch for a tiny orange-faced sparrow that flushes briefly and drops; rarely perches up.",
+  "time": "Morning"
+ },
+ "lesnig": {
+  "habitat": "Open desert and scrub; a rare winter stray to South Florida.",
+  "look": "Low, floppy flight over fields at dusk; compare wing-patch position with Common Nighthawk.",
+  "time": "Dusk"
+ },
+ "lessca": {
+  "habitat": "Lakes, reservoirs, bays and large ponds.",
+  "look": "Big rafts offshore on the largest water; note the peaked head with purple gloss. Scan from boat ramps and dams.",
+  "time": "Midday"
+ },
+ "lesyel": {
+  "habitat": "Flooded fields, shallow pools and marsh edges.",
+  "look": "Slim, bright-yellow legs wading in shallow fresh water; compare bill length with Greater Yellowlegs when together.",
+  "time": "Any time"
+ },
+ "libher": {
+  "habitat": "Freshwater marshes, ponds, ditches and tidal pools.",
+  "look": "Slate-blue heron stalking slowly; white immatures mix with Snowy Egrets, so check dull legs and two-tone bill.",
+  "time": "Any time"
+ },
+ "licpar": {
+  "habitat": "South Florida suburbs; mixed with Red-crowned flocks.",
+  "look": "Pick through amazon flocks for a maroon forehead and lilac crown; needs good light.",
+  "time": "Dawn and dusk"
+ },
+ "limpki": {
+  "habitat": "Freshwater swamps, lake shores and canals with apple snails.",
+  "look": "Listen for the wailing scream at night and dawn; walk shorelines looking for a brown ibis-like bird probing the mud.",
+  "time": "Dawn and dusk"
+ },
+ "linspa": {
+  "habitat": "Brushy wet edges and weedy thickets in migration and winter.",
+  "look": "Pick through sparrow flocks for a finely streaked, buffy-breasted bird that raises a slight crest; shy and quick to drop into cover.",
+  "time": "Morning"
+ },
+ "litgul": {
+  "habitat": "Lakes, sewage ponds and coastal waters among Bonaparte's Gulls.",
+  "look": "Pick through Bonaparte's Gull flocks for a tiny gull with dark underwings and rounded wingtips, usually in late winter.",
+  "time": "Midday"
+ },
+ "lobcur": {
+  "habitat": "Coastal flats and beaches; a rare winter visitor in the Southeast.",
+  "look": "A huge sandpiper with an improbably long bill on open flats; most are in Florida.",
+  "time": "Low tide"
+ },
+ "lobdow": {
+  "habitat": "Freshwater pools and flooded fields, more than coastal flats.",
+  "look": "Check dowitcher flocks on fresh water in fall and winter; the sharp 'keek' call is the surest clue.",
+  "time": "Morning"
+ },
+ "logshr": {
+  "habitat": "Open pastures with fences and scattered trees, airports, old fields.",
+  "look": "Scan fence posts, wires and bare treetops for a gray masked bird; check thorny shrubs and barbed wire for impaled prey.",
+  "time": "Morning"
+ },
+ "lotduc": {
+  "habitat": "Ocean inlets and large reservoirs in winter.",
+  "look": "Scan open water for a small, pale duck that dives often; listen for the yodeling calls of flocks offshore.",
+  "time": "Morning"
+ },
+ "lotjae": {
+  "habitat": "Far offshore; onshore or on reservoirs only after storms, mostly in fall.",
+  "look": "A slim, tern-like jaeger; check reservoirs and beaches in the days after tropical systems in August and September.",
+  "time": "After storms"
+ },
+ "louwat": {
+  "habitat": "Fast rocky streams in wooded ravines.",
+  "look": "Walk a clear stream in March and April and listen for a loud ringing song that slurs downward; it bobs along the water's edge.",
+  "time": "Morning"
+ },
+ "macwar": {
+  "habitat": "Western species; an extreme rarity in dense low thickets.",
+  "look": "A skulking gray-hooded warbler with broken white eye arcs in low brush; needs photos to separate from Mourning.",
+  "time": "Morning"
+ },
+ "magfri": {
+  "habitat": "Coastal skies, piers and fishing boats in Florida; inland after storms.",
+  "look": "Look up: a huge black bird with angular wings hanging motionless over the coast, especially on hot afternoons and before storms.",
+  "time": "Afternoon"
+ },
+ "magwar": {
+  "habitat": "Woodland edges and young conifers in migration.",
+  "look": "Check low to mid-level edges in May and September for a yellow warbler with a black necklace and a white tail band.",
+  "time": "Morning"
+ },
+ "mallar3": {
+  "habitat": "Any water, from park ponds to marshes.",
+  "look": "The default dabbling duck; check park flocks for wild-type birds and for other species hiding among them.",
+  "time": "Any time"
+ },
+ "mancuc": {
+  "habitat": "Mangroves and tropical hammocks in South Florida.",
+  "look": "Very secretive; listen for the slow guttural call in the mangroves of Sanibel and the Keys, and watch for movement in dense canopy.",
+  "time": "Early morning"
+ },
+ "manduc": {
+  "habitat": "Park ponds; an escape from collections.",
+  "look": "Ornate small duck with Wood Duck habits; look among Wood Ducks and park waterfowl.",
+  "time": "Early morning"
+ },
+ "margod": {
+  "habitat": "Tidal flats and beaches on the coast in winter.",
+  "look": "Big cinnamon-brown shorebird with a long upturned bill, often in roosting flocks on sandbars at high tide.",
+  "time": "High-tide roosts"
+ },
+ "marwre": {
+  "habitat": "Cattail and cordgrass marshes.",
+  "look": "Listen for the gurgling, mechanical song from dense reeds; wait by an opening and it will climb a stem to look.",
+  "time": "Early morning"
+ },
+ "masboo": {
+  "habitat": "Tropical seas; nests in the Dry Tortugas, rare elsewhere.",
+  "look": "A large white booby with a black mask on offshore markers or after storms; most records are Florida.",
+  "time": "Morning"
+ },
+ "merlin": {
+  "habitat": "Open country, coasts and reservoirs in migration and winter.",
+  "look": "A compact dark falcon rocketing low over flats or perched on a snag watching shorebird flocks; most frequent on the coast in fall.",
+  "time": "Morning"
+ },
+ "miskit": {
+  "habitat": "Riverside woods, tall pines in towns, and open skies in summer.",
+  "look": "Look up on summer afternoons for graceful gray kites catching dragonflies; neighborhoods with tall trees along rivers often have nesting pairs.",
+  "time": "Afternoon"
+ },
+ "monpar": {
+  "habitat": "Suburbs, parks and utility structures with huge stick nests.",
+  "look": "Find the bulky communal nests on poles and stadium lights; noisy flocks commute at dawn and dusk.",
+  "time": "Dawn and dusk"
+ },
+ "motduc": {
+  "habitat": "Florida marshes, ditches, retention ponds and wet prairie.",
+  "look": "A dark Mallard-like duck in pairs; note the unmarked buffy face and yellow bill. Check roadside ditches and pond edges.",
+  "time": "Any time"
+ },
+ "moudov": {
+  "habitat": "Fields, yards, wires and open woods everywhere.",
+  "look": "Common on wires and the ground; whistling wings when it flushes.",
+  "time": "Any time"
+ },
+ "mouwar": {
+  "habitat": "Dense low thickets and weedy tangles in migration.",
+  "look": "Very skulking; stand quietly by a dense tangle in late May or September and listen for a loud 'chek' and a rolling song.",
+  "time": "Early morning"
+ },
+ "musduc": {
+  "habitat": "Urban ponds and canals; feral birds, often tame.",
+  "look": "Large dark duck with red facial warts, loafing on pond edges and parking lots near water.",
+  "time": "Any time"
+ },
+ "mutswa": {
+  "habitat": "Park lakes and ponds, often introduced or feral.",
+  "look": "Huge white swan with an orange bill and black knob; check ornamental lakes and golf courses.",
+  "time": "Any time"
+ },
+ "naswar": {
+  "habitat": "Woodland edges and thickets in migration.",
+  "look": "Look for a gray-headed warbler with a white eye ring and yellow throat in mixed flocks in late April and October.",
+  "time": "Morning"
+ },
+ "neocor": {
+  "habitat": "Lakes and coastal waters; a rare but increasing visitor.",
+  "look": "Pick through cormorant roosts for a smaller, longer-tailed bird with a white edge to the pointed gular patch.",
+  "time": "Late afternoon roosts"
+ },
+ "norbob": {
+  "habitat": "Weedy fields, pine savanna, brushy edges and recently burned or thinned woods.",
+  "look": "Listen for the clear 'bob-WHITE' whistle from field edges in spring and summer; coveys flush explosively from grass. Walk slowly along brushy edges.",
+  "time": "Early morning, calm evenings"
+ },
+ "norcar": {
+  "habitat": "Thickets, yards, edges and feeders everywhere.",
+  "look": "The first bird to sing before dawn; males on exposed perches in spring.",
+  "time": "Any time"
+ },
+ "norfli": {
+  "habitat": "Open woods, edges, yards and fields; feeds on the ground.",
+  "look": "Look for a brown woodpecker flushing from the ground with a white rump; loud 'wick-wick-wick' in spring.",
+  "time": "Morning"
+ },
+ "norgan": {
+  "habitat": "Ocean waters within sight of shore in winter.",
+  "look": "Scan from beaches and piers for large white birds plunging headfirst into the sea; onshore winds bring them close.",
+  "time": "Morning"
+ },
+ "norhar2": {
+  "habitat": "Marshes, large fields and pastures in winter.",
+  "look": "Low, tilting flight over grass with the white rump flashing; scan big open fields at dawn and in the last light.",
+  "time": "Early morning and late afternoon"
+ },
+ "normoc": {
+  "habitat": "Suburbs, hedgerows, parks and farmland.",
+  "look": "Sings from rooftops and wires, sometimes at night; flashes white wing patches.",
+  "time": "Any time"
+ },
+ "norpar": {
+  "habitat": "Riverside and swamp forest with Spanish moss or beard lichen.",
+  "look": "Listen for the rising buzz with a snap at the end from the canopy along rivers; small and high.",
+  "time": "Morning"
+ },
+ "norpin": {
+  "habitat": "Shallow lakes, flooded fields and marshes.",
+  "look": "Long-necked, elegant duck; scan the far edges of flooded fields and shallow bays where it tips up to feed.",
+  "time": "Morning and late afternoon"
+ },
+ "norsho": {
+  "habitat": "Shallow ponds, sewage lagoons and marshes with rich surface food.",
+  "look": "Look for groups swimming in circles with bills skimming the surface; the big spoon bill is obvious even at distance.",
+  "time": "Any time in winter"
+ },
+ "norwat": {
+  "habitat": "Swampy pools, slow creeks and wet thickets in migration.",
+  "look": "Look at the muddy edges of woodland pools for a bobbing streaked warbler; the loud 'chink' call gives it away.",
+  "time": "Morning"
+ },
+ "nrwswa": {
+  "habitat": "Creek banks, bridges, culverts and lake shores.",
+  "look": "Brown swallow with a dingy throat flying low over water near bridges; nests in drainpipes and bank crevices.",
+  "time": "Any time"
+ },
+ "nstspa": {
+  "habitat": "Salt marsh in winter; wet grassy fields in migration.",
+  "look": "Visit high marsh edges at extreme high tides in October to see sparrows pushed onto the wrack; an orange-faced, blurry-streaked bird.",
+  "time": "Extreme high tides"
+ },
+ "nswowl": {
+  "habitat": "Dense conifers and rhododendron in the mountains; rare in winter elsewhere.",
+  "look": "Listen on spring nights at high elevations for the monotonous tooting; in winter check dense cedars and holly thickets for whitewash.",
+  "time": "Night"
+ },
+ "nutman": {
+  "habitat": "Weedy lots and grassy edges in South Florida; a small feral population.",
+  "look": "Small brown finch with a scaled breast in flocks in seeding grass; Miami area.",
+  "time": "Morning"
+ },
+ "olsfly": {
+  "habitat": "Tall dead snags above forest openings, burns and beaver ponds in migration.",
+  "look": "Scan the very top of the tallest dead tree at a woodland edge for an upright, vested flycatcher; listen for 'quick-three-beers' in May and September.",
+  "time": "Morning"
+ },
+ "orcori": {
+  "habitat": "Open woodland edges, orchards and scattered trees near water in summer.",
+  "look": "Listen for a fast, rich warble from treetops along field edges in May; the male is dark chestnut and easy to miss as a blackbird.",
+  "time": "Morning"
+ },
+ "orcwar": {
+  "habitat": "Brushy thickets, hedgerows and weedy edges in winter.",
+  "look": "Scan low shrubs and thickets in winter for a dull yellow-olive warbler with faint streaks; often with kinglets and sparrows.",
+  "time": "Morning"
+ },
+ "osprey": {
+  "habitat": "Lakes, reservoirs, rivers and coasts; nests on platforms and channel markers.",
+  "look": "Watch over open water for a hovering raptor that plunges feet-first; nests on poles and markers are obvious in spring.",
+  "time": "Any time"
+ },
+ "ovenbi1": {
+  "habitat": "Mature deciduous forest floor with deep leaf litter.",
+  "look": "Listen for the ringing 'teacher-teacher-TEACHER' from inside the woods; it walks the ground like a tiny chicken and sings from a low branch.",
+  "time": "Morning"
+ },
+ "pacloo": {
+  "habitat": "Coastal waters and large reservoirs; very rare in the East.",
+  "look": "A compact loon with a rounded head and straight bill; compare carefully with Common and Red-throated. Needs photos.",
+  "time": "Morning"
+ },
+ "paibun": {
+  "habitat": "Brushy coastal edges and maritime scrub in summer; feeders in Florida in winter.",
+  "look": "Listen for a sweet warble from a shrub top near the coast in May; in winter offer white millet at Florida feeders.",
+  "time": "Morning"
+ },
+ "palwar": {
+  "habitat": "Open ground: lawns, field edges, pond margins and pine flats in winter.",
+  "look": "Look on the ground and in low shrubs for a warbler constantly pumping its tail; yellow undertail coverts.",
+  "time": "Any time"
+ },
+ "parjae": {
+  "habitat": "Nearshore ocean, chasing terns and gulls; rare on large reservoirs after storms.",
+  "look": "Watch tern flocks from piers and inlets in fall; a dark falcon-like bird harrying a tern until it drops its fish is a jaeger.",
+  "time": "Morning sea watches"
+ },
+ "pecsan": {
+  "habitat": "Grassy wet fields, flooded sod and marsh edges.",
+  "look": "Look in wet grass rather than open mud for a peep with a sharply cut streaked breast; fall is best.",
+  "time": "Morning"
+ },
+ "peflov": {
+  "habitat": "Suburbs; escaped pets, occasionally small feral groups.",
+  "look": "Tiny green parrot with a peach face at a feeder or in a palm.",
+  "time": "Morning"
+ },
+ "perfal": {
+  "habitat": "Cities, bridges, coasts and large reservoirs.",
+  "look": "Scan tall buildings and bridge towers; on the coast watch shorebird flocks erupt. Fall migration peaks early October on the beach.",
+  "time": "Morning"
+ },
+ "phivir": {
+  "habitat": "Woodland edges and young growth in fall migration.",
+  "look": "Check mixed flocks in late September for a small yellow-breasted vireo with a dark loral line; easily passed off as Warbling.",
+  "time": "Morning"
+ },
+ "pibgre": {
+  "habitat": "Ponds, marshes and lake coves with emergent vegetation.",
+  "look": "Small brown grebe that dives or sinks when watched; scan edges of ponds and listen for the cuckoo-like whooping in spring.",
+  "time": "Any time"
+ },
+ "pilwoo": {
+  "habitat": "Mature forest, swamps and wooded suburbs with big dead trees.",
+  "look": "Listen for loud wild laughter and slow heavy drumming; look for fresh rectangular holes low on trunks.",
+  "time": "Morning"
+ },
+ "pinsis": {
+  "habitat": "Feeders, sweetgums and alders in irruption winters.",
+  "look": "Streaky little finch with yellow in the wings among goldfinch flocks; listen for the rising buzzy 'zreee'.",
+  "time": "Morning"
+ },
+ "pinwar": {
+  "habitat": "Pine woods year-round; feeders in winter.",
+  "look": "Listen for a musical trill from pine tops; often the first warbler singing in February. Takes suet at feeders.",
+  "time": "Any time"
+ },
+ "pipplo": {
+  "habitat": "Sandy beaches, tidal flats and inlet shoals in winter.",
+  "look": "Very pale plover on dry sand above the tide line; scan quiet beach stretches and inlets, moving slowly so it does not flush.",
+  "time": "Low tide, early morning"
+ },
+ "pirfly1": {
+  "habitat": "Tropical; an extreme rarity in Florida.",
+  "look": "A streaked flycatcher with a dark mask near fruiting trees; needs photos.",
+  "time": "Morning"
+ },
+ "pitwhy": {
+  "habitat": "Weedy fields in South Florida; a small established population.",
+  "look": "Male with absurd long tail streamers in breeding season, feeding on grass seeds in open lots; Miami area.",
+  "time": "Morning"
+ },
+ "pomjae": {
+  "habitat": "Offshore waters; occasionally visible from beaches and piers in winter.",
+  "look": "Scan beyond the breakers from a pier for a heavy, broad-winged jaeger chasing gulls; pelagic trips are far more reliable.",
+  "time": "Morning"
+ },
+ "prawar": {
+  "habitat": "Scrubby fields, young pines, powerline cuts and mangroves in Florida.",
+  "look": "Listen for the rising buzzy scale from a young pine or shrub in April; it pumps its tail.",
+  "time": "Morning"
+ },
+ "prowar": {
+  "habitat": "Flooded swamp forest, cypress sloughs and river backwaters.",
+  "look": "Listen for the loud ringing 'sweet-sweet-sweet' over still water in April; the golden bird sits low over the water near cavities.",
+  "time": "Morning"
+ },
+ "purfin": {
+  "habitat": "Woodland edges and feeders in winter; irruptive.",
+  "look": "Check feeder finch flocks from November for a raspberry-washed male or a strongly patterned female with a bold eyebrow.",
+  "time": "Morning"
+ },
+ "purgal2": {
+  "habitat": "Freshwater marshes with floating vegetation and pickerelweed.",
+  "look": "Walks across lily pads on long yellow legs; scan the edges of marsh pools and listen for cackling.",
+  "time": "Morning"
+ },
+ "purmar": {
+  "habitat": "Martin houses and gourds near open water and fields.",
+  "look": "Check martin colonies in neighborhoods and parks from March; in July and August evening pre-roost gatherings reach thousands.",
+  "time": "Morning and evening"
+ },
+ "purswa3": {
+  "habitat": "Freshwater marshes and retention ponds in South Florida.",
+  "look": "A huge purple gallinule-like bird with a red bill standing in open marsh; often on the edges of stormwater treatment areas.",
+  "time": "Any time"
+ },
+ "razorb": {
+  "habitat": "Offshore; rare winter visitor to Southeast coasts in some years.",
+  "look": "Scan from jetties and piers in midwinter for a black-and-white diver sitting low; irruption years bring many.",
+  "time": "Morning, calm seas"
+ },
+ "rebmer": {
+  "habitat": "Coastal bays, inlets and large lakes.",
+  "look": "Scan salt water and big reservoirs for slim, shaggy-crested divers in small groups, often fishing in lines.",
+  "time": "Morning"
+ },
+ "rebnut": {
+  "habitat": "Pines, hemlocks and spruce; irruptive in winter in the lowlands.",
+  "look": "Tin-horn 'ank-ank' from pine tops in irruption winters; check pines and feeders from October.",
+  "time": "Morning"
+ },
+ "rebtro": {
+  "habitat": "Gulf Stream and Caribbean waters; storm stray.",
+  "look": "Pelagic trips and post-hurricane beach checks; a red-billed tropicbird with barred back.",
+  "time": "After storms"
+ },
+ "rebwoo": {
+  "habitat": "Woods, suburbs and feeders everywhere.",
+  "look": "Rolling 'churr' call and a red nape; the common woodpecker at feeders.",
+  "time": "Any time"
+ },
+ "recpar": {
+  "habitat": "Suburbs of South Florida with established feral flocks.",
+  "look": "Listen for raucous flocks of chunky green amazons at dawn and dusk roost flights.",
+  "time": "Dawn and dusk"
+ },
+ "recpoc": {
+  "habitat": "Park ponds; an escape.",
+  "look": "Drake with a rounded orange-red head and bright red bill, among ornamental waterfowl.",
+  "time": "Any time"
+ },
+ "recwoo": {
+  "habitat": "Mature, open longleaf and loblolly pine stands that are burned regularly.",
+  "look": "Find trees with white paint bands and resin-coated trunks; wait near the cluster at dawn as birds leave cavities, calling with a squeaky 'sklit'.",
+  "time": "First 30 minutes after sunrise"
+ },
+ "redcro": {
+  "habitat": "Pine stands with heavy cone crops; irregular.",
+  "look": "Listen for 'kip-kip' calls overhead near pine cones; flocks feed quietly at the tops of loblolly and white pines.",
+  "time": "Morning"
+ },
+ "redegr": {
+  "habitat": "Shallow coastal lagoons and flats in Florida and the Gulf.",
+  "look": "Look for the heron running, spinning and canopy-feeding in open shallows; both dark and white morphs occur.",
+  "time": "Low tide"
+ },
+ "redhea": {
+  "habitat": "Lakes, reservoirs and coastal bays.",
+  "look": "Rafts of diving ducks offshore; look for a round chestnut head and gray body with a blue bill. Compare with Canvasback's sloping head.",
+  "time": "Midday"
+ },
+ "redjun": {
+  "habitat": "Neighborhoods with feral chickens.",
+  "look": "Free-roaming chickens of wild type; a crowing rooster in a known feral flock.",
+  "time": "Any time"
+ },
+ "redkno": {
+  "habitat": "Sandy beaches and tidal flats, especially at inlets, in migration and winter.",
+  "look": "Scan high-tide roosts and inlet flats for chunky gray shorebirds in tight flocks; in May look for rusty breasts.",
+  "time": "High-tide roosts"
+ },
+ "redpha1": {
+  "habitat": "Offshore waters; onshore only after storms.",
+  "look": "Check beaches, ponds and reservoirs right after hurricanes and strong coastal storms for a swimming shorebird.",
+  "time": "After storms"
+ },
+ "reevir1": {
+  "habitat": "Deciduous forest canopy everywhere in summer.",
+  "look": "Endless question-and-answer phrases from the canopy all day; look for a vireo working the undersides of leaves.",
+  "time": "Any time, sings all day"
+ },
+ "refboo": {
+  "habitat": "Tropical seas; a rare stray to Florida coasts.",
+  "look": "Check channel markers, piers and buoys for a small booby with red feet; often found roosting on structures.",
+  "time": "Morning"
+ },
+ "rehwoo": {
+  "habitat": "Open oak woods, beaver swamps with dead snags, golf courses and pecan groves.",
+  "look": "Scan standing dead trees in open settings for a bold black-and-white bird with a red head; watch for flycatching sallies from snags.",
+  "time": "Morning"
+ },
+ "rengre": {
+  "habitat": "Large reservoirs and coastal waters; a rare winter visitor.",
+  "look": "A big, long-necked grebe with a dusky cheek and yellow bill base; scan reservoirs after hard freezes to the north.",
+  "time": "Morning scans"
+ },
+ "renpha": {
+  "habitat": "Offshore and on inland ponds after storms.",
+  "look": "A swimming shorebird spinning on a pond or sewage lagoon in late summer and fall, especially after weather systems.",
+  "time": "After storms"
+ },
+ "reshaw": {
+  "habitat": "Wet woods, swamps, river bottoms and wooded suburbs.",
+  "look": "Listen for the loud repeated 'kee-ah' in late winter and spring; perches on wires and low limbs along wooded roads.",
+  "time": "Morning"
+ },
+ "rethaw": {
+  "habitat": "Fields, highway edges, open woods; perches on poles and tall trees.",
+  "look": "The big hawk on roadside poles; soars with a red tail by late morning.",
+  "time": "Any time"
+ },
+ "retloo": {
+  "habitat": "Nearshore ocean and inlets in winter; rare on big reservoirs.",
+  "look": "Scan the surf from piers for a slim loon holding its thin bill tilted up; often moving in lines offshore.",
+  "time": "Morning, calm seas"
+ },
+ "rewbla": {
+  "habitat": "Marshes, wet ditches, fields and feeders.",
+  "look": "Conk-la-ree from every cattail in spring; huge mixed flocks in winter fields.",
+  "time": "Any time"
+ },
+ "rewbul": {
+  "habitat": "Suburban Miami neighborhoods with fruiting shrubs.",
+  "look": "A small established population around Kendall; look for a crested bird with red cheek spots in fruiting trees.",
+  "time": "Morning"
+ },
+ "ribgul": {
+  "habitat": "Parking lots, reservoirs, landfills, beaches, athletic fields.",
+  "look": "The default inland gull in winter; scan large loafing flocks for rarer gulls.",
+  "time": "Any time"
+ },
+ "rinduc": {
+  "habitat": "Wooded ponds, beaver ponds, small lakes and reservoir coves.",
+  "look": "The common diving duck of small freshwater; look for the peaked head and white ring near the bill tip, often in tight flocks.",
+  "time": "Any time in winter"
+ },
+ "rinphe1": {
+  "habitat": "Farmland; in the Southeast only released birds.",
+  "look": "Long-tailed gamebird along field edges, usually from a game release.",
+  "time": "Early morning"
+ },
+ "robgro": {
+  "habitat": "Deciduous woods and feeders in migration; mountain hardwoods in summer.",
+  "look": "Check sunflower feeders in late April and early May; the song is a sweet, fast robin from the canopy.",
+  "time": "Morning"
+ },
+ "robpoc1": {
+  "habitat": "Park ponds; an escape.",
+  "look": "Dark duck with a red knobbed bill among ornamental waterfowl.",
+  "time": "Any time"
+ },
+ "rocpig": {
+  "habitat": "Cities, bridges, grain elevators and overpasses.",
+  "look": "Flocks on bridges and buildings; worth checking for falcons hunting them.",
+  "time": "Any time"
+ },
+ "rolhaw": {
+  "habitat": "Large open fields and marshes in winter; very rare in the Southeast.",
+  "look": "Scan big fields for a long-winged buteo hovering in place, with dark wrist patches and a white tail base.",
+  "time": "Morning and late afternoon"
+ },
+ "rorpar": {
+  "habitat": "Suburbs with palms; small feral populations in Florida.",
+  "look": "Long-tailed green parakeet with a red bill screeching over neighborhoods at dawn.",
+  "time": "Dawn and dusk"
+ },
+ "rosgoo": {
+  "habitat": "Same places as Snow Goose: reservoirs, sod farms, goose flocks on lawns.",
+  "look": "Scan Snow and Canada Goose flocks for a smaller, round-headed white goose with a stubby bill lacking the dark grin patch; stays close to other geese.",
+  "time": "Morning and late afternoon"
+ },
+ "rosspo1": {
+  "habitat": "Shallow coastal lagoons, mangrove pools and impoundments; increasingly inland.",
+  "look": "Pink birds sweeping bills side to side in shallows; check impoundments and drying ponds in late summer when post-breeding birds wander north.",
+  "time": "Low tide; late summer"
+ },
+ "roster": {
+  "habitat": "Coastal waters and offshore sandbars in Florida and the Keys.",
+  "look": "Scan tern roosts for a very pale tern with a long tail and mostly dark bill; rare and local.",
+  "time": "Morning"
+ },
+ "royter1": {
+  "habitat": "Beaches, inlets and piers; rare inland after storms.",
+  "look": "Large orange-billed tern in loafing flocks on beaches; conspicuous year-round on the coast.",
+  "time": "Any time"
+ },
+ "rthhum": {
+  "habitat": "Gardens, feeders, flowering edges and woodland openings.",
+  "look": "Put out a feeder and watch; in the wild look at jewelweed, trumpet creeper and salvia patches. Males perch on exposed twigs.",
+  "time": "Early morning and late afternoon"
+ },
+ "ruckin": {
+  "habitat": "Brushy edges, thickets and conifers in winter.",
+  "look": "Tiny, hyperactive bird flicking its wings constantly in low shrubs; the scolding 'ji-dit' gives it away.",
+  "time": "Any time"
+ },
+ "rudduc": {
+  "habitat": "Ponds, sewage lagoons, reservoir coves with still water.",
+  "look": "Compact duck with a stiff tail, usually in tight sleeping rafts in sheltered water; the blue bill appears in spring.",
+  "time": "Midday rafts"
+ },
+ "rudtur": {
+  "habitat": "Rocky jetties, shell beaches and wrack lines on the coast.",
+  "look": "Flips seaweed and shells along the tide line; check jetties and piers.",
+  "time": "Low tide"
+ },
+ "rufhum": {
+  "habitat": "Feeders and flowering shrubs in late fall and winter.",
+  "look": "The most likely winter hummingbird in the Southeast: keep feeders up past October and watch for rusty flanks and a buzzy, aggressive bird.",
+  "time": "Morning at feeders"
+ },
+ "rusbla": {
+  "habitat": "Flooded woodlands, beaver swamps and wooded wet ditches in winter.",
+  "look": "Walk swamp edges in winter and listen for squeaky, creaking calls; flocks flip leaves in shallow water. Declining, so check wooded wetlands specifically.",
+  "time": "Morning"
+ },
+ "sabgul": {
+  "habitat": "Offshore and on inland reservoirs in fall, especially after storms.",
+  "look": "Check reservoirs and sewage ponds in September for a small gull with a striking three-tone wing pattern.",
+  "time": "Morning"
+ },
+ "sancra": {
+  "habitat": "Pastures, wet prairie, golf courses and shallow marsh.",
+  "look": "Tall gray birds in pairs or family groups in open grass; the rattling bugle carries far. In Florida look on golf courses and roadsides.",
+  "time": "Morning and late afternoon"
+ },
+ "sander": {
+  "habitat": "Sandy ocean beaches, running at the edge of the waves.",
+  "look": "The pale sandpiper chasing waves; large winter flocks on open beaches.",
+  "time": "Any time"
+ },
+ "santer1": {
+  "habitat": "Beaches, inlets and sandbars on the coast.",
+  "look": "Look for the yellow-tipped black bill among roosting Royal Terns; shaggy crest.",
+  "time": "Any time"
+ },
+ "savspa": {
+  "habitat": "Fields, pastures, sod farms and marsh edges in winter.",
+  "look": "Common streaky sparrow of open fields; look for a yellow spot before the eye and a short notched tail.",
+  "time": "Any time"
+ },
+ "scaibi": {
+  "habitat": "South American; in Florida only escapes or hybrids.",
+  "look": "A scarlet ibis among White Ibis flocks; nearly all are from captivity.",
+  "time": "Any time"
+ },
+ "scatan": {
+  "habitat": "Mature deciduous forest in the mountains and Piedmont; canopy in migration.",
+  "look": "Listen for the hoarse robin-like song and 'chip-burr' call from high in oaks; the blazing red male hides surprisingly well in leaves.",
+  "time": "Morning"
+ },
+ "scnpig1": {
+  "habitat": "Caribbean forest; in Florida an extreme rarity.",
+  "look": "A large dark pigeon with a scaled nape in tall trees; nearly all reports need documentation.",
+  "time": "Morning"
+ },
+ "scoshe1": {
+  "habitat": "Offshore waters with Cory's Shearwaters.",
+  "look": "Separated from Cory's by underwing pattern on pelagic trips; not a shore bird.",
+  "time": "After storms"
+ },
+ "sctfly": {
+  "habitat": "Open pastures with fences and scattered trees; a rare migrant and winter bird.",
+  "look": "Scan fence lines and wires in open country, especially in late fall; the streamers are obvious even on a distant perch.",
+  "time": "Morning"
+ },
+ "sedwre1": {
+  "habitat": "Damp grassy fields, broomsedge and wet meadows in winter.",
+  "look": "Walk slowly through tall wet grass in winter; it flushes a few feet and drops back in. Listen for dry 'chip' notes.",
+  "time": "Morning"
+ },
+ "semplo": {
+  "habitat": "Mudflats, beaches and drawn-down reservoir margins in migration.",
+  "look": "Small banded plover running on mud; scan flats at low tide and reservoir shores in August and September.",
+  "time": "Low tide"
+ },
+ "semsan": {
+  "habitat": "Mudflats, reservoir shores and coastal pools in migration.",
+  "look": "The common gray-brown peep of open mud in May and August; black legs and a short straight bill.",
+  "time": "Low tide"
+ },
+ "shbdow": {
+  "habitat": "Mudflats, coastal pools and flooded fields in migration.",
+  "look": "Feeds with a sewing-machine motion in shallow water; listen for the mellow 'tu-tu-tu' flight call to separate from Long-billed.",
+  "time": "Low tide"
+ },
+ "sheowl": {
+  "habitat": "Large marshes, airports and grassland in winter.",
+  "look": "Watch big open fields in the last half hour of light for a moth-like owl quartering low; often shares fields with harriers.",
+  "time": "Dusk"
+ },
+ "shicow": {
+  "habitat": "Feeders and lawns in Florida; rare elsewhere.",
+  "look": "Pick through cowbird flocks for a glossy purple-black male with a slimmer bill; listen for a liquid whistled song.",
+  "time": "Morning"
+ },
+ "shshaw": {
+  "habitat": "Woodland edges and yards with feeders in winter; ridges in fall migration.",
+  "look": "A small hawk bursting through a feeder area; in fall watch ridgelines on north winds in late September.",
+  "time": "Morning"
+ },
+ "shthaw": {
+  "habitat": "Florida woodlands and wetland edges; hunts high over mixed habitat.",
+  "look": "Scan the sky over cypress and hammock edges late in the morning for a buteo soaring very high; both dark and light morphs occur.",
+  "time": "Late morning"
+ },
+ "shtshe": {
+  "habitat": "Pacific species; extraordinary in the Atlantic.",
+  "look": "Only from exhaustive documentation; not a bird to look for.",
+  "time": "After storms"
+ },
+ "smbani": {
+  "habitat": "Brushy fields and scrub in South Florida; now rare.",
+  "look": "Groups of floppy black birds with huge bills in low scrub; listen for whining calls. Known sites only.",
+  "time": "Morning"
+ },
+ "smbela1": {
+  "habitat": "South American; a one-time stray to the East.",
+  "look": "A drab elaenia with wing bars and a short crest; any record needs extensive documentation.",
+  "time": "Morning"
+ },
+ "snakit": {
+  "habitat": "Freshwater marshes and lake edges with apple snails in central and south Florida.",
+  "look": "Watch low over marsh vegetation for a slow-flapping dark raptor with a white tail base; perches on low posts eating snails.",
+  "time": "Morning"
+ },
+ "snoegr": {
+  "habitat": "Marshes, pond edges, tidal flats and ditches.",
+  "look": "Active white egret stirring the water with yellow feet; often in loose feeding groups.",
+  "time": "Any time"
+ },
+ "snogoo": {
+  "habitat": "Large lakes, reservoirs, sod farms and harvested fields; in the Southeast usually a stray with Canada Geese.",
+  "look": "Pick through Canada Goose flocks on lawns and fields for a white (or blue-morph) bird with pink bill and black wingtips; check the biggest open-water roosts at dusk.",
+  "time": "Morning and late afternoon on fields; dusk at roosts"
+ },
+ "snoowl1": {
+  "habitat": "Beaches, airports and open fields; an irruptive winter rarity.",
+  "look": "In invasion winters scan dunes, jetties and airport fields for a big white owl sitting on the ground.",
+  "time": "Any time"
+ },
+ "snoplo5": {
+  "habitat": "Gulf beaches with dry sand and shell; nests above the wrack line.",
+  "look": "Tiny pale plover almost invisible on sand; scan protected beach areas in Lee County, watching for movement.",
+  "time": "Early morning"
+ },
+ "solsan": {
+  "habitat": "Muddy puddles, wooded pond edges and ditches in migration.",
+  "look": "Usually alone at small muddy pools; bobs gently and flushes with a high whistle. Check flooded woodland edges in April and August.",
+  "time": "Morning"
+ },
+ "sonspa": {
+  "habitat": "Brushy wet edges, ditches and yards.",
+  "look": "Heavily streaked with a central breast spot, pumping its tail in flight; sings from low perches.",
+  "time": "Any time"
+ },
+ "sooshe": {
+  "habitat": "Offshore; occasionally visible from shore in late spring.",
+  "look": "Scan from beaches in May and June during onshore winds for an all-dark shearwater with silvery underwings.",
+  "time": "Morning sea watches"
+ },
+ "sooter1": {
+  "habitat": "Tropical seas; nests in the Dry Tortugas, storm-blown elsewhere.",
+  "look": "After tropical storms check beaches, lakes and reservoirs for a dark-backed tern with a white forehead.",
+  "time": "After storms"
+ },
+ "sora": {
+  "habitat": "Freshwater marsh, flooded fields, pond edges with dense vegetation.",
+  "look": "The whinnying call gives it away; in fall, walk slowly along wet ditches and marsh edges and watch for a chunky bird slipping into cover.",
+  "time": "Dawn and dusk"
+ },
+ "sposan": {
+  "habitat": "Rocky and muddy shorelines of lakes, rivers and ponds.",
+  "look": "Walks the water's edge bobbing its tail constantly, then flies off with stiff shallow wingbeats low over water.",
+  "time": "Any time"
+ },
+ "sstspa": {
+  "habitat": "Salt marsh in winter.",
+  "look": "Visit marsh edges at the highest tides in October and November; a sharp-faced sparrow with crisp streaks, pushed up with Nelson's and Seaside sparrows.",
+  "time": "Extreme high tides"
+ },
+ "stisan": {
+  "habitat": "Shallow freshwater pools and impoundments in migration.",
+  "look": "Feeds belly-deep in groups with a deliberate probing motion; check dowitcher and yellowlegs flocks in July to September.",
+  "time": "Morning"
+ },
+ "sumtan": {
+  "habitat": "Open oak and pine woods, wooded suburbs.",
+  "look": "Listen for the 'pit-ti-tuck' call from the canopy; a slow robin-like song. Look near wasp nests, which it raids.",
+  "time": "Morning"
+ },
+ "surfbi": {
+  "habitat": "Pacific rocky shores; an extraordinary stray to the East.",
+  "look": "A stocky turnstone-like bird on jetties; any report needs photos.",
+  "time": "Low tide"
+ },
+ "sursco": {
+  "habitat": "Ocean surf line, inlets and large reservoirs after storms.",
+  "look": "Scan just beyond the breakers for dark ducks with a white nape and forehead patches on the drake; lines fly low over the water.",
+  "time": "Morning sea watches"
+ },
+ "swagoo1": {
+  "habitat": "Urban ponds and farmyards; domestic (Chinese goose) stock.",
+  "look": "Long-necked goose with a knob at the base of the bill, loafing with Canada Geese or tame flocks.",
+  "time": "Any time"
+ },
+ "swahaw": {
+  "habitat": "Open fields and prairies; a rare migrant and winter visitor, mostly South Florida.",
+  "look": "Scan plowed fields for a slim buteo with long wings and a dark chest; often perched on the ground or low posts.",
+  "time": "Morning"
+ },
+ "swaspa": {
+  "habitat": "Marshes, wet ditches and flooded weedy fields in winter.",
+  "look": "Look low in wet vegetation for a rusty-winged sparrow with a gray face; responds to pishing by climbing a stem.",
+  "time": "Morning"
+ },
+ "swathr": {
+  "habitat": "Woodland understory and fruiting shrubs in migration.",
+  "look": "Look for a buff-faced thrush in dogwoods and other fruiting trees in late September and early October; a liquid 'whit' call from cover.",
+  "time": "Early morning"
+ },
+ "swawar": {
+  "habitat": "Dense canebrakes and rhododendron thickets in river bottoms and ravines.",
+  "look": "Listen in late April and May for a loud, slurred song like a Louisiana Waterthrush; it stays on the ground in dense cane. Patience and playback restraint required.",
+  "time": "Early morning"
+ },
+ "swtkit": {
+  "habitat": "River swamps and pine flats in summer; over fields in late July roosts.",
+  "look": "Look up along river corridors from April to August for the forked tail; late-summer roosts gather dozens over pastures in the evening.",
+  "time": "Late morning to afternoon"
+ },
+ "tenwar": {
+  "habitat": "Treetops in migration, especially flowering and fruiting trees.",
+  "look": "In fall check mixed flocks for a plain greenish warbler with a pale eyebrow; in spring listen for a staccato three-part trill from the canopy.",
+  "time": "Morning"
+ },
+ "towwar": {
+  "habitat": "Western species; a very rare stray in winter.",
+  "look": "A yellow-faced warbler with a dark cheek patch in conifers or at a suet feeder in winter; needs photos.",
+  "time": "Morning"
+ },
+ "treswa": {
+  "habitat": "Open water, marshes and fields; huge winter flocks in Florida.",
+  "look": "Glossy blue-green swallows over water; roost swarms of thousands at dusk over marsh in winter.",
+  "time": "Dusk for roosts"
+ },
+ "triher": {
+  "habitat": "Coastal marshes, mangrove pools and tidal flats.",
+  "look": "Slim heron dashing and wading belly-deep; white belly separates it from other dark herons.",
+  "time": "Low tide"
+ },
+ "trokin": {
+  "habitat": "Open areas with scattered trees; a rare stray, mostly Florida and the Gulf coast.",
+  "look": "Yellow-bellied kingbird on wires in fall and winter; separate from Western by notched tail and heavy bill, and by the twittering call.",
+  "time": "Morning"
+ },
+ "tuftit": {
+  "habitat": "Deciduous woods, suburbs and feeders.",
+  "look": "Loud 'peter-peter' whistle; a core member of mixed flocks.",
+  "time": "Any time"
+ },
+ "tunswa": {
+  "habitat": "Large lakes and flooded fields; in the Southeast a scarce winter visitor to reservoirs.",
+  "look": "Scan open water of big reservoirs in midwinter for white swans with black bills; listen for soft hooting from passing flocks at night and dawn.",
+  "time": "Midwinter, morning scans of open water"
+ },
+ "turvul": {
+  "habitat": "Everywhere; soars over fields, roads and woods.",
+  "look": "Rocking flight on raised wings; big roosts on towers at dusk.",
+  "time": "Late morning onward"
+ },
+ "uplsan": {
+  "habitat": "Sod farms, airports and short-grass pastures in migration.",
+  "look": "Scan turf farms in April and August for a slender, small-headed sandpiper standing in short grass; listen for the rolling whistle.",
+  "time": "Morning"
+ },
+ "vauswi": {
+  "habitat": "Western species; a rare winter stray in the Southeast.",
+  "look": "Check Chimney Swift roosts in late fall and winter for smaller, paler-rumped birds; most records are from known winter roosts.",
+  "time": "Evening at roosts"
+ },
+ "veery": {
+  "habitat": "Damp deciduous woods in migration; mountain hardwoods in summer.",
+  "look": "Listen at dusk in May for the spiraling, breathy song; in migration look low in shady woods for a warm brown thrush with faint spotting.",
+  "time": "Dawn and dusk"
+ },
+ "ventro1": {
+  "habitat": "South American; escapes in Florida.",
+  "look": "A large black-and-orange oriole with a bare blue eye patch at a feeder; captive origin.",
+  "time": "Any time"
+ },
+ "verfly": {
+  "habitat": "Open country near water: pond edges, pastures with scattered trees; a rare winter visitor.",
+  "look": "Scan fence lines and low perches around ponds in winter for a small flycatcher that drops to the ground; females are peachy-bellied.",
+  "time": "Morning"
+ },
+ "vesspa": {
+  "habitat": "Short-grass fields, bare margins and gravel roads in winter and migration.",
+  "look": "Scan field edges and dirt roads for a streaky sparrow that flashes white outer tail feathers when it flies.",
+  "time": "Morning"
+ },
+ "vigswa": {
+  "habitat": "Western species; an exceptional stray.",
+  "look": "Check Tree Swallow flocks for a bird with white wrapping above the eye and onto the rump sides.",
+  "time": "Morning"
+ },
+ "virrai": {
+  "habitat": "Freshwater marshes with dense cattails; winters in Southern marshes.",
+  "look": "Listen for the 'kiddick' and grunting calls at dusk; stand quietly beside a cattail edge and watch openings in the mud.",
+  "time": "Dusk and dawn"
+ },
+ "wesgre": {
+  "habitat": "Large reservoirs; a very rare stray.",
+  "look": "Long-necked black-and-white grebe far out on big water; check with a scope and compare with loons.",
+  "time": "Morning"
+ },
+ "weskin": {
+  "habitat": "Open fields, wires and coastal scrub in fall and winter.",
+  "look": "Scan wires along fields and beaches in October and November for a pale gray kingbird with a yellow belly and white tail edges.",
+  "time": "Morning"
+ },
+ "wessan": {
+  "habitat": "Tidal flats and beaches; rare inland.",
+  "look": "Pick through peep flocks on coastal flats for drooped bills and rusty scapulars; winters on the coast when Semipalmated has gone.",
+  "time": "Low tide"
+ },
+ "westan": {
+  "habitat": "Feeders and fruiting trees in winter; a rare western stray.",
+  "look": "Check feeders offering fruit and suet in winter for a yellow tanager with wing bars; the male has a red face.",
+  "time": "Morning"
+ },
+ "whbnut": {
+  "habitat": "Mature deciduous woods and oak-rich suburbs.",
+  "look": "Nasal 'yank' calls; walks headfirst down trunks. Scarce in the Coastal Plain, common in the Piedmont and mountains.",
+  "time": "Any time"
+ },
+ "whcpig2": {
+  "habitat": "Mangroves and hardwood hammocks in South Florida.",
+  "look": "Scan treetops and fruiting trees in hammocks; flocks commute between mangrove nesting islands and mainland feeding trees at dawn and dusk.",
+  "time": "Dawn and dusk flights"
+ },
+ "whcpin": {
+  "habitat": "Ponds and marshes; in the Southeast nearly always an escape.",
+  "look": "Small brown duck with white cheeks and a red bill spot, usually alone among park waterfowl.",
+  "time": "Any time"
+ },
+ "whcspa": {
+  "habitat": "Brushy field edges, hedgerows and farmyards in winter.",
+  "look": "Check hedgerows along fields for a tall, clean-breasted sparrow with a striped crown; often with White-throated flocks.",
+  "time": "Morning"
+ },
+ "whevir": {
+  "habitat": "Dense thickets, overgrown fields, brushy swamp edges.",
+  "look": "Sings a snappy 'quick-with-the-beer-check' from inside thickets; stay still and it will work toward you.",
+  "time": "Morning, but sings all day"
+ },
+ "whiibi": {
+  "habitat": "Lawns, marshes, mudflats and ditches in the Coastal Plain and Florida.",
+  "look": "Flocks probing lawns and wet fields; long lines flying to roost at dusk.",
+  "time": "Any time"
+ },
+ "whimbr3": {
+  "habitat": "Salt marsh edges, mudflats and beaches, especially with fiddler crabs.",
+  "look": "Scan the marsh edge at low tide for a large brown shorebird with a decurved bill and striped crown.",
+  "time": "Low tide"
+ },
+ "whrsan": {
+  "habitat": "Flooded fields and flats in late spring; drawn-down reservoirs in fall.",
+  "look": "A peep with wingtips extending past the tail and a white rump when it flies; late May and October are best.",
+  "time": "Morning"
+ },
+ "whtkit": {
+  "habitat": "Open grassland and marsh edges; rare and local in Florida.",
+  "look": "Scan open fields in South Florida for a pale raptor hovering like a kestrel with wings raised.",
+  "time": "Morning and late afternoon"
+ },
+ "whtspa": {
+  "habitat": "Thickets, woodland edges and yards in winter.",
+  "look": "Scratching in leaf litter under shrubs; listen for the sweet 'Old Sam Peabody' whistle, even in winter.",
+  "time": "Any time"
+ },
+ "whttro": {
+  "habitat": "Gulf Stream waters; onshore only after storms.",
+  "look": "Pelagic trips in summer, or a long shot after hurricanes; a white seabird with long tail streamers.",
+  "time": "After storms"
+ },
+ "whwdov": {
+  "habitat": "Suburbs and towns, mostly in Florida; feeders and palms.",
+  "look": "Large dove with a white wing stripe; check wires and feeders, and listen for the 'who cooks for you' cooing.",
+  "time": "Morning"
+ },
+ "whwsco2": {
+  "habitat": "Coastal waters and large lakes.",
+  "look": "Look for the white wing patch when scoters flap or fly; otherwise a dark bulky duck in the surf or on big reservoirs.",
+  "time": "Morning"
+ },
+ "wilfly": {
+  "habitat": "Willow thickets, wet meadows and brushy pond edges.",
+  "look": "Listen for the sneezy 'fitz-bew' from the top of a shrub in May and August; silent birds are best left unidentified.",
+  "time": "Morning"
+ },
+ "willet1": {
+  "habitat": "Beaches, salt marsh and tidal flats.",
+  "look": "Plain gray shorebird that flashes a bold black-and-white wing pattern when it flies; loud on the marsh in spring.",
+  "time": "Any time"
+ },
+ "wilpha": {
+  "habitat": "Shallow freshwater pools and sewage ponds in migration.",
+  "look": "Spins on the water or wades actively; look for a slim pale shorebird with a needle bill in fall at impoundments.",
+  "time": "Morning"
+ },
+ "wilplo": {
+  "habitat": "Sandy beaches, tidal flats and shell bars on the coast.",
+  "look": "Look for a heavy-billed plover on the upper beach and flats, often near fiddler crab burrows.",
+  "time": "Low tide"
+ },
+ "wilsni1": {
+  "habitat": "Wet meadows, muddy ditches and marsh edges in winter.",
+  "look": "Walk wet field edges and flush them; they zigzag away with a rasping call. Scan muddy margins for a striped back pressed to the ground.",
+  "time": "Morning"
+ },
+ "wiltur": {
+  "habitat": "Mixed woods with openings, field edges, pastures and oak forest.",
+  "look": "Scan field edges and dirt roads at dawn as flocks come out to feed; listen for gobbling in spring.",
+  "time": "First hour after sunrise, late afternoon"
+ },
+ "winwre3": {
+  "habitat": "Root tangles, brush piles and stream banks in moist woods in winter.",
+  "look": "Look low, at the base of fallen trees and along creek banks, for a tiny dark wren bobbing with its tail cocked; the call is a doubled 'chimp-chimp'.",
+  "time": "Morning"
+ },
+ "wispet": {
+  "habitat": "Offshore waters in summer.",
+  "look": "From shore only after storms; otherwise a pelagic trip, where it patters on the surface behind the boat.",
+  "time": "After storms"
+ },
+ "wlswar": {
+  "habitat": "Low willow and alder thickets near water in migration.",
+  "look": "A small yellow warbler with a black cap flitting low in wet shrubs, often in September; check pond-edge thickets.",
+  "time": "Morning"
+ },
+ "woewar1": {
+  "habitat": "Steep wooded slopes and ravines with dense understory.",
+  "look": "Listen for a dry, fast trill like a Chipping Sparrow from a hillside; it probes dead leaf clusters at mid-height.",
+  "time": "Morning"
+ },
+ "wooduc": {
+  "habitat": "Wooded swamps, beaver ponds, slow creeks and lake coves with overhanging trees.",
+  "look": "Approach quietly; they flush with a rising squeal. Scan shaded shorelines, logs and the backs of coves; check nest boxes in spring.",
+  "time": "First hour of light and the last hour before dark"
+ },
+ "woosto": {
+  "habitat": "Swamps, cypress ponds, roadside ditches and drying wetlands.",
+  "look": "Watch for large white birds soaring on thermals late morning; flocks feed in shrinking pools where fish concentrate in the dry season.",
+  "time": "Late morning soaring; early morning feeding"
+ },
+ "woothr": {
+  "habitat": "Mature moist deciduous woods with a shrub layer.",
+  "look": "Listen at dawn and dusk from late April for the flute-like 'ee-oh-lay'; forages on the forest floor.",
+  "time": "Dawn and dusk"
+ },
+ "y00475": {
+  "habitat": "Lakes, ponds and reservoirs in winter; marshes year-round in Florida.",
+  "look": "Big rafts on open water in winter; check them for ducks and grebes mixed in.",
+  "time": "Any time"
+ },
+ "y00478": {
+  "habitat": "Landfills and large reservoir roosts; a rare winter gull.",
+  "look": "A pale, round-headed large gull with grayish or white wingtips; sort through Herring Gull roosts at dams.",
+  "time": "Late afternoon roosts"
+ },
+ "y00678": {
+  "habitat": "Pastures and prairie in central Florida; occasionally wanders.",
+  "look": "Scan fence posts and roadsides in cattle country for a long-legged raptor walking the ground or with vultures at carcasses.",
+  "time": "Morning"
+ },
+ "ycnher": {
+  "habitat": "Wooded swamps, tidal creeks and suburban neighborhoods near water; eats crabs and crayfish.",
+  "look": "Look along creek banks and ditches, and under live oaks for nests in spring; often active in daylight, unlike Black-crowned.",
+  "time": "Any time, best evening"
+ },
+ "yebcha": {
+  "habitat": "Dense briar thickets, clearcuts and overgrown fields.",
+  "look": "Listen for a bizarre jumble of whistles, clucks and caws from a thicket in May; watch for a display flight with dangling legs.",
+  "time": "Early morning, also at night in spring"
+ },
+ "yebcuc": {
+  "habitat": "Deciduous woods and thickets, especially along rivers and in tent-caterpillar outbreaks.",
+  "look": "Heard far more than seen: a hollow 'ka-ka-ka-kowlp-kowlp'. Sits still in the canopy; watch for a long-tailed shape sliding through leaves.",
+  "time": "Morning, and calls on hot humid afternoons"
+ },
+ "yebfly": {
+  "habitat": "Shady, damp woods and thickets in migration.",
+  "look": "A small, yellow-washed Empidonax low in moist shade; most likely in late May and September. Listen for the soft rising 'chu-wee'.",
+  "time": "Morning"
+ },
+ "yebsap": {
+  "habitat": "Woods, orchards and yards in winter; favors maples, hollies and pines.",
+  "look": "Look for neat rows of sap wells on trunks and the mewing call; quiet and easily overlooked on a trunk.",
+  "time": "Morning"
+ },
+ "yecpar": {
+  "habitat": "Suburban Florida with fruiting and flowering trees.",
+  "look": "Small green parakeet with yellow wing bars in flocks over Miami and Fort Lauderdale neighborhoods.",
+  "time": "Morning"
+ },
+ "yehbla": {
+  "habitat": "Blackbird flocks in fields and marshes; a rare stray.",
+  "look": "Pick through large blackbird and cowbird flocks at feedlots and sod farms for a yellow head; most often in fall.",
+  "time": "Morning"
+ },
+ "yehpar": {
+  "habitat": "South Florida suburbs; small feral numbers.",
+  "look": "A large amazon with a yellow head in roost flights; escapes also common.",
+  "time": "Dawn and dusk"
+ },
+ "yelrai": {
+  "habitat": "Damp grassy fields and marsh edges with short dense grass; very secretive.",
+  "look": "Almost never seen without flushing; most records come from rope drags or mowing. Listen at night for ticking clicks like pebbles tapped.",
+  "time": "Night"
+ },
+ "yelwar1": {
+  "habitat": "Willow thickets, streamside shrubs and mangroves.",
+  "look": "Listen for 'sweet-sweet-sweet-I'm-so-sweet' from willows near water in spring; a bright yellow bird with yellow tail spots.",
+  "time": "Morning"
+ },
+ "yerwar": {
+  "habitat": "Wax myrtle, cedars, open woods and fields in winter; everywhere in migration.",
+  "look": "The abundant winter warbler; flocks flash yellow rumps and give a sharp 'check' call in myrtle thickets.",
+  "time": "Any time"
+ },
+ "yetvir": {
+  "habitat": "Mature deciduous woods, especially oaks along streams and ridgetops.",
+  "look": "Listen for a slow, hoarse 'three-eight' from high in the canopy; stays up in the big trees.",
+  "time": "Morning"
+ },
+ "yetwar": {
+  "habitat": "Tall pines, sycamores and cypress along rivers.",
+  "look": "Listen for a sweet descending series from high pines in March; it creeps along big limbs like a nuthatch.",
+  "time": "Morning"
+ }
+}
