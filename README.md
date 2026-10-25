@@ -23,7 +23,7 @@ All request and response bodies are JSON. Authenticated routes read an `HttpOnly
 | GET | `/api/saved` | yes | the user's watch list |
 | POST | `/api/saved` | yes | `{ speciesCode }` → adds to watch list, resolving unknown codes first (idempotent) |
 | DELETE | `/api/saved?speciesCode=` | yes | removes from watch list |
-| GET | `/api/birds?codes=a,b,c` | no | birds by eBird species code, in request order (max 50); unknown codes are resolved from eBird taxonomy plus image and Wikipedia lookups and stored |
+| GET | `/api/birds?codes=a,b,c` | no | birds by eBird species code, in request order (max 50); unknown codes are resolved from eBird taxonomy plus image and Wikipedia lookups and stored; each carries `tips: { habitat, look, time }` from `data/species-tips.json` (field craft for the Southeast, written once for the 440 species of the users' counties; null for others) |
 | GET | `/api/birds?q=term` | no | common-name search (max 50) |
 | GET | `/api/ebird/species-list?region=` | no | eBird species codes for a region, true species only (CDN-cached a day) |
 | GET | `/api/ebird/observations?region=` | no | recent observations (cached 5 min) |
