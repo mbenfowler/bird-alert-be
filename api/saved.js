@@ -3,6 +3,7 @@ const db = require('../lib/db')
 const { requireUser } = require('../lib/auth')
 const { assertSpecies } = require('../lib/ebird')
 const { findOrCreateBirds } = require('../lib/enrich')
+const { getRoute, putRoute } = require('../lib/savedRoutes')
 
 const savedBirdsFor = (userId) =>
   db('saved_birds')
@@ -14,8 +15,19 @@ const savedBirdsFor = (userId) =>
 // GET    /api/saved                      -> bird[]
 // POST   /api/saved { speciesCode }      -> bird (idempotent; unknown codes are resolved and stored)
 // DELETE /api/saved?speciesCode=         -> 204 (idempotent)
-module.exports = route(['GET', 'POST', 'DELETE'], async (req, res) => {
+// GET    /api/saved?kind=route&region=   -> { region, stops: point[] | null, start: point | null, updatedAt }
+// PUT    /api/saved?kind=route { region, stops?, start? } -> the same; stops null goes back to the suggested route
+//   (a point is { locId, name, lat, lng, note }; the route rides on this function so it costs no function slot)
+module.exports = route(['GET', 'POST', 'PUT', 'DELETE'], async (req, res) => {
   const user = await requireUser(req)
+
+  if (req.query.kind === 'route') {
+    res.setHeader('Cache-Control', 'no-store')
+    if (req.method === 'GET') return res.status(200).json(await getRoute(user.id, String(req.query.region || '')))
+    if (req.method === 'PUT') return res.status(200).json(await putRoute(user.id, body(req)))
+    throw new HttpError(405, 'Method not allowed')
+  }
+  if (req.method === 'PUT') throw new HttpError(405, 'Method not allowed')
 
   if (req.method === 'GET') {
     return res.status(200).json(await savedBirdsFor(user.id))
