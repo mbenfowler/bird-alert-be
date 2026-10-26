@@ -37,10 +37,10 @@ test('the best window is the busiest two hours, only with enough reports', () =>
 test('places merge every source, keep coordinates and notes, and rank by band then score', () => {
   const asOf = '2026-10-25'
   const reports = [
-    { locId: 'L1', locName: 'Park', day: '2026-10-25', time: '08:10', lat: 34.3, lng: -83.7, subId: 'S1', comment: 'north ramp', observer: 'A' },
+    { locId: 'L1', locName: 'Park', day: '2026-10-25', time: '08:10', lat: 34.3, lng: -83.7, isHotspot: true, subId: 'S1', comment: 'north ramp', observer: 'A' },
     { locId: 'L1', locName: 'Park', day: '2026-10-24', time: '07:00', subId: 'S2' },
     { locId: 'L1', day: '2026-10-24', time: '07:00', subId: 'S2' },
-    { locId: 'L2', locName: 'Dam', day: '2026-10-05', subId: 'S3' },
+    { locId: 'L2', locName: 'Dam', day: '2026-10-05', isHotspot: false, subId: 'S3' },
     { locId: 'L3', locName: 'Old', day: '2026-08-01' },
     { locId: null, day: '2026-10-25' }
   ]
@@ -55,6 +55,8 @@ test('places merge every source, keep coordinates and notes, and rank by band th
   assert.deepEqual(park.effort, { checklists: 6, withSpecies: 4, detection: 67 })
   assert.equal(park.notes[0].text, 'north ramp')
   assert.equal(dam.effort.detection, null)
+  assert.equal(park.isHotspot, true)
+  assert.equal(dam.isHotspot, false)
   assert.equal(dam.band, 'Long shot')
   assert.equal(dam.lastSeen.daysAgo, 20)
 })
