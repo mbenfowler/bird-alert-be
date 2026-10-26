@@ -6,6 +6,7 @@ const { syncChecklists, userRegions } = require('../../lib/checklists')
 const { whereToFind, notableCodes } = require('../../lib/hotspots')
 const { dailyPass, accuracy } = require('../../lib/grading')
 const { whereToGo } = require('../../lib/whereToGo')
+const { nearbyPublic } = require('../../lib/nearby')
 const { assertCronCaller } = require('../../lib/digest')
 
 const DAY = 86400
@@ -62,6 +63,12 @@ const resources = {
       return whereToGo(ebird.assertRegion(region), list.slice(0, 1000))
     },
     cacheControl: cache(600, 3600)
+  },
+  // GET /api/ebird/nearby?lat=&lng= -> { hotspots: [{ locId, name, lat, lng, miles, checklists, species, latest, lightlyBirded }],
+  //   parks: [{ name, lat, lng, miles, type }] } public land near a point (eBird hotspots within 10 km, OSM parks within ~5 km)
+  nearby: {
+    handler: ({ lat, lng }) => nearbyPublic(Number.parseFloat(lat), Number.parseFloat(lng)),
+    cacheControl: cache(DAY, WEEK)
   },
   // GET /api/ebird/regions?state=GA -> { code, name }[]
   regions: {
