@@ -47,3 +47,15 @@ test('the upstream status survives the 502 wrapper', async () => {
     console.error = quiet
   }
 })
+
+test('a throttled eBird call is retried once after a breath', async () => {
+  const { withFetch, jsonResponse } = require('./helpers')
+  const ebird = require('../lib/ebird')
+  let calls = 0
+  const data = await withFetch(() => { calls += 1; return calls === 1 ? new Response('slow down', { status: 429 }) : jsonResponse([{ speciesCode: 'cangoo' }]) }, () => ebird.recentObservations('US-GA-139'))
+  assert.equal(calls, 2)
+  assert.deepEqual(data, [{ speciesCode: 'cangoo' }])
+  calls = 0
+  await assert.rejects(withFetch(() => { calls += 1; return new Response('slow down', { status: 429 }) }, () => ebird.recentObservations('US-GA-139')), (error) => error.status === 502 && error.upstream === 429)
+  assert.equal(calls, 2)
+})

@@ -313,8 +313,11 @@ test('predictions are recorded once a day and graded a week later against the ch
   await db('birds').insert({ speciesCode: 'norcar', comName: 'Northern Cardinal', sciName: 'Cardinalis cardinalis' }).onConflict('speciesCode').ignore()
   const bird = await db('birds').where({ speciesCode: 'norcar' }).first()
   await db('saved_birds').insert({ speciesCode: 'norcar', user_id: userId, bird_id: bird.id }).onConflict(['user_id', 'bird_id']).ignore()
-  const interest = await speciesOfInterest('US-GA-139', new Set(['hoomer']))
+  // Only species reported here lately are worth a prediction.
+  await db('region_species_days').insert([{ region: 'US-GA-139', day: '2026-09-28', speciesCode: 'norcar' }, { region: 'US-GA-139', day: '2026-09-28', speciesCode: 'hoomer' }]).onConflict().ignore()
+  const interest = await speciesOfInterest('US-GA-139', new Set(['hoomer', 'nothere']), asOf)
   assert.ok(interest.includes('norcar') && interest.includes('hoomer'), interest.join(','))
+  assert.ok(!interest.includes('nothere'), 'a species with no recent report is skipped')
   assert.equal(new Set(interest).size, interest.length, 'no duplicates')
 
   const result = { class: 'resident', places: [
