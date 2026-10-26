@@ -3,7 +3,7 @@ const ebird = require('../../lib/ebird')
 const db = require('../../lib/db')
 const { arrivingSoon, seasonality } = require('../../lib/seasonality')
 const { syncChecklists, userRegions } = require('../../lib/checklists')
-const { whereToFind } = require('../../lib/hotspots')
+const { whereToFind, notableCodes } = require('../../lib/hotspots')
 const { dailyPass, accuracy } = require('../../lib/grading')
 const { assertCronCaller } = require('../../lib/digest')
 
@@ -72,7 +72,7 @@ const resources = {
       const grading = []
       for (const code of regions) {
         if (Date.now() > deadline) break
-        try { grading.push(await dailyPass(code, { where: whereToFind, deadline })) } catch (error) { console.error(`Grading for ${code} failed:`, error.message) }
+        try { grading.push(await dailyPass(code, { where: whereToFind, notable: await notableCodes(code), deadline })) } catch (error) { console.error(`Grading for ${code} failed:`, error.message) }
       }
       return { regions: results, grading }
     },
