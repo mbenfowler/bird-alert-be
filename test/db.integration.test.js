@@ -477,3 +477,19 @@ test('the strict health check fails once errors pile up', async () => {
   await health(fakeReq({ query: {} }), res)
   assert.equal(res.statusCode, 200, 'the plain check still answers ok')
 })
+
+test('a page view on a new county fetches only a few history days; the rest wait for the hourly pass', async () => {
+  const keep = { hist: ebird.historicObservations, recent: ebird.recentObservations }
+  let fetched = 0
+  ebird.historicObservations = async () => { fetched += 1; return [] }
+  ebird.recentObservations = async () => []
+  try {
+    await seasonality.arrivingSoon('US-NC-001', { day: '2026-10-26' })
+    assert.equal(fetched, 4)
+    await seasonality.arrivingSoon('US-NC-001', { day: '2026-10-26' })
+    assert.equal(fetched, 8, 'each view adds a few more, never the whole month at once')
+  } finally {
+    ebird.historicObservations = keep.hist
+    ebird.recentObservations = keep.recent
+  }
+})
