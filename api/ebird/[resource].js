@@ -5,6 +5,7 @@ const { arrivingSoon, seasonality } = require('../../lib/seasonality')
 const { syncChecklists, userRegions } = require('../../lib/checklists')
 const { whereToFind, notableCodes } = require('../../lib/hotspots')
 const { dailyPass, accuracy } = require('../../lib/grading')
+const { whereToGo } = require('../../lib/whereToGo')
 const { assertCronCaller } = require('../../lib/digest')
 
 const DAY = 86400
@@ -49,6 +50,17 @@ const resources = {
   //   score, days, lastSeen, effort: { checklists, withSpecies, detection }, notes }] } ranked by the chance a visit pays off
   where: {
     handler: ({ region, code }) => whereToFind(ebird.assertRegion(region), ebird.assertSpecies(code)),
+    cacheControl: cache(600, 3600)
+  },
+  // GET /api/ebird/where-to-go?region=&codes=a,b,c -> { species, places: [{ locId, locName, expected, birds, bestTime, seenToday }],
+  //   route: { stops, covers, url } } the watch list's places folded together, ranked by birds a visit can expect
+  'where-to-go': {
+    handler: ({ region, codes }) => {
+      const list = String(codes || '').split(',').map((c) => c.trim()).filter(Boolean).map(ebird.assertSpecies)
+      if (!list.length) throw new HttpError(400, 'codes is required')
+      if (list.length > 40) throw new HttpError(400, 'At most 40 codes')
+      return whereToGo(ebird.assertRegion(region), list)
+    },
     cacheControl: cache(600, 3600)
   },
   // GET /api/ebird/regions?state=GA -> { code, name }[]
