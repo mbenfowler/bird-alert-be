@@ -1,0 +1,37 @@
+name: Daily digests
+
+# The watch-list (15:00 UTC) and notable (16:00 UTC) digests. Each call sends for 45 seconds and
+# says whether there is more; the step repeats until done. digest_log keeps any user from getting two.
+# Needs the CRON_SECRET repository secret, equal to the backend's CRON_SECRET env var.
+on:
+  schedule:
+    - cron: '0 15 * * *'
+    - cron: '0 16 * * *'
+  workflow_dispatch:
+    inputs:
+      kind:
+        description: 'watchlist or rare'
+        required: true
+        default: 'watchlist'
+
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Send the digest
+        env:
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+          SCHEDULE: ${{ github.event.schedule }}
+          INPUT_KIND: ${{ github.event.inputs.kind }}
+        run: |
+          test -n "$CRON_SECRET" || { echo "CRON_SECRET secret is not set"; exit 1; }
+          kind="$INPUT_KIND"
+          if [ -z "$kind" ]; then [ "$SCHEDULE" = "0 15 * * *" ] && kind=watchlist || kind=rare; fi
+          for i in $(seq 1 30); do
+            out=$(curl --fail-with-body --silent --show-error --max-time 120 \
+              -H "Authorization: Bearer $CRON_SECRET" \
+              "https://bird-alert-be.vercel.app/api/mail/$kind")
+            echo "$out" | head -c 400; echo
+            echo "$out" | grep -q '"capped":true' && { echo "Daily mail cap reached; the rest wait for tomorrow."; exit 1; }
+            echo "$out" | grep -q '"more":true' || break
+          done

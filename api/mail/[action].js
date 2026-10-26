@@ -9,7 +9,8 @@ const cron = (kind) => ({
   methods: ['GET'],
   handler: async (req, res) => {
     assertCronCaller(req)
-    res.status(200).json(await runDigest({ kind, ...DIGESTS[kind] }))
+    // Each call gets 45 seconds; the caller repeats while `more` is true.
+    res.status(200).json(await runDigest({ kind, ...DIGESTS[kind], deadline: Date.now() + 45_000 }))
   }
 })
 

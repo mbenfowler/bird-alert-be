@@ -1,19 +1,21 @@
 {
-  "crons": [
+  "rewrites": [
     {
-      "path": "/api/mail/watchlist",
-      "schedule": "0 15 * * *"
+      "source": "/api/alertDigestMailer",
+      "destination": "/api/mail/watchlist"
     },
     {
-      "path": "/api/mail/rare",
-      "schedule": "0 16 * * *"
+      "source": "/api/rareSightingsMailer",
+      "destination": "/api/mail/rare"
+    },
+    {
+      "source": "/api/migrationMailer",
+      "destination": "/api/mail/migration"
+    },
+    {
+      "source": "/api/mailPreview",
+      "destination": "/api/mail/preview"
     }
-  ],
-  "rewrites": [
-    { "source": "/api/alertDigestMailer", "destination": "/api/mail/watchlist" },
-    { "source": "/api/rareSightingsMailer", "destination": "/api/mail/rare" },
-    { "source": "/api/migrationMailer", "destination": "/api/mail/migration" },
-    { "source": "/api/mailPreview", "destination": "/api/mail/preview" }
   ],
   "functions": {
     "api/**/*.js": {

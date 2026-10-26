@@ -11,7 +11,7 @@ const seasonality = require('../lib/seasonality')
 let userId
 before(async () => {
   await db.migrate.latest()
-  for (const table of ['drive_cache', 'nearby_cache', 'place_predictions', 'checklist_species', 'checklists', 'bird_sounds', 'digest_log', 'push_handoff', 'push_log', 'push_subscriptions', 'saved_birds', 'auth_throttle', 'season_firsts', 'region_species_days', 'region_days', 'job_runs', 'users', 'birds']) await db(table).del()
+  for (const table of ['mail_counts', 'error_log', 'drive_cache', 'nearby_cache', 'place_predictions', 'checklist_species', 'checklists', 'bird_sounds', 'digest_log', 'push_handoff', 'push_log', 'push_subscriptions', 'saved_birds', 'auth_throttle', 'season_firsts', 'region_species_days', 'region_days', 'job_runs', 'users', 'birds']) await db(table).del()
   // Nothing in here may reach eBird; the hourly job's history fetch is a no-op unless a test says otherwise.
   ebird.historicObservations = async () => []
   ;[{ id: userId }] = await db('users').insert({
@@ -400,4 +400,80 @@ test('a drive is fetched once per point list and served from the cache after', a
   assert.equal(calls, 1)
   assert.equal(await withFetch(() => jsonResponse({ code: 'NoRoute' }), () => drive([{ lat: 0, lng: 0 }, { lat: 1, lng: 1 }])), null, 'no route answers null')
   assert.equal(await drive([{ lat: 0, lng: 0 }]), null, 'one point is not a drive')
+})
+
+test('mail stops at the daily cap, bulk first, and counts what it held', async () => {
+  const { reserveSend } = require('../lib/mailer')
+  const saved = { cap: process.env.MAIL_DAILY_CAP, smtp: process.env.SMTP_URL }
+  process.env.MAIL_DAILY_CAP = '4'
+  delete process.env.SMTP_URL
+  try {
+    // A day of its own: other test files send mail against the same database at the same time.
+    const day = '1999-01-01'
+    for (let i = 0; i < 3; i += 1) await reserveSend(true, { day })
+    await assert.rejects(reserveSend(true, { day }), (e) => e.code === 'MAIL_CAP', 'digests stop at 85% of the cap')
+    await reserveSend(false, { day })
+    await assert.rejects(reserveSend(false, { day }), (e) => e.code === 'MAIL_CAP', 'account mail stops at the cap')
+    const row = await db('mail_counts').where({ day }).first()
+    assert.deepEqual([row.sent, row.held], [4, 2])
+  } finally {
+    if (saved.cap === undefined) delete process.env.MAIL_DAILY_CAP; else process.env.MAIL_DAILY_CAP = saved.cap
+    if (saved.smtp !== undefined) process.env.SMTP_URL = saved.smtp
+  }
+})
+
+test('a digest out of time says there is more, and the next call sends', async () => {
+  await db('users').where({ id: userId }).update({ alert_digest_email_enabled: true, email_confirmed: true, location: 'US-GA-139' })
+  const sent = []
+  const options = {
+    kind: 'budgettest',
+    preference: 'alert_digest_email_enabled',
+    fetchSightings: async () => [{ speciesCode: 'cangoo', comName: 'Canada Goose', obsDt: '2026-10-26 08:00' }],
+    select: async (_user, sightings) => sightings,
+    send: async (user) => { sent.push(user.id) }
+  }
+  const first = await runDigest({ ...options, deadline: Date.now() - 1 })
+  assert.equal(first.more, true)
+  assert.equal(sent.length, 0)
+  const second = await runDigest(options)
+  assert.equal(second.more, false)
+  assert.deepEqual(sent, [userId])
+})
+
+test('the hourly push out of time says where to resume', async () => {
+  const { runPushAlerts } = require('../lib/pushAlerts')
+  await db('users').where({ id: userId }).update({ push_watchlist_enabled: true, location: 'US-GA-139', push_quiet_start: null, push_quiet_end: null })
+  if (!await db('push_subscriptions').where({ user_id: userId }).first()) {
+    await db('push_subscriptions').insert({ user_id: userId, endpoint: 'https://push.example/budget', p256dh: 'k', auth: 'a' })
+  }
+  const keep = { recent: ebird.recentObservations, notable: ebird.notableObservations }
+  ebird.recentObservations = async () => []
+  ebird.notableObservations = async () => []
+  try {
+    const partial = await runPushAlerts({ send: async () => ({ sent: 0, gone: 0 }), deadline: Date.now() - 1 })
+    assert.equal(partial.more, true)
+    assert.equal(partial.next, userId - 1)
+    const done = await runPushAlerts({ send: async () => ({ sent: 0, gone: 0 }), after: partial.next })
+    assert.equal(done.more, false)
+  } finally {
+    ebird.recentObservations = keep.recent
+    ebird.notableObservations = keep.notable
+  }
+})
+
+test('the strict health check fails once errors pile up', async () => {
+  const health = require('../api/index')
+  const { fakeReq, fakeRes } = require('./helpers')
+  const { reportError } = require('../lib/errors')
+  let res = fakeRes()
+  await health(fakeReq({ query: { strict: '1' } }), res)
+  assert.equal(res.statusCode, 200)
+  for (let i = 0; i < 5; i += 1) await reportError('GET /api/test', new Error('boom'))
+  res = fakeRes()
+  await health(fakeReq({ query: { strict: '1' } }), res)
+  assert.equal(res.statusCode, 503)
+  assert.equal(res.body.errors.by.find((e) => e.where === 'GET /api/test').count, 5)
+  res = fakeRes()
+  await health(fakeReq({ query: {} }), res)
+  assert.equal(res.statusCode, 200, 'the plain check still answers ok')
 })
