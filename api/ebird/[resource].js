@@ -56,7 +56,7 @@ const resources = {
     cacheControl: cache(600, 3600)
   },
   // GET /api/ebird/where-to-go?region=&codes=a,b,c -> { species, places: [{ locId, locName, expected, birds, bestTime, seenToday }],
-  //   route: { stops, covers, url, drive, origin } } the watch list's places folded together, ranked by birds a visit can expect (any number of codes; beyond 1000 the rest are ignored)
+  //   route: { stops, covers, url, drive, origin }, grades: { High: { n, hits, rate, enough }, ... } } the watch list's places folded together, ranked by birds a visit can expect (any number of codes; beyond 1000 the rest are ignored)
   'where-to-go': {
     handler: ({ region, codes, from }) => {
       const list = String(codes || '').split(',').map((c) => c.trim()).filter(Boolean).map(ebird.assertSpecies)
