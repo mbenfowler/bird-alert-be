@@ -54,6 +54,7 @@ test('places merge every source, keep coordinates and notes, and rank by band th
   assert.deepEqual(park.lastSeen, { day: '2026-10-25', time: '08:10', subId: 'S1', daysAgo: 0 })
   assert.deepEqual(park.effort, { checklists: 6, withSpecies: 4, detection: 67 })
   assert.equal(park.notes[0].text, 'north ramp')
+  assert.equal(park.bestTime, null, 'two timed reports are not enough for a place window')
   assert.equal(dam.effort.detection, null)
   assert.equal(park.isHotspot, true)
   assert.equal(dam.isHotspot, false)
@@ -84,4 +85,11 @@ test('a personal location near a hotspot folds into it; a distant one and other 
   assert.deepEqual(park.merged, [{ locId: 'LYARD', locName: 'Don Carter State Park' }])
   assert.deepEqual(places.find((p) => p.locId === 'LDAM').merged, [])
   assert.equal(effort.get('LPARK').checklists, 2, 'the caller\'s effort map is not mutated')
+})
+
+test('a place gets its own best window once it has five timed reports', () => {
+  const reports = ['06:30', '07:10', '07:40', '06:55', '07:20', '15:00'].map((time, i) => ({ locId: 'L1', locName: 'Park', day: `2026-10-${10 + i}`, time, subId: `S${i}` }))
+  const [park] = rankPlaces({ reports, asOf: '2026-10-25', halfLife: 21 })
+  assert.equal(park.bestTime.label, '6 am to 8 am')
+  assert.equal(park.bestTime.samples, 6)
 })
