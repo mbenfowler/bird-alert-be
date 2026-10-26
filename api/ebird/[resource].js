@@ -5,8 +5,10 @@ const { arrivingSoon, seasonality } = require('../../lib/seasonality')
 const { syncChecklists, userRegions } = require('../../lib/checklists')
 const { whereToFind, notableCodes } = require('../../lib/hotspots')
 const { dailyPass, accuracy } = require('../../lib/grading')
-const { whereToGo } = require('../../lib/whereToGo')
+const { whereToGo, parseOrigin } = require('../../lib/whereToGo')
 const { nearbyPublic } = require('../../lib/nearby')
+const { placeSearch, parsePoints } = require('../../lib/placeSearch')
+const { drive } = require('../../lib/routing')
 const { assertCronCaller } = require('../../lib/digest')
 
 const DAY = 86400
@@ -54,13 +56,14 @@ const resources = {
     cacheControl: cache(600, 3600)
   },
   // GET /api/ebird/where-to-go?region=&codes=a,b,c -> { species, places: [{ locId, locName, expected, birds, bestTime, seenToday }],
-  //   route: { stops, covers, url } } the watch list's places folded together, ranked by birds a visit can expect (any number of codes; beyond 1000 the rest are ignored)
+  //   route: { stops, covers, url, drive, origin } } the watch list's places folded together, ranked by birds a visit can expect (any number of codes; beyond 1000 the rest are ignored)
   'where-to-go': {
-    handler: ({ region, codes }) => {
+    handler: ({ region, codes, from }) => {
       const list = String(codes || '').split(',').map((c) => c.trim()).filter(Boolean).map(ebird.assertSpecies)
       if (!list.length) throw new HttpError(400, 'codes is required')
       // Long lists are fine (the bulk path costs the same); beyond a thousand, the rest are simply not considered.
-      return whereToGo(ebird.assertRegion(region), list.slice(0, 1000))
+      // `from=lat,lng` (optional): the route counts the drive from there, and its directions start there.
+      return whereToGo(ebird.assertRegion(region), list.slice(0, 1000), { origin: parseOrigin(from) })
     },
     cacheControl: cache(600, 3600)
   },
@@ -68,6 +71,17 @@ const resources = {
   //   parks: [{ name, lat, lng, miles, type }] } public land near a point (eBird hotspots within 10 km, OSM parks within ~5 km)
   nearby: {
     handler: ({ lat, lng }) => nearbyPublic(Number.parseFloat(lat), Number.parseFloat(lng)),
+    cacheControl: cache(DAY, WEEK)
+  },
+  // GET /api/ebird/place-search?state=GA&q=yahoola[&addresses=1] -> { hotspots: [{ locId, name, county, lat, lng, species, checklists, latest }],
+  //   addresses: [{ name, lat, lng }] } stops and starting points by name; addresses only when asked (on submit, not as you type)
+  'place-search': {
+    handler: ({ state, q, addresses }) => placeSearch({ state: ebird.assertState(state).toUpperCase(), q, addresses: addresses === '1' }),
+    cacheControl: cache(DAY, WEEK)
+  },
+  // GET /api/ebird/drive?points=lat,lng;lat,lng -> { minutes, miles, legs, geometry } or null, the drive through a route of the person's own making
+  drive: {
+    handler: async ({ points }) => (await drive(parsePoints(points))) ?? null,
     cacheControl: cache(DAY, WEEK)
   },
   // GET /api/ebird/regions?state=GA -> { code, name }[]

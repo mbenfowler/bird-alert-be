@@ -11,7 +11,7 @@ const seasonality = require('../lib/seasonality')
 let userId
 before(async () => {
   await db.migrate.latest()
-  for (const table of ['mail_counts', 'error_log', 'drive_cache', 'nearby_cache', 'place_predictions', 'checklist_species', 'checklists', 'bird_sounds', 'digest_log', 'push_handoff', 'push_log', 'push_subscriptions', 'saved_birds', 'auth_throttle', 'season_firsts', 'region_species_days', 'region_days', 'job_runs', 'users', 'birds']) await db(table).del()
+  for (const table of ['hotspot_ref', 'mail_counts', 'error_log', 'drive_cache', 'nearby_cache', 'place_predictions', 'checklist_species', 'checklists', 'bird_sounds', 'digest_log', 'push_handoff', 'push_log', 'push_subscriptions', 'saved_birds', 'auth_throttle', 'season_firsts', 'region_species_days', 'region_days', 'job_runs', 'users', 'birds']) await db(table).del()
   // Nothing in here may reach eBird; the hourly job's history fetch is a no-op unless a test says otherwise.
   ebird.historicObservations = async () => []
   ;[{ id: userId }] = await db('users').insert({
@@ -492,4 +492,31 @@ test('a page view on a new county fetches only a few history days; the rest wait
     ebird.historicObservations = keep.hist
     ebird.recentObservations = keep.recent
   }
+})
+
+test('hotspots are searched by every word typed, loaded once a week from eBird', async () => {
+  const { searchHotspots } = require('../lib/placeSearch')
+  let calls = 0
+  const original = ebird.stateHotspots
+  ebird.stateHotspots = async () => {
+    calls += 1
+    return [
+      { locId: 'L1', locName: 'Yahoola Creek Park', subnational2Code: 'US-GA-187', lat: 34.53, lng: -83.96, numSpeciesAllTime: 74, numChecklistsAllTime: 32, latestObsDt: '2026-08-15 12:16' },
+      { locId: 'L2', locName: 'Wimpy Mill Picnic Area at Yahoola Creek', subnational2Code: 'US-GA-187', lat: 34.55, lng: -83.98, numSpeciesAllTime: 57, numChecklistsAllTime: 16 },
+      { locId: 'L3', locName: 'Chicopee Lake', subnational2Code: 'US-GA-139', lat: 34.25, lng: -83.85, numChecklistsAllTime: 300 },
+      { locId: 'L4', locName: '100% Park_land', subnational2Code: 'US-GA-139', lat: 34.2, lng: -83.8, numChecklistsAllTime: 1 }
+    ]
+  }
+  try {
+    const found = await searchHotspots('GA', 'yahoola')
+    assert.deepEqual(found.map((h) => h.locId), ['L1', 'L2'])
+    assert.equal(found[0].county, 'US-GA-187')
+    assert.equal(found[0].latest, '2026-08-15')
+    assert.deepEqual((await searchHotspots('GA', 'creek yahoola picnic')).map((h) => h.locId), ['L2'])
+    // LIKE wildcards never reach the query.
+    assert.deepEqual(await searchHotspots('GA', '%_'), [])
+    assert.deepEqual((await searchHotspots('GA', '100% park')).map((h) => h.locId), ['L4'])
+    assert.equal(calls, 1)
+    assert.deepEqual(await searchHotspots('GA', '  '), [])
+  } finally { ebird.stateHotspots = original }
 })

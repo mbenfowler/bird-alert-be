@@ -47,3 +47,20 @@ test('the route weighs driving: two neighbours beat a far stop that adds a littl
   assert.equal(ids.length, 3)
   assert.equal(Math.abs(ids.indexOf('CH') - ids.indexOf('EL')), 1, `order ${ids.join(' → ')}`)
 })
+
+test('a starting point pulls the route toward it and starts the directions there', () => {
+  const { parseOrigin } = require('../lib/whereToGo')
+  const bird = (code, chance) => ({ speciesCode: code, comName: code, chance })
+  const near = { locId: 'N', locName: 'Near', lat: 34.30, lng: -83.80, isHotspot: true, expected: 1, birds: [bird('a', 100)] }
+  const far = { locId: 'F', locName: 'Far', lat: 34.80, lng: -83.80, isHotspot: true, expected: 1, birds: [bird('a', 100)] }
+  assert.equal(pickRoute([far, near], { maxStops: 1, origin: { lat: 34.80, lng: -83.80 } }).stops[0].locId, 'F')
+  assert.equal(pickRoute([far, near], { maxStops: 1, origin: { lat: 34.30, lng: -83.80 } }).stops[0].locId, 'N')
+  // Two stops from the far end: the far one comes first.
+  const other = { ...near, locId: 'N2', birds: [bird('b', 100)] }
+  const route = pickRoute([far, { ...other, lat: 34.31 }, { ...near, locId: 'N3', birds: [bird('c', 100)], lat: 34.75 }], { maxStops: 2, origin: { lat: 34.82, lng: -83.80 } })
+  assert.deepEqual(route.stops.map((s) => s.locId), ['F', 'N3'])
+  assert.match(pickRoute([near], { origin: { lat: 34.2, lng: -83.7 } }).url, /origin=34\.2%2C-83\.7/)
+  assert.deepEqual(parseOrigin('34.2345,-83.8765'), { lat: 34.23, lng: -83.88 })
+  assert.equal(parseOrigin('nope'), null)
+  assert.equal(parseOrigin(''), null)
+})
