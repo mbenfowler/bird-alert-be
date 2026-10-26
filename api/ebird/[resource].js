@@ -53,13 +53,13 @@ const resources = {
     cacheControl: cache(600, 3600)
   },
   // GET /api/ebird/where-to-go?region=&codes=a,b,c -> { species, places: [{ locId, locName, expected, birds, bestTime, seenToday }],
-  //   route: { stops, covers, url } } the watch list's places folded together, ranked by birds a visit can expect (up to 200 codes)
+  //   route: { stops, covers, url } } the watch list's places folded together, ranked by birds a visit can expect (any number of codes; beyond 1000 the rest are ignored)
   'where-to-go': {
     handler: ({ region, codes }) => {
       const list = String(codes || '').split(',').map((c) => c.trim()).filter(Boolean).map(ebird.assertSpecies)
       if (!list.length) throw new HttpError(400, 'codes is required')
-      if (list.length > 200) throw new HttpError(400, 'At most 200 codes')
-      return whereToGo(ebird.assertRegion(region), list)
+      // Long lists are fine (the bulk path costs the same); beyond a thousand, the rest are simply not considered.
+      return whereToGo(ebird.assertRegion(region), list.slice(0, 1000))
     },
     cacheControl: cache(600, 3600)
   },
