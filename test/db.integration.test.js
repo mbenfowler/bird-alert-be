@@ -11,7 +11,7 @@ const seasonality = require('../lib/seasonality')
 let userId
 before(async () => {
   await db.migrate.latest()
-  for (const table of ['place_predictions', 'checklist_species', 'checklists', 'bird_sounds', 'digest_log', 'push_handoff', 'push_log', 'push_subscriptions', 'saved_birds', 'auth_throttle', 'season_firsts', 'region_species_days', 'region_days', 'job_runs', 'users', 'birds']) await db(table).del()
+  for (const table of ['nearby_cache', 'place_predictions', 'checklist_species', 'checklists', 'bird_sounds', 'digest_log', 'push_handoff', 'push_log', 'push_subscriptions', 'saved_birds', 'auth_throttle', 'season_firsts', 'region_species_days', 'region_days', 'job_runs', 'users', 'birds']) await db(table).del()
   // Nothing in here may reach eBird; the hourly job's history fetch is a no-op unless a test says otherwise.
   ebird.historicObservations = async () => []
   ;[{ id: userId }] = await db('users').insert({
@@ -354,4 +354,31 @@ test('predictions are recorded once a day and graded a week later against the ch
   const second = await dailyPass('US-GA-139', { where, asOf: '2026-10-08' })
   assert.deepEqual(second, { region: 'US-GA-139', skipped: true })
   assert.equal(whereCalls, first.species)
+})
+
+test('public land near a point comes from eBird and OpenStreetMap once, then from the cache', async () => {
+  const { nearbyPublic } = require('../lib/nearby')
+  const { withFetch, jsonResponse } = require('./helpers')
+  process.env.EBIRD_API_KEY = process.env.EBIRD_API_KEY || 'test'
+  const calls = []
+  const handler = (url) => {
+    calls.push(url)
+    if (url.includes('ebird.org')) return jsonResponse([
+      { locId: 'L1', locName: 'Lake Lanier--Sardis Creek Park', lat: 34.40, lng: -83.90, numChecklistsAllTime: 80, numSpeciesAllTime: 103, latestObsDt: '2026-07-25 09:00' },
+      { locId: 'L2', locName: 'Little River Park', lat: 34.38, lng: -83.83, numChecklistsAllTime: 1, numSpeciesAllTime: 23, latestObsDt: '2026-04-13 09:14' }
+    ])
+    return jsonResponse([
+      { name: 'Sardis Creek Park', lat: '34.40', lon: '-83.90', category: 'leisure', type: 'park', display_name: 'Sardis Creek Park, Hall County' },
+      { name: 'Wahoo Park', lat: '34.37', lon: '-83.86', category: 'leisure', type: 'park', display_name: 'Wahoo Park, Hall County' },
+      { name: 'Some Street', lat: '34.37', lon: '-83.86', category: 'highway', type: 'residential', display_name: 'Some Street' }
+    ])
+  }
+  const first = await withFetch(handler, () => nearbyPublic(34.37594, -83.869886))
+  assert.equal(calls.length, 2)
+  assert.deepEqual(first.hotspots.map((h) => [h.name, h.lightlyBirded, h.latest]), [['Little River Park', true, '2026-04-13'], ['Lake Lanier--Sardis Creek Park', false, '2026-07-25']])
+  assert.ok(first.hotspots[0].miles < first.hotspots[1].miles)
+  assert.deepEqual(first.parks.map((p) => p.name), ['Wahoo Park'], 'a park that is also a hotspot appears once, and non-parks are dropped')
+  const second = await withFetch(() => { throw new Error('should not fetch') }, () => nearbyPublic(34.3759, -83.8699))
+  assert.deepEqual(second.parks.map((p) => p.name), ['Wahoo Park'])
+  await assert.rejects(nearbyPublic(Number.NaN, 1), (e) => e.status === 400)
 })
