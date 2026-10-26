@@ -11,7 +11,7 @@ const seasonality = require('../lib/seasonality')
 let userId
 before(async () => {
   await db.migrate.latest()
-  for (const table of ['checklist_species', 'checklists', 'bird_sounds', 'digest_log', 'push_handoff', 'push_log', 'push_subscriptions', 'saved_birds', 'auth_throttle', 'season_firsts', 'region_species_days', 'region_days', 'job_runs', 'users', 'birds']) await db(table).del()
+  for (const table of ['place_predictions', 'checklist_species', 'checklists', 'bird_sounds', 'digest_log', 'push_handoff', 'push_log', 'push_subscriptions', 'saved_birds', 'auth_throttle', 'season_firsts', 'region_species_days', 'region_days', 'job_runs', 'users', 'birds']) await db(table).del()
   // Nothing in here may reach eBird; the hourly job's history fetch is a no-op unless a test says otherwise.
   ebird.historicObservations = async () => []
   ;[{ id: userId }] = await db('users').insert({
@@ -304,4 +304,51 @@ test('where to find a species: tables and the live feed become ranked places wit
   assert.equal(dam.lastSeen.subId, 'SLIVE')
   assert.equal(dam.effort.detection, null)
   ebird.speciesObservations = async () => []
+})
+
+test('predictions are recorded once a day and graded a week later against the checklists that followed', async () => {
+  const { recordPredictions, gradeDue, accuracy, dailyPass, speciesOfInterest } = require('../lib/grading')
+  const asOf = '2026-10-01'
+  await db('users').where({ id: userId }).update({ location: 'US-GA-139' })
+  await db('birds').insert({ speciesCode: 'norcar', comName: 'Northern Cardinal', sciName: 'Cardinalis cardinalis' }).onConflict('speciesCode').ignore()
+  const bird = await db('birds').where({ speciesCode: 'norcar' }).first()
+  await db('saved_birds').insert({ speciesCode: 'norcar', user_id: userId, bird_id: bird.id }).onConflict(['user_id', 'bird_id']).ignore()
+  const interest = await speciesOfInterest('US-GA-139', new Set(['hoomer']))
+  assert.ok(interest.includes('norcar') && interest.includes('hoomer'), interest.join(','))
+  assert.equal(new Set(interest).size, interest.length, 'no duplicates')
+
+  const result = { class: 'resident', places: [
+    { locId: 'LA', band: 'High', score: 2.1, effort: { checklists: 5, detection: 80 } },
+    { locId: 'LB', band: 'Fair', score: 0.5, effort: { checklists: 1, detection: null } },
+    { locId: 'LC', band: 'Good', score: 1.3, effort: { checklists: 4, detection: 50 } }
+  ] }
+  assert.equal(await recordPredictions('US-GA-139', 'norcar', asOf, result), 3)
+  assert.equal(await recordPredictions('US-GA-139', 'norcar', asOf, result), 3)
+  assert.equal(Number((await db('place_predictions').where({ region: 'US-GA-139', species_code: 'norcar' }).count('* as n').first()).n), 3)
+
+  // The week after: LA birded twice with the cardinal once; LB birded once without it; LC never birded.
+  await db('checklists').insert([
+    { sub_id: 'SGA1', region: 'US-GA-139', loc_id: 'LA', loc_name: 'A', obs_day: '2026-10-03', num_species: 3 },
+    { sub_id: 'SGA2', region: 'US-GA-139', loc_id: 'LA', loc_name: 'A', obs_day: '2026-10-06', num_species: 3 },
+    { sub_id: 'SGB1', region: 'US-GA-139', loc_id: 'LB', loc_name: 'B', obs_day: '2026-10-05', num_species: 2 },
+    { sub_id: 'SGA0', region: 'US-GA-139', loc_id: 'LA', loc_name: 'A', obs_day: '2026-10-01', num_species: 1 }
+  ]).onConflict('sub_id').ignore()
+  await db('checklist_species').insert([{ sub_id: 'SGA2', species_code: 'norcar', how_many: 1 }, { sub_id: 'SGA0', species_code: 'norcar', how_many: 1 }]).onConflict(['sub_id', 'species_code']).ignore()
+  assert.equal(await gradeDue('2026-10-07'), 0, 'not due until a week has passed')
+  assert.equal(await gradeDue('2026-10-08'), 3)
+  const graded = Object.fromEntries((await db('place_predictions').where({ region: 'US-GA-139' }).select('loc_id', 'visits', 'outcome')).map((r) => [r.loc_id, [r.visits, r.outcome]]))
+  assert.deepEqual(graded, { LA: [2, true], LB: [1, false], LC: [0, null] })
+  const acc = await accuracy('US-GA-139', { asOf: '2026-10-08' })
+  assert.deepEqual(acc, { High: { n: 1, hits: 1, rate: 100, enough: false }, Fair: { n: 1, hits: 0, rate: 0, enough: false } })
+
+  // The daily pass runs once per day per region and grades what is due.
+  let whereCalls = 0
+  const where = async () => { whereCalls += 1; return { class: 'resident', places: [{ locId: 'LA', band: 'High', score: 1, effort: { checklists: 2, detection: 50 } }] } }
+  const first = await dailyPass('US-GA-139', { where, asOf: '2026-10-08', notable: new Set() })
+  assert.equal(first.region, 'US-GA-139')
+  assert.ok(first.species >= 1 && first.predicted === first.species && first.recorded === first.species, JSON.stringify(first))
+  assert.equal(first.graded, 0)
+  const second = await dailyPass('US-GA-139', { where, asOf: '2026-10-08' })
+  assert.deepEqual(second, { region: 'US-GA-139', skipped: true })
+  assert.equal(whereCalls, first.species)
 })

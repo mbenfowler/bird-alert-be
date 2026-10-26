@@ -4,6 +4,7 @@ const db = require('../../lib/db')
 const { arrivingSoon, seasonality } = require('../../lib/seasonality')
 const { syncChecklists, userRegions } = require('../../lib/checklists')
 const { whereToFind } = require('../../lib/hotspots')
+const { dailyPass, accuracy } = require('../../lib/grading')
 const { assertCronCaller } = require('../../lib/digest')
 
 const DAY = 86400
@@ -67,9 +68,20 @@ const resources = {
         if (Date.now() > deadline) break
         results.push(await syncChecklists(code, { detailLimit: 40, deadline }))
       }
-      return { regions: results }
+      // Once a day per region: record what the ranking says and grade last week's predictions.
+      const grading = []
+      for (const code of regions) {
+        if (Date.now() > deadline) break
+        try { grading.push(await dailyPass(code, { where: whereToFind, deadline })) } catch (error) { console.error(`Grading for ${code} failed:`, error.message) }
+      }
+      return { regions: results, grading }
     },
     cacheControl: 'no-store'
+  },
+  // GET /api/ebird/grades?region= -> { High: { n, hits, rate, enough }, ... } how the bands fared over the last two months
+  grades: {
+    handler: ({ region }) => accuracy(ebird.assertRegion(region)),
+    cacheControl: cache(3600, DAY)
   }
 }
 
