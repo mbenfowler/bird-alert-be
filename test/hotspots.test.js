@@ -68,7 +68,8 @@ test('a personal location near a hotspot folds into it; a distant one and other 
     { locId: 'LPARK', locName: 'Don Carter SP', day: '2026-10-20', time: '09:00', lat: 34.3000, lng: -83.7000, isHotspot: true, subId: 'S1' },
     { locId: 'LYARD', locName: 'Don Carter State Park', day: '2026-10-25', time: '07:50', lat: 34.3030, lng: -83.7010, isHotspot: false, subId: 'S2', comment: 'at the boat ramp', observer: 'B' },
     { locId: 'LHOME', locName: 'Home', day: '2026-10-24', time: '08:00', lat: 34.4000, lng: -83.9000, isHotspot: false, subId: 'S3' },
-    { locId: 'LDAM', locName: 'Buford Dam', day: '2026-10-24', time: '08:00', lat: 34.3040, lng: -83.7020, isHotspot: true, subId: 'S4' }
+    // Another hotspot 1.5 km off: a yard folds into the nearest hotspot, and never into a hotspot that far.
+    { locId: 'LDAM', locName: 'Buford Dam', day: '2026-10-24', time: '08:00', lat: 34.3130, lng: -83.7100, isHotspot: true, subId: 'S4' }
   ]
   const effort = new Map([['LPARK', { checklists: 2, withSpecies: 1 }], ['LYARD', { checklists: 3, withSpecies: 3 }], ['LDAM', { checklists: 4, withSpecies: 1 }]])
   const places = rankPlaces({ reports, effort, asOf, halfLife: 21 })
