@@ -269,3 +269,39 @@ test('checklists are listed once, fetched in full newest first, and not fetched 
   assert.equal(third.detailed, 0)
   assert.equal(fetched.length, 2)
 })
+
+test('where to find a species: tables and the live feed become ranked places with evidence', async () => {
+  const { whereToFind } = require('../lib/hotspots')
+  const asOf = '2026-10-25'
+  await db('birds').insert({ speciesCode: 'hoomer', comName: 'Hooded Merganser', sciName: 'Lophodytes cucullatus', order: 'Anseriformes' }).onConflict('speciesCode').ignore()
+  // A winter visitor: five months of last year's days in the county.
+  const days = []
+  for (const m of ['2025-11', '2025-12', '2026-01', '2026-02', '2026-03']) for (const d of ['03', '10', '17', '24']) days.push({ region: 'US-GA-139', day: `${m}-${d}`, speciesCode: 'hoomer' })
+  await db('region_species_days').insert(days).onConflict().ignore()
+  // Checklists this fortnight: the cove birded six times, the merganser on four; the dam birded twice, once with it.
+  const lists = []
+  for (let i = 0; i < 6; i += 1) lists.push({ sub_id: `SC${i}`, region: 'US-GA-139', loc_id: 'LCOVE', loc_name: 'Quiet Cove', lat: 34.31, lng: -83.82, obs_day: `2026-10-${20 + (i % 5)}`, obs_time: '07:30', num_species: 10 })
+  for (let i = 0; i < 2; i += 1) lists.push({ sub_id: `SD${i}`, region: 'US-GA-139', loc_id: 'LDAM', loc_name: 'The Dam', lat: 34.2, lng: -83.9, obs_day: `2026-10-2${i}`, obs_time: '16:00', num_species: 8 })
+  await db('checklists').insert(lists).onConflict('sub_id').ignore()
+  await db('checklist_species').insert([
+    ...[0, 1, 2, 3].map((i) => ({ sub_id: `SC${i}`, species_code: 'hoomer', how_many: 3, comments: i === 3 ? 'Back of the cove by the beaver lodge' : null })),
+    { sub_id: 'SD0', species_code: 'hoomer', how_many: 1 }
+  ]).onConflict(['sub_id', 'species_code']).ignore()
+  ebird.notableObservations = async () => []
+  ebird.speciesObservations = async () => [{ speciesCode: 'hoomer', locId: 'LDAM', locName: 'The Dam', obsDt: '2026-10-25 16:40', lat: 34.2, lng: -83.9, subId: 'SLIVE' }]
+
+  const result = await whereToFind('US-GA-139', 'hoomer', { asOf })
+  assert.equal(result.class, 'seasonal')
+  assert.equal(result.halfLifeDays, 10)
+  assert.equal(result.bestTime.source, 'reports')
+  assert.equal(result.bestTime.label, '6 am to 8 am')
+  assert.deepEqual(result.places.map((p) => p.locId), ['LCOVE', 'LDAM'])
+  const [cove, dam] = result.places
+  assert.equal(cove.band, 'High')
+  assert.deepEqual(cove.effort, { checklists: 6, withSpecies: 4, detection: 67 })
+  assert.equal(cove.notes[0].text, 'Back of the cove by the beaver lodge')
+  assert.equal(dam.lastSeen.day, '2026-10-25')
+  assert.equal(dam.lastSeen.subId, 'SLIVE')
+  assert.equal(dam.effort.detection, null)
+  ebird.speciesObservations = async () => []
+})

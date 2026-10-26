@@ -3,6 +3,7 @@ const ebird = require('../../lib/ebird')
 const db = require('../../lib/db')
 const { arrivingSoon, seasonality } = require('../../lib/seasonality')
 const { syncChecklists, userRegions } = require('../../lib/checklists')
+const { whereToFind } = require('../../lib/hotspots')
 const { assertCronCaller } = require('../../lib/digest')
 
 const DAY = 86400
@@ -42,6 +43,12 @@ const resources = {
   seasonality: {
     handler: ({ region, code }) => seasonality(ebird.assertRegion(region), ebird.assertSpecies(code)),
     cacheControl: cache(DAY, WEEK)
+  },
+  // GET /api/ebird/where?region=&code= -> { class, halfLifeDays, bestTime, places: [{ locId, locName, lat, lng, band,
+  //   score, days, lastSeen, effort: { checklists, withSpecies, detection }, notes }] } ranked by the chance a visit pays off
+  where: {
+    handler: ({ region, code }) => whereToFind(ebird.assertRegion(region), ebird.assertSpecies(code)),
+    cacheControl: cache(600, 3600)
   },
   // GET /api/ebird/regions?state=GA -> { code, name }[]
   regions: {
