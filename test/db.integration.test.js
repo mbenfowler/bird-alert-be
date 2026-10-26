@@ -11,7 +11,7 @@ const seasonality = require('../lib/seasonality')
 let userId
 before(async () => {
   await db.migrate.latest()
-  for (const table of ['hotspot_ref', 'mail_counts', 'error_log', 'drive_cache', 'nearby_cache', 'place_predictions', 'checklist_species', 'checklists', 'bird_sounds', 'digest_log', 'push_handoff', 'push_log', 'push_subscriptions', 'saved_birds', 'auth_throttle', 'season_firsts', 'region_species_days', 'region_days', 'job_runs', 'users', 'birds']) await db(table).del()
+  for (const table of ['user_routes', 'hotspot_ref', 'mail_counts', 'error_log', 'drive_cache', 'nearby_cache', 'place_predictions', 'checklist_species', 'checklists', 'bird_sounds', 'digest_log', 'push_handoff', 'push_log', 'push_subscriptions', 'saved_birds', 'auth_throttle', 'season_firsts', 'region_species_days', 'region_days', 'job_runs', 'users', 'birds']) await db(table).del()
   // Nothing in here may reach eBird; the hourly job's history fetch is a no-op unless a test says otherwise.
   ebird.historicObservations = async () => []
   ;[{ id: userId }] = await db('users').insert({
@@ -519,4 +519,26 @@ test('hotspots are searched by every word typed, loaded once a week from eBird',
     assert.equal(calls, 1)
     assert.deepEqual(await searchHotspots('GA', '  '), [])
   } finally { ebird.stateHotspots = original }
+})
+
+test('a saved route is kept per county and the start once, and each can be cleared', async () => {
+  const { getRoute, putRoute } = require('../lib/savedRoutes')
+  assert.deepEqual(await getRoute(userId, 'US-GA-139'), { region: 'US-GA-139', stops: null, start: null, updatedAt: null })
+  const stops = [{ locId: 'L1', name: 'Chicopee Lake', lat: 34.25, lng: -83.85 }, { locId: null, name: 'Wahoo Park', lat: 34.3, lng: -83.8, note: 'not an eBird hotspot' }]
+  const saved = await putRoute(userId, { region: 'US-GA-139', stops, start: { locId: null, name: 'Gainesville, Georgia', lat: 34.2979, lng: -83.8241 } })
+  assert.deepEqual(saved.stops.map((s) => s.name), ['Chicopee Lake', 'Wahoo Park'])
+  assert.equal(saved.stops[1].note, 'not an eBird hotspot')
+  assert.equal(saved.start.name, 'Gainesville, Georgia')
+  // Another county has its own stops but shares the start.
+  const other = await getRoute(userId, 'US-GA-187')
+  assert.equal(other.stops, null)
+  assert.equal(other.start.name, 'Gainesville, Georgia')
+  // Changing only the stops leaves the start alone, and the reverse.
+  await putRoute(userId, { region: 'US-GA-139', stops: [stops[1], stops[0]] })
+  assert.deepEqual((await getRoute(userId, 'US-GA-139')).stops.map((s) => s.name), ['Wahoo Park', 'Chicopee Lake'])
+  await putRoute(userId, { region: 'US-GA-139', start: null })
+  const cleared = await putRoute(userId, { region: 'US-GA-139', stops: null })
+  assert.equal(cleared.stops, null)
+  assert.equal(cleared.start, null)
+  await assert.rejects(putRoute(userId, { region: 'nope!', stops: [] }), (error) => error.status === 400)
 })
