@@ -370,14 +370,15 @@ test('public land near a point comes from eBird and OpenStreetMap once, then fro
     return jsonResponse([
       { name: 'Sardis Creek Park', lat: '34.40', lon: '-83.90', category: 'leisure', type: 'park', display_name: 'Sardis Creek Park, Hall County' },
       { name: 'Wahoo Park', lat: '34.37', lon: '-83.86', category: 'leisure', type: 'park', display_name: 'Wahoo Park, Hall County' },
-      { name: 'Some Street', lat: '34.37', lon: '-83.86', category: 'highway', type: 'residential', display_name: 'Some Street' }
+      { name: 'Some Street', lat: '34.37', lon: '-83.86', category: 'highway', type: 'residential', display_name: 'Some Street' },
+      { name: '', lat: '34.36', lon: '-83.85', category: 'leisure', type: 'park', display_name: 'Hall County, Georgia' }
     ])
   }
   const first = await withFetch(handler, () => nearbyPublic(34.37594, -83.869886))
   assert.equal(calls.length, 2)
   assert.deepEqual(first.hotspots.map((h) => [h.name, h.lightlyBirded, h.latest]), [['Little River Park', true, '2026-04-13'], ['Lake Lanier--Sardis Creek Park', false, '2026-07-25']])
   assert.ok(first.hotspots[0].miles < first.hotspots[1].miles)
-  assert.deepEqual(first.parks.map((p) => p.name), ['Wahoo Park'], 'a park that is also a hotspot appears once, and non-parks are dropped')
+  assert.deepEqual(first.parks.map((p) => p.name), ['Wahoo Park'], 'a park that is also a hotspot appears once; non-parks and unnamed parks are dropped')
   const second = await withFetch(() => { throw new Error('should not fetch') }, () => nearbyPublic(34.3759, -83.8699))
   assert.deepEqual(second.parks.map((p) => p.name), ['Wahoo Park'])
   await assert.rejects(nearbyPublic(Number.NaN, 1), (e) => e.status === 400)
