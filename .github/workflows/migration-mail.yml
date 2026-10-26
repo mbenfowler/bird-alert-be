@@ -16,6 +16,11 @@ jobs:
           CRON_SECRET: ${{ secrets.CRON_SECRET }}
         run: |
           test -n "$CRON_SECRET" || { echo "CRON_SECRET secret is not set"; exit 1; }
-          curl --fail-with-body --silent --show-error --max-time 300 \
-            -H "Authorization: Bearer $CRON_SECRET" \
-            https://bird-alert-be.vercel.app/api/mail/migration
+          for i in $(seq 1 30); do
+            out=$(curl --fail-with-body --silent --show-error --max-time 120 \
+              -H "Authorization: Bearer $CRON_SECRET" \
+              https://bird-alert-be.vercel.app/api/mail/migration)
+            echo "$out" | head -c 400; echo
+            echo "$out" | grep -q '"capped":true' && { echo "Daily mail cap reached."; exit 1; }
+            echo "$out" | grep -q '"more":true' || break
+          done

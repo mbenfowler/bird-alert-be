@@ -14,7 +14,7 @@ jobs:
     steps:
       - name: Health check (API and app)
         run: |
-          curl --fail-with-body --silent --show-error --max-time 30 https://bird-alert-be.vercel.app/api
+          curl --fail-with-body --silent --show-error --max-time 30 'https://bird-alert-be.vercel.app/api?strict=1'
           echo
           curl --fail --silent --show-error --max-time 30 -o /dev/null -w 'app: HTTP %{http_code}\n' https://bird-alert.vercel.app/
       - name: Call the push alerts endpoint
@@ -22,9 +22,16 @@ jobs:
           CRON_SECRET: ${{ secrets.CRON_SECRET }}
         run: |
           test -n "$CRON_SECRET" || { echo "CRON_SECRET secret is not set"; exit 1; }
-          curl --fail-with-body --silent --show-error --max-time 120 \
-            -H "Authorization: Bearer $CRON_SECRET" \
-            https://bird-alert-be.vercel.app/api/push/alerts
+          # Each call works for 45 seconds and says where it stopped; repeat until it is done.
+          after=0
+          for i in $(seq 1 20); do
+            out=$(curl --fail-with-body --silent --show-error --max-time 120 \
+              -H "Authorization: Bearer $CRON_SECRET" \
+              "https://bird-alert-be.vercel.app/api/push/alerts?after=$after")
+            echo "$out" | head -c 400; echo
+            echo "$out" | grep -q '"more":true' || break
+            after=$(echo "$out" | grep -o '"next":[0-9]*' | cut -d: -f2)
+          done
       - name: Sync the regions' checklists
         env:
           CRON_SECRET: ${{ secrets.CRON_SECRET }}

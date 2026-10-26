@@ -163,7 +163,9 @@ const actions = {
     handler: async (req, res) => {
       assertCronCaller(req)
       assertConfigured()
-      res.status(200).json(await runPushAlerts())
+      // 45 seconds a call; while `more` is true the caller repeats with ?after=<next>.
+      const after = Number.parseInt(req.query.after ?? '0', 10) || 0
+      res.status(200).json(await runPushAlerts({ after, deadline: Date.now() + 45_000 }))
     }
   }
 }

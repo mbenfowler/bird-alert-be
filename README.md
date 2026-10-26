@@ -8,7 +8,7 @@ All request and response bodies are JSON. Authenticated routes read an `HttpOnly
 
 | Method | Path | Auth | Purpose |
 |---|---|---|---|
-| GET | `/api` | no | health: `{ ok, db, latencyMs }`; the hourly GitHub workflow checks it and emails on failure |
+| GET | `/api` | no | health: `{ ok, db, latencyMs, errors: { lastHour, by } }`; `?strict=1` (the hourly GitHub workflow) answers 503 when the database is down or 5+ server errors were logged in the last hour, and the failed run emails the owner |
 | GET | `/api/auth/exists?email=` | no | `{ userExists }` |
 | POST | `/api/auth/signup` | no | `{ email, password }` → user, sets cookie, sends confirmation email |
 | POST | `/api/auth/login` | no | `{ email, password }` → user, sets cookie |
@@ -94,3 +94,10 @@ pg_restore --clean --if-exists --no-owner --dbname "$TARGET_PG_URL" restore.dump
 ## Deploying
 
 Set these in the Vercel project: `PROD_PG_URL`, `SESSION_SECRET`, `CRON_SECRET`, `APP_BASE_URL`, `EBIRD_API_KEY`, `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY`, `VAPID_SUBJECT` (web push; generate the keys with `npx web-push generate-vapid-keys`), `NUTHATCH_API_KEY` (bird images; optional), and `APP_EMAIL` plus `APP_PW` (a Gmail app password). Run `NODE_ENV=production npx knex migrate:latest` against the production database before the first deploy of a migration.
+
+## Running at scale
+
+- **Jobs work in 45-second slices.** `/api/push/alerts?after=` and `/api/mail/{watchlist,rare,migration}` stop when their budget runs out and answer `more: true` (push also `next`, the resume point). The GitHub workflows (`push-alerts.yml`, `daily-mail.yml`, `migration-mail.yml`) call again until done; `push_log` and `digest_log` make every re-call safe.
+- **Mail has a daily cap.** Gmail suspends accounts past about 500 recipients a day, so sends are counted per UTC day in `mail_counts` (default cap 450, `MAIL_DAILY_CAP` overrides). Digests stop at 85% of it so confirmation and reset emails always get through; a capped digest run fails its workflow, which emails the owner. Set `SMTP_URL` to move to any SMTP provider (Resend, Brevo, SES…) with no code change; with it the cap is off unless set.
+- **Errors are kept a week** in `error_log` (every unexpected 500 and failed digest send) and summarized by the health check.
+- **Database:** production uses Neon's pooled endpoint, so bursts of function instances share connections.
