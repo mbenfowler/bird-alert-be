@@ -1,6 +1,6 @@
 const { test } = require('node:test')
 const assert = require('node:assert/strict')
-const { classify, recencyScore, band, bestWindow, rankPlaces, metresBetween, HALF_LIVES } = require('../lib/hotspots')
+const { classify, recencyScore, chanceOf, band, bestWindow, rankPlaces, metresBetween, HALF_LIVES } = require('../lib/hotspots')
 
 test('species fall into persistence classes from their own year, and notable wins', () => {
   assert.equal(classify({ monthsPresent: 12, daysLastYear: 300 }), 'resident')
@@ -18,13 +18,14 @@ test('a report keeps half its value after one half-life, and days are counted on
   assert.ok(recencyScore(['2026-10-15'], '2026-10-25', 21) > recencyScore(['2026-10-15'], '2026-10-25', 2))
 })
 
-test('bands weigh detection when effort is enough, recency otherwise, and staleness caps them', () => {
-  assert.equal(band({ score: 0.9, detection: 0.6, effort: 5, lastAge: 1, halfLife: 10 }), 'High')
-  assert.equal(band({ score: 0.9, detection: 0.6, effort: 2, lastAge: 1, halfLife: 10 }), 'Fair')
-  assert.equal(band({ score: 3, detection: null, effort: 0, lastAge: 1, halfLife: 10 }), 'High')
-  assert.equal(band({ score: 1.3, detection: null, effort: 0, lastAge: 3, halfLife: 10 }), 'Good')
-  assert.equal(band({ score: 3, detection: 0.9, effort: 9, lastAge: 25, halfLife: 10 }), 'Fair')
-  assert.equal(band({ score: 0.1, detection: null, effort: 1, lastAge: 20, halfLife: 4 }), 'Long shot')
+test('the chance is the faded detection rate with effort, a capped inference without, and bands follow it', () => {
+  assert.equal(chanceOf({ score: 0.9, detection: 0.92, effort: 13, lastAge: 0, halfLife: 21 }), 92)
+  assert.equal(chanceOf({ score: 0.9, detection: 0.92, effort: 13, lastAge: 21, halfLife: 21 }), 65)
+  assert.equal(chanceOf({ score: 0.9, detection: 0.25, effort: 4, lastAge: 1, halfLife: 21 }), 25)
+  assert.equal(chanceOf({ score: 1, detection: null, effort: 0, lastAge: 0, halfLife: 10 }), 50)
+  assert.equal(chanceOf({ score: 3, detection: null, effort: 1, lastAge: 0, halfLife: 10 }), 55, 'inferred chances are capped below High')
+  assert.equal(chanceOf({ score: 0.2, detection: null, effort: 0, lastAge: 15, halfLife: 4 }), 13)
+  assert.deepEqual([92, 60, 59, 40, 39, 20, 19].map(band), ['High', 'High', 'Good', 'Good', 'Fair', 'Fair', 'Long shot'])
 })
 
 test('the best window is the busiest two hours, only with enough reports', () => {
@@ -48,6 +49,7 @@ test('places merge every source, keep coordinates and notes, and rank by band th
   const places = rankPlaces({ reports, effort, asOf, halfLife: 10 })
   assert.deepEqual(places.map((p) => p.locId), ['L1', 'L2'])
   const [park, dam] = places
+  assert.equal(park.chance, 67)
   assert.equal(park.band, 'High')
   assert.equal(park.days, 2)
   assert.deepEqual([park.lat, park.lng], [34.3, -83.7])
@@ -58,6 +60,7 @@ test('places merge every source, keep coordinates and notes, and rank by band th
   assert.equal(dam.effort.detection, null)
   assert.equal(park.isHotspot, true)
   assert.equal(dam.isHotspot, false)
+  assert.equal(dam.chance, 16)
   assert.equal(dam.band, 'Long shot')
   assert.equal(dam.lastSeen.daysAgo, 20)
 })
