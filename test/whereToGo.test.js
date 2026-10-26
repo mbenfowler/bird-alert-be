@@ -31,3 +31,19 @@ test('the route covers different birds rather than the same bird thrice, and ski
   assert.equal(pickRoute([]).url, null)
   assert.equal(mapsRouteUrl([{ lat: 1, lng: 2 }]), 'https://www.google.com/maps/dir/?api=1&destination=1%2C2&travelmode=driving')
 })
+
+test('the route weighs driving: two neighbours beat a far stop that adds a little more', () => {
+  const { pickRoute } = require('../lib/whereToGo')
+  const bird = (speciesCode, chance) => ({ speciesCode, comName: speciesCode, chance, band: 'Good', lastSeen: { daysAgo: 1 }, note: null })
+  // Chicopee and Elachee are a kilometre apart; North Hall is 15 km away and offers one more bird.
+  const chicopee = { locId: 'CH', locName: 'Chicopee Lake', lat: 34.2470, lng: -83.8470, isHotspot: true, expected: 1.6, birds: [bird('a', 80), bird('b', 80)] }
+  const elachee = { locId: 'EL', locName: 'Elachee', lat: 34.2540, lng: -83.8470, isHotspot: true, expected: 1.3, birds: [bird('c', 70), bird('d', 60)] }
+  const north = { locId: 'NH', locName: 'North Hall', lat: 34.3900, lng: -83.8470, isHotspot: true, expected: 1.4, birds: [bird('e', 70), bird('f', 70)] }
+  const route = pickRoute([chicopee, north, elachee], { maxStops: 3 })
+  assert.deepEqual(route.stops.map((s) => s.locId).sort(), ['CH', 'EL'])
+  // The neighbours are visited back to back, never with the far one between them.
+  const all = pickRoute([chicopee, north, elachee].map((p) => p.locId === 'NH' ? { ...p, birds: [bird('e', 99), bird('f', 99), bird('g', 99), bird('h', 99)], expected: 4 } : p), { maxStops: 3 })
+  const ids = all.stops.map((s) => s.locId)
+  assert.equal(ids.length, 3)
+  assert.equal(Math.abs(ids.indexOf('CH') - ids.indexOf('EL')), 1, `order ${ids.join(' → ')}`)
+})
