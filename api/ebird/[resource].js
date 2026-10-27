@@ -9,6 +9,7 @@ const { whereToGo, parseOrigin } = require('../../lib/whereToGo')
 const { nearbyPublic } = require('../../lib/nearby')
 const { placeSearch, parsePoints } = require('../../lib/placeSearch')
 const { drive } = require('../../lib/routing')
+const { getShare, sharePage } = require('../../lib/shares')
 const { assertCronCaller } = require('../../lib/digest')
 
 const DAY = 86400
@@ -84,6 +85,18 @@ const resources = {
     handler: async ({ points }) => (await drive(parsePoints(points))) ?? null,
     cacheControl: cache(DAY, WEEK)
   },
+  // GET /api/ebird/share?id= -> a shared route or sighting (public, read-only)
+  share: {
+    handler: ({ id }) => getShare(id),
+    cacheControl: cache(3600, DAY)
+  },
+  // GET /api/ebird/share-page?kind=r|s&id= -> the app's page with the share's preview card (title, picture) in its head;
+  //   the front end rewrites /share/:kind/:id here, so links pasted anywhere unfurl properly
+  'share-page': {
+    handler: (query, req) => sharePage(query, req),
+    cacheControl: 'public, max-age=0, s-maxage=300, stale-while-revalidate=600',
+    html: true
+  },
   // GET /api/ebird/regions?state=GA -> { code, name }[]
   regions: {
     handler: ({ state }) => ebird.subregions(ebird.assertState(state)),
@@ -141,5 +154,9 @@ module.exports = route(['GET'], async (req, res) => {
   if (!resource) throw new HttpError(404, 'Not found')
   const data = await resource.handler(req.query, req)
   res.setHeader('Cache-Control', resource.cacheControl)
+  if (resource.html) {
+    res.setHeader('Content-Type', 'text/html; charset=utf-8')
+    return res.status(200).send(data)
+  }
   res.status(200).json(data)
 })
