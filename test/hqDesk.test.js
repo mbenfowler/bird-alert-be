@@ -31,6 +31,8 @@ test('drafts fit a post, say how solid the report is, and carry the link', () =>
   const text = draftPost(pick, 'https://bird-alert.vercel.app/share/s/AbCdEfGhJk', '2026-10-27')
   assert.ok(text.length <= 280)
   assert.match(text, /^🚨 Anhinga in New Jersey\n📍 Laurel Acres Park, Burlington Co\.\n🗓 reported today · 5 checklists, confirmed\nhttps:\/\/bird-alert.vercel.app\/share\/s\/AbCdEfGhJk\nvia eBird/)
+  const [dashed] = pickRarities(Array.from({ length: 3 }, (_, i) => rec({ subId: `D${i}`, locName: 'Fiesta Island--dog run' })))
+  assert.match(draftPost(dashed, 'x', '2026-10-27'), /📍 Fiesta Island – dog run, Burlington Co\./)
   assert.equal(isWholeSpecies('Brant (Pale-bellied)'), false)
   assert.equal(isWholeSpecies('Greater/Lesser Yellowlegs'), false)
   assert.equal(isWholeSpecies('Ruff'), true)
