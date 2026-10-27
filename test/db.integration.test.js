@@ -11,7 +11,7 @@ const seasonality = require('../lib/seasonality')
 let userId
 before(async () => {
   await db.migrate.latest()
-  for (const table of ['shares', 'seen_birds', 'taxonomy_ref', 'user_routes', 'hotspot_ref', 'mail_counts', 'error_log', 'drive_cache', 'nearby_cache', 'place_predictions', 'checklist_species', 'checklists', 'bird_sounds', 'digest_log', 'push_handoff', 'push_log', 'push_subscriptions', 'saved_birds', 'auth_throttle', 'season_firsts', 'region_species_days', 'region_days', 'job_runs', 'users', 'birds']) await db(table).del()
+  for (const table of ['passkeys', 'shares', 'seen_birds', 'taxonomy_ref', 'user_routes', 'hotspot_ref', 'mail_counts', 'error_log', 'drive_cache', 'nearby_cache', 'place_predictions', 'checklist_species', 'checklists', 'bird_sounds', 'digest_log', 'push_handoff', 'push_log', 'push_subscriptions', 'saved_birds', 'auth_throttle', 'season_firsts', 'region_species_days', 'region_days', 'job_runs', 'users', 'birds']) await db(table).del()
   // Nothing in here may reach eBird; the hourly job's history fetch is a no-op unless a test says otherwise.
   ebird.historicObservations = async () => []
   ;[{ id: userId }] = await db('users').insert({
@@ -580,4 +580,39 @@ test('a share is made by a person, read by anyone, and capped per day', async ()
   await assert.rejects(createShare(userId, { kind: 'poem' }), (e) => e.status === 400)
   await db('shares').insert(Array.from({ length: 50 }, (_, i) => ({ id: `cap${String(i).padStart(4, '0')}`, kind: 'route', user_id: userId, payload: '{}' })))
   await assert.rejects(createShare(userId, { kind: 'route', stops: [{ name: 'x', lat: 1, lng: 1 }] }), (e) => e.status === 429)
+})
+
+test('signup can bring a county, /me renews the session, and passkey calls need a known origin', async () => {
+  const auth = require('../api/auth/[action]')
+  const { fakeReq, fakeRes } = require('./helpers')
+  const signup = fakeRes()
+  await auth(fakeReq({ method: 'POST', query: { action: 'signup' }, body: { email: 'county@example.com', password: 'longenough1', state: 'GA', location: 'US-GA-139' } }), signup)
+  assert.equal(signup.statusCode, 201)
+  assert.deepEqual([signup.body.state, signup.body.location, signup.body.hasPasskey], ['GA', 'US-GA-139', false])
+  assert.equal(signup.body.password_hash, undefined)
+  // A county from another state, or nonsense, is dropped rather than refused.
+  const odd = fakeRes()
+  await auth(fakeReq({ method: 'POST', query: { action: 'signup' }, body: { email: 'odd@example.com', password: 'longenough1', state: 'NC', location: 'US-GA-139' } }), odd)
+  assert.deepEqual([odd.statusCode, odd.body.location], [201, ''])
+
+  const cookie = String(signup.headers['set-cookie']).split(';')[0]
+  const me = fakeRes()
+  await auth(fakeReq({ method: 'GET', query: { action: 'me' }, headers: { cookie } }), me)
+  assert.equal(me.statusCode, 200)
+  assert.match(String(me.headers['set-cookie']), /Max-Age=2592000/, 'a visit renews the session')
+
+  const options = fakeRes()
+  await auth(fakeReq({ method: 'POST', query: { action: 'passkey-register-options' }, headers: { cookie, origin: 'http://localhost:3000' } }), options)
+  assert.equal(options.statusCode, 200)
+  assert.equal(options.body.options.rp.id, 'localhost')
+  assert.equal(options.body.options.authenticatorSelection.residentKey, 'required')
+  const foreign = fakeRes()
+  await auth(fakeReq({ method: 'POST', query: { action: 'passkey-login-options' }, headers: { origin: 'https://evil.example' } }), foreign)
+  assert.equal(foreign.statusCode, 400)
+  const unknown = fakeRes()
+  const login = fakeRes()
+  await auth(fakeReq({ method: 'POST', query: { action: 'passkey-login-options' }, headers: { origin: 'http://localhost:3000' } }), login)
+  await auth(fakeReq({ method: 'POST', query: { action: 'passkey-login' }, headers: { origin: 'http://localhost:3000' }, body: { token: login.body.token, response: { id: 'nope', response: {} } } }), unknown)
+  assert.equal(unknown.statusCode, 401)
+  assert.match(unknown.body.error, /isn’t on any account/)
 })
