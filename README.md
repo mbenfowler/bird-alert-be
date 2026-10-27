@@ -60,6 +60,21 @@ The four mail routes share one function (`api/mail/[action].js`): Vercel's Hobby
 
 `region_species_days` holds which species were reported in a region on which day, from eBird's historic feed (one request per day, fetched once and kept) plus the hourly job's live reports. `region_days` records which days are on file in full. The hourly job fills in 16 months a few days at a time within a time budget; `node scripts/backfill-seasonality.js [region...]` does it in one go for a new region. A species counts as a returning migrant when it was reported on at least three days within three weeks of today's date last year and at most once in the two to four months before that.
 
+### How good are the chances? (the track record)
+
+The chances on the species page and Where to go are checked against what birders go on to report. Once a day, inside the hourly sync, each region's species of interest (its users' watch-list birds and whatever eBird flags notable, reported there in the last 30 days, at most 40) have their ranked places written to `place_predictions`: the chance, its band, and the day. Seven days later each one is graded: did a checklist at that place report the bird within the week? That uses stored checklists only, never a live eBird call.
+
+`accuracy(region)` (served at `/api/ebird/grades` and inside the species and Where to go responses) gives, per band over the last 60 days, the predictions graded, how many came true, and the rate. A well-calibrated band comes true at about the rate it claims: High (60% or better) should land at 60% or above, Good (40-59%) near the middle, and so on. A High band that comes true a third of the time means the scoring is overconfident and the half-lives or the inferred-chance ceiling (55) want tuning.
+
+The app shows it only behind a "Checked against real reports" badge, and only for bands with 20 or more graded predictions. To see the full numbers, including bands still short of 20:
+
+```bash
+node scripts/grades.js              # every region with a user
+node scripts/grades.js US-GA-139    # one region
+```
+
+prints, per region, each band's range, how often it came true (hits/n), and how many predictions are still waiting out their week. Prefix with `NODE_ENV=production PROD_PG_URL=...` to read production. Predictions began 2026-10-26, so the first grades arrive 2026-11-02.
+
 Email links (`/confirm/:token`, `/reset/:token`, `/unsubscribe/:token`) carry signed, purpose-scoped tokens. Reset tokens are bound to the current password hash, so each works once.
 
 ## Local development
