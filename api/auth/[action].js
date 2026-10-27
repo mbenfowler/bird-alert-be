@@ -9,6 +9,19 @@ const {
 const { verifyToken, passwordVersion } = require('../../lib/tokens')
 const { sendConfirmationEmail, sendPasswordResetEmail } = require('../../lib/mailer')
 const { assertNotThrottled, recordAttempt, clearAttempts } = require('../../lib/throttle')
+const passkeys = require('../../lib/passkeys')
+const { assertRegion } = require('../../lib/ebird')
+
+/** A signup may bring the county the visitor was looking at, so they land on their birds. */
+const signupPlace = (state, location) => {
+  if (!location) return { state: '', location: '' }
+  const code = assertRegion(String(location))
+  const m = code.match(/^US-([A-Z]{2})-[A-Z0-9]{1,5}$/)
+  if (!m || (state && String(state).toUpperCase() !== m[1])) return { state: '', location: '' }
+  return { state: m[1], location: code }
+}
+/** The user as the app sees them, with whether they have a passkey yet. */
+const withPasskeys = async (user) => ({ ...sanitizeUser(user), hasPasskey: Boolean(await db('passkeys').where({ user_id: user.id }).first('id')) })
 
 const EMAIL_PREFERENCES = ['alert_digest_email_enabled', 'rare_sightings_email_enabled', 'migration_email_enabled']
 
@@ -27,18 +40,18 @@ const actions = {
   signup: {
     methods: ['POST'],
     handler: async (req, res) => {
-      const { email: rawEmail, password } = body(req)
+      const { email: rawEmail, password, state, location } = body(req)
       const email = assertValidEmail(normalizeEmail(rawEmail))
       assertValidPassword(password)
       if (await findUserByEmail(email)) throw new HttpError(409, 'An account with that email already exists')
 
       const [user] = await db('users')
-        .insert({ email, password_hash: await hashPassword(password), location: '', state: '' })
+        .insert({ email, password_hash: await hashPassword(password), ...signupPlace(state, location) })
         .returning('*')
 
       createSession(res, user)
       sendConfirmationEmail(user).catch((error) => console.error('Confirmation email failed:', error))
-      res.status(201).json(sanitizeUser(user))
+      res.status(201).json(await withPasskeys(user))
     }
   },
 
@@ -57,7 +70,44 @@ const actions = {
       }
       await clearAttempts('login', email)
       createSession(res, user)
-      res.status(200).json(sanitizeUser(user))
+      res.status(200).json(await withPasskeys(user))
+    }
+  },
+
+  // POST /api/auth/passkey-login-options -> { options, token }; then
+  // POST /api/auth/passkey-login { response, token } -> user (sets session cookie). No email needed.
+  'passkey-login-options': {
+    methods: ['POST'],
+    handler: async (req, res) => res.status(200).json(await passkeys.authenticationOptions(req))
+  },
+  'passkey-login': {
+    methods: ['POST'],
+    handler: async (req, res) => {
+      const userId = await passkeys.authenticate(req, body(req))
+      const user = await findUserById(userId)
+      if (!user) throw new HttpError(401, 'That account no longer exists')
+      createSession(res, user)
+      res.status(200).json(await withPasskeys(user))
+    }
+  },
+  // POST /api/auth/passkey-register-options (logged in) -> { options, token }; then
+  // POST /api/auth/passkey-register { response, token } -> the account's passkeys
+  'passkey-register-options': {
+    methods: ['POST'],
+    handler: async (req, res) => res.status(200).json(await passkeys.registrationOptions(await requireUser(req), req))
+  },
+  'passkey-register': {
+    methods: ['POST'],
+    handler: async (req, res) => res.status(201).json(await passkeys.register(await requireUser(req), req, body(req)))
+  },
+  // GET /api/auth/passkeys -> [{ id, name, site, createdAt, lastUsedAt }]; DELETE /api/auth/passkeys?id= -> the rest
+  passkeys: {
+    methods: ['GET', 'DELETE'],
+    handler: async (req, res) => {
+      const user = await requireUser(req)
+      res.setHeader('Cache-Control', 'no-store')
+      if (req.method === 'DELETE') await passkeys.remove(user.id, req.query.id)
+      res.status(200).json(await passkeys.listFor(user.id))
     }
   },
 
@@ -76,7 +126,9 @@ const actions = {
     handler: async (req, res) => {
       const user = await getSessionUser(req)
       if (!user) throw new HttpError(401, 'Not logged in')
-      res.status(200).json(sanitizeUser(user))
+      // Each visit renews the session, so only thirty days away logs someone out.
+      createSession(res, user)
+      res.status(200).json(await withPasskeys(user))
     }
   },
 
