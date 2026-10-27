@@ -43,6 +43,7 @@ test('outside production without FORCE_SEND_MAIL a send is simulated, not attemp
 })
 
 test('replies go to the owner when FEEDBACK_TO is set, and to an explicit reply-to above all', async () => {
+  process.env.FORCE_SEND_MAIL = 'true'
   process.env.FEEDBACK_TO = 'owner@example.com'
   try {
     sent.length = 0
