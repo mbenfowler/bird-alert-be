@@ -117,6 +117,8 @@ pg_restore --clean --if-exists --no-owner --dbname "$TARGET_PG_URL" restore.dump
 
 ## Maintenance
 
+`node scripts/stats.js` prints how the app is doing from our own tables: new accounts (and how many set a county or confirmed their email), push devices, watch-list and life-list birds added, passkeys, saved routes, share links made and opened, for the last 7 and 30 days and all time. Page views, referrers and countries are in Vercel Web Analytics on the front end. Prefix with `NODE_ENV=production PROD_PG_URL=...` to read production.
+
 `node scripts/backfill-images.js` fills in pictures for stored birds that have none (Nuthatch, then Wikipedia's lead image). Prefix with `NODE_ENV=production PROD_PG_URL=...` to run against production.
 
 ## Deploying
