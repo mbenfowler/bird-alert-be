@@ -81,3 +81,21 @@ test('the daily prediction budget walks the whole list over the days', () => {
   assert.equal(covered.size, 100, 'three days already cover a hundred')
   assert.deepEqual(dailySlice(codes.slice(0, 5), '2026-11-01'), codes.slice(0, 5))
 })
+
+test('split evidence samples around the date, two years, never the future', () => {
+  const { sampleDays, verdict } = require('../lib/splitEvidence')
+  const days = sampleDays('2025-08-23', '2026-10-27')
+  assert.equal(days.length, 10)
+  assert.ok(days.includes('2025-08-09') && days.includes('2024-09-06'))
+  assert.equal(sampleDays('2026-10-20', '2026-10-27').filter((d) => d.startsWith('2026')).length, 3, 'only days already past')
+  const choices = [{ speciesCode: 'willet2', comName: 'Saltmarsh Willet' }, { speciesCode: 'willet3', comName: 'Prairie Willet' }]
+  assert.equal(verdict({ willet3: 7, willet2: 1 }, choices).lean, 'willet3')
+  assert.equal(verdict({ willet3: 4, willet2: 3 }, choices).strength, 'mixed')
+  assert.equal(verdict({ willet3: 2 }, choices).strength, 'thin')
+})
+
+test('a slash row carries where and when, for asking local reports', async () => {
+  const csv = 'Category,Common Name,Scientific Name,S/P,Date,LocID,Countable\nspecies,Saltmarsh/Prairie Willet,Tringa semipalmata/inornata,US-GA,23 Aug 2025,L591483,1\n'
+  const { skipped } = await planImport(exportRows(csv), lookup)
+  assert.deepEqual(skipped[0].where, { locId: 'L591483', region: 'US-GA', day: '2025-08-23' })
+})

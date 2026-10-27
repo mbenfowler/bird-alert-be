@@ -5,6 +5,7 @@ const { assertSpecies } = require('../lib/ebird')
 const { findOrCreateBirds } = require('../lib/enrich')
 const { getRoute, putRoute } = require('../lib/savedRoutes')
 const { importLifeList, seenList, markSeen, unmarkSeen } = require('../lib/lifeList')
+const { splitEvidence } = require('../lib/splitEvidence')
 
 const savedBirdsFor = (userId) =>
   db('saved_birds')
@@ -22,7 +23,9 @@ const savedBirdsFor = (userId) =>
 // GET    /api/saved?kind=seen                    -> [{ speciesCode, firstSeen, source }] the life list
 // POST   /api/saved?kind=seen { speciesCode }    -> 201 (idempotent) "Seen it"
 // DELETE /api/saved?kind=seen&speciesCode=       -> 204
-// POST   /api/saved?kind=seen&import=1 { csv }   -> { added, already, skipped: [{ name, reason }], total } from eBird's life list export
+// POST   /api/saved?kind=seen&import=1 { csv }   -> { added, already, skipped: [{ name, reason, choices?, where? }], total } from eBird's life list export
+// POST   /api/saved?kind=seen&evidence=1 { choices: [{ speciesCode, comName }], locId?, region?, day }
+//   -> { area, sampled, lean, strength: clear|mixed|thin, ranked: [{ speciesCode, comName, days }] } which of a slash it likely was, from local reports
 module.exports = route(['GET', 'POST', 'PUT', 'DELETE'], async (req, res) => {
   const user = await requireUser(req)
 
@@ -35,6 +38,7 @@ module.exports = route(['GET', 'POST', 'PUT', 'DELETE'], async (req, res) => {
   if (req.query.kind === 'seen') {
     res.setHeader('Cache-Control', 'no-store')
     if (req.method === 'GET') return res.status(200).json(await seenList(user.id))
+    if (req.method === 'POST' && req.query.evidence === '1') return res.status(200).json(await splitEvidence(body(req)))
     if (req.method === 'POST' && req.query.import === '1') return res.status(200).json(await importLifeList(user.id, body(req).csv))
     const code = assertSpecies(String(req.method === 'POST' ? body(req).speciesCode || '' : req.query.speciesCode || ''))
     if (req.method === 'POST') { await markSeen(user.id, code); return res.status(201).json({ speciesCode: code }) }
