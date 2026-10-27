@@ -18,3 +18,9 @@ test('a first of the season keeps that tag even when the bird is also on the wat
   const merged = mergeSightings({ watchlist: [obs('whtspa', 'S1')], season: [{ ...obs('whtspa', 'S1'), lastSeenOn: '2026-04-12' }, obs('winwre', 'S2')] })
   assert.deepEqual(merged.map((s) => [s.speciesCode, s.kind, s.lastSeenOn]), [['whtspa', 'season', '2026-04-12'], ['winwre', 'season', undefined]])
 })
+
+test('a lifer outranks every other reason for a sighting', () => {
+  const bunting = { speciesCode: 'paibun', subId: 'S1' }
+  const merged = mergeSightings({ watchlist: [bunting], notable: [bunting], lifer: [bunting, { speciesCode: 'sedwre', subId: 'S2' }] })
+  assert.deepEqual(merged.map((m) => [m.speciesCode, m.kind]), [['paibun', 'lifer'], ['sedwre', 'lifer']])
+})
