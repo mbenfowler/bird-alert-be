@@ -23,3 +23,11 @@ test('sanitizeUser strips the hash and never returns a password', () => {
   assert.deepEqual(sanitizeUser({ id: 1, email: 'a@b.co', password_hash: 'x', password: 'y' }), { id: 1, email: 'a@b.co' })
   assert.equal(sanitizeUser(null), null)
 })
+
+test('only plain email addresses are accepted', () => {
+  const { assertValidEmail } = require('../lib/users')
+  for (const ok of ['matt@example.com', 'first.last+birds@sub.example.co.uk', "o'brien@example.ie"]) assert.equal(assertValidEmail(ok), ok)
+  for (const bad of ['"a;b"@example.com', 'a(b)@example.com', 'a<b>@example.com', 'a,b@example.com', 'a:b@example.com', 'a\\b@example.com', 'x@[1.2.3.4]', 'no-at.example.com', 'a b@example.com']) {
+    assert.throws(() => assertValidEmail(bad), /valid email/, bad)
+  }
+})
