@@ -88,7 +88,8 @@ const resources = {
   // GET /api/ebird/share?id= -> a shared route or sighting (public, read-only)
   share: {
     handler: ({ id }) => getShare(id),
-    cacheControl: cache(3600, DAY)
+    // Not cached at the edge, so every open is counted (one small read).
+    cacheControl: 'no-store'
   },
   // GET /api/ebird/share-page?kind=r|s&id= -> the app's page with the share's preview card (title, picture) in its head;
   //   the front end rewrites /share/:kind/:id here, so links pasted anywhere unfurl properly
