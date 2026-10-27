@@ -7,6 +7,7 @@ const { getRoute, putRoute } = require('../lib/savedRoutes')
 const { importLifeList, seenList, markSeen, unmarkSeen } = require('../lib/lifeList')
 const { splitEvidence } = require('../lib/splitEvidence')
 const { createShare } = require('../lib/shares')
+const { sendFeedback } = require('../lib/feedback')
 
 const savedBirdsFor = (userId) =>
   db('saved_birds')
@@ -35,6 +36,11 @@ module.exports = route(['GET', 'POST', 'PUT', 'DELETE'], async (req, res) => {
     if (req.method === 'GET') return res.status(200).json(await getRoute(user.id, String(req.query.region || '')))
     if (req.method === 'PUT') return res.status(200).json(await putRoute(user.id, body(req)))
     throw new HttpError(405, 'Method not allowed')
+  }
+  // POST /api/saved?kind=feedback { kind: 'idea' | 'bug' | 'other', message, page? } -> { ok } emailed to the owner, reply-to the sender
+  if (req.query.kind === 'feedback') {
+    if (req.method !== 'POST') throw new HttpError(405, 'Method not allowed')
+    return res.status(201).json(await sendFeedback(user, body(req), { userAgent: req.headers['user-agent'] }))
   }
   // POST /api/saved?kind=share { kind: 'route' | 'sighting', ... } -> { id, url } a read-only link anyone can open
   if (req.query.kind === 'share') {

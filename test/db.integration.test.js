@@ -11,7 +11,7 @@ const seasonality = require('../lib/seasonality')
 let userId
 before(async () => {
   await db.migrate.latest()
-  for (const table of ['passkeys', 'shares', 'seen_birds', 'taxonomy_ref', 'user_routes', 'hotspot_ref', 'mail_counts', 'error_log', 'drive_cache', 'nearby_cache', 'place_predictions', 'checklist_species', 'checklists', 'bird_sounds', 'digest_log', 'push_handoff', 'push_log', 'push_subscriptions', 'saved_birds', 'auth_throttle', 'season_firsts', 'region_species_days', 'region_days', 'job_runs', 'users', 'birds']) await db(table).del()
+  for (const table of ['feedback', 'passkeys', 'shares', 'seen_birds', 'taxonomy_ref', 'user_routes', 'hotspot_ref', 'mail_counts', 'error_log', 'drive_cache', 'nearby_cache', 'place_predictions', 'checklist_species', 'checklists', 'bird_sounds', 'digest_log', 'push_handoff', 'push_log', 'push_subscriptions', 'saved_birds', 'auth_throttle', 'season_firsts', 'region_species_days', 'region_days', 'job_runs', 'users', 'birds']) await db(table).del()
   // Nothing in here may reach eBird; the hourly job's history fetch is a no-op unless a test says otherwise.
   ebird.historicObservations = async () => []
   ;[{ id: userId }] = await db('users').insert({
@@ -615,4 +615,18 @@ test('signup can bring a county, /me renews the session, and passkey calls need 
   await auth(fakeReq({ method: 'POST', query: { action: 'passkey-login' }, headers: { origin: 'http://localhost:3000' }, body: { token: login.body.token, response: { id: 'nope', response: {} } } }), unknown)
   assert.equal(unknown.statusCode, 401)
   assert.match(unknown.body.error, /isn’t on any account/)
+})
+
+test('feedback is kept, emailed with the sender as reply-to, and capped per day', async () => {
+  const { sendFeedback, DAILY_LIMIT } = require('../lib/feedback')
+  const user = await db('users').where({ id: userId }).first()
+  assert.deepEqual(await sendFeedback(user, { kind: 'idea', message: '  Follow a hotspot, please!  ', page: '/settings' }, { userAgent: 'test' }), { ok: true })
+  const [row] = await db('feedback').where({ user_id: userId })
+  assert.deepEqual([row.kind, row.message, row.page, row.emailed], ['idea', 'Follow a hotspot, please!', '/settings', false], 'outside production the email is only simulated')
+  assert.equal((await sendFeedback(user, { kind: 'weird', message: 'odd kind', page: 'javascript:alert(1)' })).ok, true)
+  const odd = await db('feedback').where({ user_id: userId }).orderBy('id', 'desc').first()
+  assert.deepEqual([odd.kind, odd.page], ['other', null])
+  await assert.rejects(sendFeedback(user, { message: 'hi' }), (e) => e.status === 400)
+  for (let i = 2; i < DAILY_LIMIT; i += 1) await sendFeedback(user, { message: `idea ${i}` })
+  await assert.rejects(sendFeedback(user, { message: 'one too many' }), (e) => e.status === 429)
 })
