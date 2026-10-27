@@ -4,6 +4,7 @@ const { requireUser } = require('../lib/auth')
 const { assertSpecies } = require('../lib/ebird')
 const { findOrCreateBirds } = require('../lib/enrich')
 const { getRoute, putRoute } = require('../lib/savedRoutes')
+const { importLifeList, seenList, markSeen, unmarkSeen } = require('../lib/lifeList')
 
 const savedBirdsFor = (userId) =>
   db('saved_birds')
@@ -18,6 +19,10 @@ const savedBirdsFor = (userId) =>
 // GET    /api/saved?kind=route&region=   -> { region, stops: point[] | null, start: point | null, updatedAt }
 // PUT    /api/saved?kind=route { region, stops?, start? } -> the same; stops null goes back to the suggested route
 //   (a point is { locId, name, lat, lng, note }; the route rides on this function so it costs no function slot)
+// GET    /api/saved?kind=seen                    -> [{ speciesCode, firstSeen, source }] the life list
+// POST   /api/saved?kind=seen { speciesCode }    -> 201 (idempotent) "Seen it"
+// DELETE /api/saved?kind=seen&speciesCode=       -> 204
+// POST   /api/saved?kind=seen&import=1 { csv }   -> { added, already, skipped: [{ name, reason }], total } from eBird's life list export
 module.exports = route(['GET', 'POST', 'PUT', 'DELETE'], async (req, res) => {
   const user = await requireUser(req)
 
@@ -25,6 +30,15 @@ module.exports = route(['GET', 'POST', 'PUT', 'DELETE'], async (req, res) => {
     res.setHeader('Cache-Control', 'no-store')
     if (req.method === 'GET') return res.status(200).json(await getRoute(user.id, String(req.query.region || '')))
     if (req.method === 'PUT') return res.status(200).json(await putRoute(user.id, body(req)))
+    throw new HttpError(405, 'Method not allowed')
+  }
+  if (req.query.kind === 'seen') {
+    res.setHeader('Cache-Control', 'no-store')
+    if (req.method === 'GET') return res.status(200).json(await seenList(user.id))
+    if (req.method === 'POST' && req.query.import === '1') return res.status(200).json(await importLifeList(user.id, body(req).csv))
+    const code = assertSpecies(String(req.method === 'POST' ? body(req).speciesCode || '' : req.query.speciesCode || ''))
+    if (req.method === 'POST') { await markSeen(user.id, code); return res.status(201).json({ speciesCode: code }) }
+    if (req.method === 'DELETE') { await unmarkSeen(user.id, code); return res.status(204).end() }
     throw new HttpError(405, 'Method not allowed')
   }
   if (req.method === 'PUT') throw new HttpError(405, 'Method not allowed')

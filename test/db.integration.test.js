@@ -11,7 +11,7 @@ const seasonality = require('../lib/seasonality')
 let userId
 before(async () => {
   await db.migrate.latest()
-  for (const table of ['user_routes', 'hotspot_ref', 'mail_counts', 'error_log', 'drive_cache', 'nearby_cache', 'place_predictions', 'checklist_species', 'checklists', 'bird_sounds', 'digest_log', 'push_handoff', 'push_log', 'push_subscriptions', 'saved_birds', 'auth_throttle', 'season_firsts', 'region_species_days', 'region_days', 'job_runs', 'users', 'birds']) await db(table).del()
+  for (const table of ['seen_birds', 'taxonomy_ref', 'user_routes', 'hotspot_ref', 'mail_counts', 'error_log', 'drive_cache', 'nearby_cache', 'place_predictions', 'checklist_species', 'checklists', 'bird_sounds', 'digest_log', 'push_handoff', 'push_log', 'push_subscriptions', 'saved_birds', 'auth_throttle', 'season_firsts', 'region_species_days', 'region_days', 'job_runs', 'users', 'birds']) await db(table).del()
   // Nothing in here may reach eBird; the hourly job's history fetch is a no-op unless a test says otherwise.
   ebird.historicObservations = async () => []
   ;[{ id: userId }] = await db('users').insert({
@@ -541,4 +541,28 @@ test('a saved route is kept per county and the start once, and each can be clear
   assert.equal(cleared.stops, null)
   assert.equal(cleared.start, null)
   await assert.rejects(putRoute(userId, { region: 'nope!', stops: [] }), (error) => error.status === 400)
+})
+
+test('a life list starts from an import, grows by taps, and an import never removes', async () => {
+  const { importLifeList, seenList, markSeen, unmarkSeen } = require('../lib/lifeList')
+  await db('taxonomy_ref').insert([
+    { species_code: 'tenwar', sci_name: 'Leiothlypis peregrina', com_name: 'Tennessee Warbler', category: 'species' },
+    { species_code: 'musduc', sci_name: 'Cairina moschata', com_name: 'Muscovy Duck', category: 'species' }
+  ])
+  const original = ebird.fullTaxonomy
+  ebird.fullTaxonomy = async () => { throw new Error('should use the stored taxonomy') }
+  try {
+    const csv = 'Category,Common Name,Scientific Name,Date,Exotic,Countable\nspecies,Tennessee Warbler,Leiothlypis peregrina,13 Oct 2026,,1\nspecies,Muscovy Duck,Cairina moschata,14 Sep 2025,X,0\n'
+    const first = await importLifeList(userId, csv)
+    assert.equal(first.added, 1)
+    assert.equal(first.skipped.length, 1)
+    await markSeen(userId, 'norcar')
+    const again = await importLifeList(userId, csv)
+    assert.deepEqual([again.added, again.already, again.total], [0, 1, 2])
+    const list = await seenList(userId)
+    assert.deepEqual(list.map((s) => [s.speciesCode, s.source]), [['norcar', 'tap'], ['tenwar', 'import']])
+    assert.equal(list[1].firstSeen, '2026-10-13')
+    await unmarkSeen(userId, 'norcar')
+    assert.equal((await seenList(userId)).length, 1)
+  } finally { ebird.fullTaxonomy = original }
 })
