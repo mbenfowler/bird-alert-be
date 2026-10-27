@@ -11,7 +11,7 @@ const seasonality = require('../lib/seasonality')
 let userId
 before(async () => {
   await db.migrate.latest()
-  for (const table of ['seen_birds', 'taxonomy_ref', 'user_routes', 'hotspot_ref', 'mail_counts', 'error_log', 'drive_cache', 'nearby_cache', 'place_predictions', 'checklist_species', 'checklists', 'bird_sounds', 'digest_log', 'push_handoff', 'push_log', 'push_subscriptions', 'saved_birds', 'auth_throttle', 'season_firsts', 'region_species_days', 'region_days', 'job_runs', 'users', 'birds']) await db(table).del()
+  for (const table of ['shares', 'seen_birds', 'taxonomy_ref', 'user_routes', 'hotspot_ref', 'mail_counts', 'error_log', 'drive_cache', 'nearby_cache', 'place_predictions', 'checklist_species', 'checklists', 'bird_sounds', 'digest_log', 'push_handoff', 'push_log', 'push_subscriptions', 'saved_birds', 'auth_throttle', 'season_firsts', 'region_species_days', 'region_days', 'job_runs', 'users', 'birds']) await db(table).del()
   // Nothing in here may reach eBird; the hourly job's history fetch is a no-op unless a test says otherwise.
   ebird.historicObservations = async () => []
   ;[{ id: userId }] = await db('users').insert({
@@ -566,4 +566,18 @@ test('a life list starts from an import, grows by taps, and an import never remo
     await unmarkSeen(userId, 'norcar')
     assert.equal((await seenList(userId)).length, 1)
   } finally { ebird.fullTaxonomy = original }
+})
+
+test('a share is made by a person, read by anyone, and capped per day', async () => {
+  const { createShare, getShare } = require('../lib/shares')
+  await db('birds').insert({ speciesCode: 'paibun', comName: 'Painted Bunting', sciName: 'Passerina ciris', birdImg: 'https://img.example/pb.jpg' }).onConflict('speciesCode').ignore()
+  const made = await createShare(userId, { kind: 'sighting', speciesCode: 'paibun', comName: 'Fake Name', locName: 'Chicopee Lake', lat: 34.25, lng: -83.85, obsDt: '2026-10-27 08:10', subId: 'S123456' })
+  assert.match(made.url, /\/share\/s\/[A-Za-z0-9]{10}$/)
+  const read = await getShare(made.id)
+  assert.equal(read.comName, 'Painted Bunting', 'the name comes from our birds, not the request')
+  assert.equal(read.locName, 'Chicopee Lake')
+  await assert.rejects(getShare('nope'), (e) => e.status === 404)
+  await assert.rejects(createShare(userId, { kind: 'poem' }), (e) => e.status === 400)
+  await db('shares').insert(Array.from({ length: 50 }, (_, i) => ({ id: `cap${String(i).padStart(4, '0')}`, kind: 'route', user_id: userId, payload: '{}' })))
+  await assert.rejects(createShare(userId, { kind: 'route', stops: [{ name: 'x', lat: 1, lng: 1 }] }), (e) => e.status === 429)
 })
