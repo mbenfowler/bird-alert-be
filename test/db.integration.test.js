@@ -561,6 +561,7 @@ test('a life list starts from an import, grows by taps, and an import never remo
     assert.deepEqual([again.added, again.already, again.total], [0, 1, 2])
     const list = await seenList(userId)
     assert.deepEqual(list.map((s) => [s.speciesCode, s.source]), [['norcar', 'tap'], ['tenwar', 'import']])
+    assert.equal(list[1].comName, 'Tennessee Warbler', 'named from the taxonomy when the bird is not stored yet')
     assert.equal(list[1].firstSeen, '2026-10-13')
     await unmarkSeen(userId, 'norcar')
     assert.equal((await seenList(userId)).length, 1)
