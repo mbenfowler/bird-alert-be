@@ -41,3 +41,18 @@ test('outside production without FORCE_SEND_MAIL a send is simulated, not attemp
   assert.deepEqual(result, { accepted: [user.email], simulated: true })
   assert.equal(sent.length, before)
 })
+
+test('replies go to the owner when FEEDBACK_TO is set, and to an explicit reply-to above all', async () => {
+  process.env.FORCE_SEND_MAIL = 'true'
+  process.env.FEEDBACK_TO = 'owner@example.com'
+  try {
+    sent.length = 0
+    await mailer.sendMail({ to: user.email, subject: 'Hi', text: 'hi', html: '<p>hi</p>' })
+    await mailer.sendMail({ to: 'owner@example.com', subject: 'Feedback', text: 'idea', html: '<p>idea</p>', replyTo: user.email })
+    assert.equal(sent[0].replyTo, 'owner@example.com')
+    assert.equal(sent[1].replyTo, user.email)
+  } finally { delete process.env.FEEDBACK_TO }
+  sent.length = 0
+  await mailer.sendMail({ to: user.email, subject: 'Hi', text: 'hi', html: '<p>hi</p>' })
+  assert.equal(sent[0].replyTo, undefined, 'unset: mail clients reply to the sender as before')
+})
