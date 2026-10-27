@@ -96,3 +96,31 @@ test('a place gets its own best window once it has five timed reports', () => {
   assert.equal(park.bestTime.label, '6 am to 8 am')
   assert.equal(park.bestTime.samples, 6)
 })
+
+test('detectability is the county share of checklists; owls and nightjars count only night lists', () => {
+  const { countyDetectability } = require('../lib/hotspots')
+  // Hall this autumn: cardinals on 121 of 204 checklists.
+  assert.equal(Math.round(countyDetectability({ lists: 204, withSpecies: 121 }).rate * 100), 59)
+  // Great Horned Owl: 5 of 204 by day and night together, but 5 of the 17 night lists.
+  const owl = countyDetectability({ lists: 204, withSpecies: 5, nightLists: 17, nightWithSpecies: 5, nocturnal: true })
+  assert.equal(owl.basis, 'night')
+  assert.equal(Math.round(owl.rate * 100), 29)
+  // Too few night lists: the whole-day rate stands in.
+  assert.equal(countyDetectability({ lists: 204, withSpecies: 5, nightLists: 4, nightWithSpecies: 2, nocturnal: true }).basis, 'all')
+  assert.equal(countyDetectability({ lists: 12, withSpecies: 6 }), null)
+})
+
+test('a hard-to-notice bird gets a lower inferred chance; a few checklists lean on the county rate', () => {
+  const base = { score: 3, detection: null, effort: 0, lastAge: 0, halfLife: 21 }
+  assert.equal(chanceOf(base), 48, 'no county rate: as before')
+  assert.equal(chanceOf({ ...base, prior: 0.59 }), 48, 'a cardinal keeps the full cap')
+  assert.equal(chanceOf({ ...base, prior: 0.04 }), 19, 'a secretive bird reported on the same days reads far lower')
+  assert.equal(chanceOf({ ...base, prior: 0 }), 17, 'never below the floor')
+  // Three of three checklists: certain without a prior, promising with one.
+  const measured = { score: 1, detection: 1, effort: 3, withSpecies: 3, lastAge: 0, halfLife: 21 }
+  assert.equal(chanceOf(measured), 100)
+  assert.equal(chanceOf({ ...measured, prior: 0.04 }), 62)
+  assert.equal(chanceOf({ ...measured, prior: 0.59 }), 84)
+  // Plenty of checklists: the place's own rate dominates.
+  assert.equal(chanceOf({ score: 1, detection: 0.5, effort: 40, withSpecies: 20, lastAge: 0, halfLife: 21, prior: 0.04 }), 48)
+})
