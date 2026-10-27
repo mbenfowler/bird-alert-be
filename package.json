@@ -21,5 +21,8 @@
     "migrate": "knex migrate:latest",
     "seed": "knex seed:run --specific=seeds.js",
     "test": "node --test --require ./test/setup.js \"test/**/*.test.js\""
+  },
+  "overrides": {
+    "zod": "4.6.7"
   }
 }
