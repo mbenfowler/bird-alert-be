@@ -117,6 +117,8 @@ pg_restore --clean --if-exists --no-owner --dbname "$TARGET_PG_URL" restore.dump
 
 ## Maintenance
 
+**HQ desk** (`.github/workflows/hq-desk.yml`, daily at 12:00 UTC, or run it from the Actions tab): one call to eBird's nationwide notable feed, ranked for national interest. eBird flags sightings rare for their *county*, so the feed is mostly local oddities; a headliner shows instead as many separate checklists in one state (birders chasing it), reviewers confirming it, and the bird being notable in only one or two states (one notable in eight or more is an irruption, not a rarity). Forms, hybrids and private locations are never pitched; a bird pitched in the last five days isn't repeated. The top eight arrive at `FEEDBACK_TO` each with a drafted post under 280 characters and a share link (`/share/s/…`, which unfurls with the bird's photo); Mondays add the week's top five. Picks are kept in `hq_picks`. A person reads and posts: nothing is published automatically.
+
 `node scripts/stats.js` prints how the app is doing from our own tables: new accounts (and how many set a county or confirmed their email), push devices, watch-list and life-list birds added, passkeys, saved routes, share links made and opened, for the last 7 and 30 days and all time. Page views, referrers and countries are in Vercel Web Analytics on the front end. Prefix with `NODE_ENV=production PROD_PG_URL=...` to read production.
 
 `node scripts/backfill-images.js` fills in pictures for stored birds that have none (Nuthatch, then Wikipedia's lead image). Prefix with `NODE_ENV=production PROD_PG_URL=...` to run against production.

@@ -1,0 +1,22 @@
+name: HQ desk
+
+# Each morning (12:00 UTC, 7 or 8 am Eastern): the country's top rarities, ranked, with drafted
+# posts and share links, emailed to FEEDBACK_TO. One eBird call. Needs the CRON_SECRET secret.
+on:
+  schedule:
+    - cron: '0 12 * * *'
+  workflow_dispatch:
+
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Pick the day's rarities
+        env:
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+        run: |
+          test -n "$CRON_SECRET" || { echo "CRON_SECRET secret is not set"; exit 1; }
+          curl --fail-with-body --silent --show-error --max-time 120 \
+            -H "Authorization: Bearer $CRON_SECRET" \
+            "https://bird-alert-be.vercel.app/api/mail/hq-desk"
+          echo

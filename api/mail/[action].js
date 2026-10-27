@@ -2,6 +2,7 @@ const { route, body, HttpError } = require('../../lib/http')
 const { requireUser } = require('../../lib/auth')
 const { assertCronCaller, runDigest, previewDigest } = require('../../lib/digest')
 const { DIGESTS } = require('../../lib/digests')
+const { runHqDesk } = require('../../lib/hqDesk')
 
 // One function for every email the app sends on a schedule, plus the preview; Vercel's Hobby plan
 // allows twelve functions per deployment, so routes that share a shape share a file.
@@ -21,6 +22,14 @@ const actions = {
   rare: cron('rare'),
   // GET /api/mail/migration (weekly, GitHub Actions) -> the week's arrivals, departures and expected species per region
   migration: cron('migration'),
+  // GET /api/mail/hq-desk (daily cron) -> the country's top rarities, ranked, with drafted posts and share links, emailed to the owner
+  'hq-desk': {
+    methods: ['GET'],
+    handler: async (req, res) => {
+      assertCronCaller(req)
+      res.status(200).json(await runHqDesk())
+    }
+  },
 
   // POST /api/mail/preview { kind: 'watchlist' | 'rare' | 'migration' } -> sends that email to the caller now
   // -> { sent: true, items } or { sent: false, reason: 'nothing' | 'unconfirmed' | 'location' }

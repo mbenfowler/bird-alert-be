@@ -11,7 +11,7 @@ const seasonality = require('../lib/seasonality')
 let userId
 before(async () => {
   await db.migrate.latest()
-  for (const table of ['feedback', 'passkeys', 'shares', 'seen_birds', 'taxonomy_ref', 'user_routes', 'hotspot_ref', 'mail_counts', 'error_log', 'drive_cache', 'nearby_cache', 'place_predictions', 'checklist_species', 'checklists', 'bird_sounds', 'digest_log', 'push_handoff', 'push_log', 'push_subscriptions', 'saved_birds', 'auth_throttle', 'season_firsts', 'region_species_days', 'region_days', 'job_runs', 'users', 'birds']) await db(table).del()
+  for (const table of ['hq_picks', 'feedback', 'passkeys', 'shares', 'seen_birds', 'taxonomy_ref', 'user_routes', 'hotspot_ref', 'mail_counts', 'error_log', 'drive_cache', 'nearby_cache', 'place_predictions', 'checklist_species', 'checklists', 'bird_sounds', 'digest_log', 'push_handoff', 'push_log', 'push_subscriptions', 'saved_birds', 'auth_throttle', 'season_firsts', 'region_species_days', 'region_days', 'job_runs', 'users', 'birds']) await db(table).del()
   // Nothing in here may reach eBird; the hourly job's history fetch is a no-op unless a test says otherwise.
   ebird.historicObservations = async () => []
   ;[{ id: userId }] = await db('users').insert({
@@ -629,4 +629,27 @@ test('feedback is kept, emailed with the sender as reply-to, and capped per day'
   await assert.rejects(sendFeedback(user, { message: 'hi' }), (e) => e.status === 400)
   for (let i = 2; i < DAILY_LIMIT; i += 1) await sendFeedback(user, { message: `idea ${i}` })
   await assert.rejects(sendFeedback(user, { message: 'one too many' }), (e) => e.status === 429)
+})
+
+test('the HQ desk stores its picks, makes share links, emails them, and never pitches a bird twice in a row', async () => {
+  const { runHqDesk } = require('../lib/hqDesk')
+  await db('birds').insert({ speciesCode: 'anhing', comName: 'Anhinga', sciName: 'Anhinga anhinga', birdImg: 'https://img.example/anhinga.jpg' }).onConflict('speciesCode').ignore()
+  const records = Array.from({ length: 6 }, (_, i) => ({ speciesCode: 'anhing', comName: 'Anhinga', sciName: 'Anhinga anhinga', subnational1Code: 'US-NJ', subnational1Name: 'New Jersey', subnational2Name: 'Burlington', locId: 'L1', locName: 'Laurel Acres Park', lat: 39.9, lng: -74.9, obsDt: '2026-10-26 08:00', subId: `S${i}`, userDisplayName: `B${i}`, obsValid: true, obsReviewed: true, locationPrivate: false }))
+  const mails = []
+  process.env.FEEDBACK_TO = 'hq@example.com'
+  try {
+    const first = await runHqDesk({ asOf: '2026-10-27', records, send: async (m) => { mails.push(m); return {} } })
+    assert.deepEqual([first.picks, first.considered], [1, 6])
+    assert.equal(mails[0].to, 'hq@example.com')
+    assert.match(mails[0].text, /Anhinga in New Jersey/)
+    assert.match(mails[0].text, /\/share\/s\/[A-Za-z0-9]{10}/)
+    const [row] = await db('hq_picks').where({ species_code: 'anhing' })
+    assert.ok(row.share_id)
+    const share = await db('shares').where({ id: row.share_id }).first()
+    assert.equal(share.user_id, null)
+    // The next morning the same bird isn't pitched again.
+    const second = await runHqDesk({ asOf: '2026-10-28', records, send: async (m) => { mails.push(m); return {} } })
+    assert.equal(second.picks, 0)
+    assert.equal(mails.length, 1, 'nothing new, no email')
+  } finally { delete process.env.FEEDBACK_TO }
 })
