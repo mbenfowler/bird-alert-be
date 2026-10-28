@@ -3,6 +3,9 @@ name: Database backup
 # Weekly logical backup of the production database, encrypted and kept as a workflow artifact for
 # 90 days. Needs two repository secrets: BACKUP_PG_URL (the non-pooled Postgres URL) and
 # BACKUP_PASSPHRASE (anything long and random; it is the only way to decrypt the files).
+# When: cron-job.org starts this through GitHub's workflow_dispatch API (POST .../actions/workflows/<file>/dispatches
+# with a fine-grained token that can only run Actions here), because GitHub delays or drops scheduled runs. The
+# schedule below stays as a backup; every job is safe to run twice.
 on:
   schedule:
     - cron: '0 9 * * 1'

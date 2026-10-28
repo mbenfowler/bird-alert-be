@@ -1,7 +1,9 @@
 name: Weekly migration email
 
-# Vercel Hobby allows two cron jobs and both are taken by the daily digests, so GitHub sends the
-# Sunday migration summary. Needs the CRON_SECRET repository secret, equal to the backend's env var.
+# The Sunday migration summary. Needs the CRON_SECRET repository secret, equal to the backend's env var.
+# When: cron-job.org starts this through GitHub's workflow_dispatch API (POST .../actions/workflows/<file>/dispatches
+# with a fine-grained token that can only run Actions here), because GitHub delays or drops scheduled runs. The
+# schedule below stays as a backup; every job is safe to run twice.
 on:
   schedule:
     - cron: '0 13 * * 0'

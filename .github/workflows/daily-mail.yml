@@ -3,6 +3,9 @@ name: Daily digests
 # The watch-list (15:00 UTC) and notable (16:00 UTC) digests. Each call sends for 45 seconds and
 # says whether there is more; the step repeats until done. digest_log keeps any user from getting two.
 # Needs the CRON_SECRET repository secret, equal to the backend's CRON_SECRET env var.
+# When: cron-job.org starts this through GitHub's workflow_dispatch API (POST .../actions/workflows/<file>/dispatches
+# with a fine-grained token that can only run Actions here), because GitHub delays or drops scheduled runs. The
+# schedule below stays as a backup; every job is safe to run twice.
 on:
   schedule:
     - cron: '0 15 * * *'

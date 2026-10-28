@@ -1,8 +1,11 @@
 name: Push alerts
 
-# Vercel Hobby crons run at most daily, so GitHub drives the hourly watch-list push. The health step
+# Vercel Hobby crons run at most daily, so this workflow drives the hourly watch-list push. The health step
 # doubles as an uptime monitor: a failed run emails the repository owner.
 # Needs the CRON_SECRET repository secret, equal to the backend's CRON_SECRET env var.
+# When: cron-job.org starts this through GitHub's workflow_dispatch API (POST .../actions/workflows/<file>/dispatches
+# with a fine-grained token that can only run Actions here), because GitHub delays or drops scheduled runs. The
+# schedule below stays as a backup; every job is safe to run twice.
 on:
   schedule:
     - cron: '17 * * * *'
