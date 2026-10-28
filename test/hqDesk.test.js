@@ -64,3 +64,27 @@ test('still-there checks run in rank order and stop when the time is up, leaving
   const failing = await checkStillThere(candidates.slice(0, 1), { check: async () => { throw new Error('eBird down') } })
   assert.equal(failing[0].still, null, 'a failed check keeps the bird in')
 })
+
+test('ABA Checklist codes rank a rarity for the whole ABA Area above a local oddity, and drafts name them', () => {
+  const { parseChecklist } = require('../lib/abaCodes')
+  // The CSV's shape: family header rows, then "",English,French,Scientific,Alpha,Code.
+  const codes = parseChecklist([
+    ['Ducks, Geese, and Swans (Anatidae)', '', '', '', '', ''],
+    ['', 'Ruff', 'Combattant varié', 'Calidris pugnax', 'RUFF', '3'],
+    ['', 'Anhinga', "Anhinga d'Amérique", 'Anhinga anhinga', 'ANHI', '1'],
+    ['', "Erckel's Spurfowl (Francolin)", '', 'Pternistis erckelii', 'ERSP', '2'],
+    ['', 'Labrador Duck (extinct, 1858)', '', 'Camptorhynchus labradorius', 'LADU', '6']
+  ])
+  assert.deepEqual(codes.map((c) => [c.comName, c.code]), [['Ruff', 3], ['Anhinga', 1], ["Erckel's Spurfowl", 2], ['Labrador Duck', 6]])
+  const bySci = new Map(codes.map((c) => [c.sciName, c.code]))
+  const records = [
+    ...Array.from({ length: 6 }, (_, i) => rec({ subId: `A${i}`, userDisplayName: `B${i}` })),
+    ...Array.from({ length: 3 }, (_, i) => rec({ speciesCode: 'ruff', comName: 'Ruff', sciName: 'Calidris pugnax', subnational1Code: 'US-ME', subnational1Name: 'Maine', locId: 'L9', locName: 'Sebasticook Lake', subId: `R${i}`, userDisplayName: `M${i}` }))
+  ]
+  const without = pickRarities(records)
+  assert.equal(without[0].comName, 'Anhinga', 'by the chase alone, the busier Anhinga leads')
+  const withCodes = pickRarities(records, { codeOf: (g) => bySci.get(g.sciName) ?? null })
+  assert.deepEqual(withCodes.map((p) => [p.comName, p.aba]), [['Ruff', 3], ['Anhinga', 1]])
+  assert.match(draftPost(withCodes[0], 'https://x.example/s', '2026-10-27'), /^🚨 Ruff in Maine · ABA Code 3\n/)
+  assert.match(draftPost(withCodes[1], 'https://x.example/s', '2026-10-27'), /^🚨 Anhinga in New Jersey\n/, 'codes 1-2 are not shown')
+})

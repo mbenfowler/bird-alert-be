@@ -10,3 +10,6 @@
 .env.production.local
 npm-debug.log*
 .vercel
+
+# The ABA Checklist is the ABA's copyrighted work: load it into the database, never commit it.
+ABA_Checklist*
