@@ -83,6 +83,14 @@ For one bird at one place, used on a rarity's page and on shared sightings. eBir
 
 Results are kept 10 minutes. It doesn't know about effort (a 5-minute drive-by and a 3-hour stakeout count the same) or whether the observer was looking for this bird.
 
+### Testing a change to the odds (`scripts/backtest-odds.js`)
+
+A change to how chances are worked out can be scored on past days before it ships: the backtest re-runs the model as of each day (queries never read past that day) and checks each place's chance against the next checklist filed there (`PER_VISIT=1`) or any in the following week. It only reads the database. What it found in October 2026, over 31 days and about 5,200 place predictions (mostly Hall County, GA):
+
+- Per visit the chances run a little low: places said to be 74% had the bird 80% of the time, 46% had it 52%, 28% had it 38%, 9% had it 17%. Birds passing through were the most understated.
+- Lowering a place's chance for each checklist since the last report that missed the bird made things worse for every class (Brier 0.1918 to 0.1935): the chances were already low, and a missed bird mostly hadn't left. That rule (`MODEL.misses`) is built but off.
+- Only checklists we've opened count as effort now (`MODEL.detailedEffort`); one we haven't opened would otherwise read as a miss.
+
 ### How good are the chances? (the track record)
 
 The chances on the species page and Where to go are checked against what birders go on to report. Once a day, inside the hourly sync, each region's species of interest (its users' watch-list birds and whatever eBird flags notable, reported there in the last 30 days, at most 40) have their ranked places written to `place_predictions`: the chance, its band, and the day. Seven days later each one is graded: did a checklist at that place report the bird within the week? That uses stored checklists only, never a live eBird call.

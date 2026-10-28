@@ -124,3 +124,22 @@ test('a hard-to-notice bird gets a lower inferred chance; a few checklists lean 
   // Plenty of checklists: the place's own rate dominates.
   assert.equal(chanceOf({ score: 1, detection: 0.5, effort: 40, withSpecies: 20, lastAge: 0, halfLife: 21, prior: 0.04 }), 48)
 })
+
+test('checklists since the last report that missed the bird lower the chance, when that part of the model is on', () => {
+  const { missedSince, MODEL } = require('../lib/hotspots')
+  assert.equal(MODEL.misses, false, 'off: the October 2026 backtest found it made the odds worse')
+  assert.equal(missedSince({ staleness: 0.8, misses: 0, find: 0.5 }), 1)
+  const one = missedSince({ staleness: 0.8, misses: 1, find: 0.5 })
+  const three = missedSince({ staleness: 0.8, misses: 3, find: 0.5 })
+  assert.ok(three < one && one < 1)
+  assert.ok(missedSince({ staleness: 1, misses: 2, find: 0.5 }) < 1, 'a report today still leaves room for misses to count')
+  assert.ok(missedSince({ staleness: 0.8, misses: 2, find: 0.9 }) < missedSince({ staleness: 0.8, misses: 2, find: 0.2 }), 'an easy bird missed counts for more')
+  const reports = [{ locId: 'L1', locName: 'Lake', day: '2026-10-20', time: '08:00', subId: 'S1', isHotspot: true, lat: 34, lng: -83 }]
+  const effort = new Map([['L1', { checklists: 6, withSpecies: 1 }]])
+  // Two lists after the report without the bird; one before it, and the report's own list, don't count.
+  const visits = new Map([['L1', [{ subId: 'S0', stamp: '2026-10-19 08:00' }, { subId: 'S1', stamp: '2026-10-20 08:00' }, { subId: 'S2', stamp: '2026-10-21 09:00' }, { subId: 'S3', stamp: '2026-10-22 07:30' }]]])
+  const [without] = rankPlaces({ reports, effort, asOf: '2026-10-23', halfLife: 4 })
+  const [counted] = rankPlaces({ reports, effort, asOf: '2026-10-23', halfLife: 4, visits })
+  assert.equal(counted.missesSince, 2)
+  assert.ok(counted.chance < without.chance)
+})
