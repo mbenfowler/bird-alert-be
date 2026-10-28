@@ -664,9 +664,13 @@ test('an HQ pick is posted only from its confirmation page, once, and a failed p
   const original = globalThis.fetch
   const calls = []
   try {
-    // Opening the link (or a scanner opening it) only shows the page.
-    assert.match(await approvePost({ method: 'GET', token }), /Post this to @BirdAlertHQ\?/)
-    assert.equal(calls.length, 0)
+    // Opening the link (or a scanner opening it) only shows the page, after asking X whose keys these are.
+    globalThis.fetch = async (url, init) => { calls.push([url, init]); return new Response(JSON.stringify({ data: { username: 'BirdAlertHQ' } }), { status: 200 }) }
+    const shown = await approvePost({ method: 'GET', token })
+    assert.match(shown, /Posting as @BirdAlertHQ ✓/)
+    assert.equal(calls.length, 1)
+    assert.match(String(calls[0][0]), /users\/me$/)
+    calls.length = 0
     globalThis.fetch = async (url, init) => { calls.push([url, init]); return new Response(JSON.stringify({ title: 'Forbidden' }), { status: 403 }) }
     assert.match(await approvePost({ method: 'POST', token }), /didn’t post/)
     assert.equal((await db('hq_picks').where({ id: pick.id }).first()).posted_at, null, 'a failure leaves it postable')
