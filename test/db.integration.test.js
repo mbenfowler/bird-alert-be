@@ -590,9 +590,11 @@ test('signup can bring a county, /me renews the session, and passkey calls need 
   const auth = require('../api/auth/[action]')
   const { fakeReq, fakeRes } = require('./helpers')
   const signup = fakeRes()
-  await auth(fakeReq({ method: 'POST', query: { action: 'signup' }, body: { email: 'county@example.com', password: 'longenough1', state: 'GA', location: 'US-GA-139' } }), signup)
+  await auth(fakeReq({ method: 'POST', query: { action: 'signup' }, body: { email: 'county@example.com', password: 'longenough1', state: 'GA', location: 'US-GA-139', source: { ref: 'l.instagram.com', landing: 'home', junk: 'x' } } }), signup)
   assert.equal(signup.statusCode, 201)
   assert.deepEqual([signup.body.state, signup.body.location, signup.body.hasPasskey], ['GA', 'US-GA-139', false])
+  assert.equal(signup.body.signup_source, undefined, 'where they came from stays on the server')
+  assert.deepEqual((await db('users').where({ email: 'county@example.com' }).first('signup_source')).signup_source, { ref: 'l.instagram.com', landing: 'home' })
   assert.equal(signup.body.password_hash, undefined)
   // A county from another state, or nonsense, is dropped rather than refused.
   const odd = fakeRes()

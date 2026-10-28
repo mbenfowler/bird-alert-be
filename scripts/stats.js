@@ -8,6 +8,7 @@
  */
 require('dotenv').config({ quiet: true })
 const db = require('../lib/db')
+const { sourceLabel } = require('../lib/signupSource')
 
 const since = (days) => db.raw(`now() - interval '${Number(days)} days'`)
 const count = async (query) => Number((await query.count('* as n').first()).n)
@@ -38,7 +39,18 @@ const main = async () => {
   console.log(`\n  Share links opened, all time: ${Number(opens.n || 0)}`)
   for (const s of top.filter((t) => t.views > 0)) console.log(`    ${s.views} opens · ${s.kind}${s.bird ? ` (${s.bird})` : ''}${s.region ? ` in ${s.region}` : ''} · /share/${s.kind === 'route' ? 'r' : 's'}/${s.id}`)
   const active = await count(db('users').where('updated_at', '>', since(30)))
-  console.log(`  Accounts changed in the last 30 days: ${active}\n`)
+  console.log(`  Accounts changed in the last 30 days: ${active}`)
+  // Where the last 30 days' signups came from (saved since 2026-10-28; older accounts show as unknown).
+  const signups = await db('users as u').leftJoin('shares as s', 's.id', db.raw("u.signup_source->>'share'")).where('u.created_at', '>', since(30))
+    .select('u.signup_source', db.raw("s.payload->>'comName' as bird"), db.raw("s.payload->>'regionName' as region"))
+  const bySource = new Map()
+  for (const r of signups) {
+    const label = sourceLabel(r.signup_source) + (r.bird ? ` via the ${r.bird}${r.region ? ` in ${r.region}` : ''} link` : '')
+    bySource.set(label, (bySource.get(label) || 0) + 1)
+  }
+  console.log('\n  Signups by source, last 30 days:')
+  for (const [label, n] of [...bySource].sort((a, b) => b[1] - a[1])) console.log(`    ${n} · ${label}`)
+  console.log('')
 }
 
 main().then(() => db.destroy()).catch((error) => { console.error(error); process.exit(1) })
