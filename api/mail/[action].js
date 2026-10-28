@@ -22,12 +22,13 @@ const actions = {
   rare: cron('rare'),
   // GET /api/mail/migration (weekly, GitHub Actions) -> the week's arrivals, departures and expected species per region
   migration: cron('migration'),
-  // GET /api/mail/hq-desk (daily cron) -> the country's top rarities, ranked, with drafted posts and share links, emailed to the owner
+  // GET /api/mail/hq-desk[?force=1] (daily cron) -> the country's top rarities, ranked, with drafted posts and share links, emailed
+  //   to the owner; once a day unless forced
   'hq-desk': {
     methods: ['GET'],
     handler: async (req, res) => {
       assertCronCaller(req)
-      res.status(200).json(await runHqDesk())
+      res.status(200).json(await runHqDesk({ force: req.query.force === '1' }))
     }
   },
 

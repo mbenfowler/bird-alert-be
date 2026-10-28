@@ -647,6 +647,12 @@ test('the HQ desk stores its picks, makes share links, emails them, and never pi
     assert.ok(row.share_id)
     const share = await db('shares').where({ id: row.share_id }).first()
     assert.equal(share.user_id, null)
+    // A late scheduled run the same morning sends nothing more; a forced one sends again.
+    assert.equal((await runHqDesk({ asOf: '2026-10-27', records, send: async (m) => { mails.push(m); return {} } })).skipped, 'already sent today')
+    assert.equal(mails.length, 1)
+    await runHqDesk({ asOf: '2026-10-27', records, force: true, send: async (m) => { mails.push(m); return {} } })
+    assert.equal(mails.length, 2)
+    mails.pop()
     // The next morning the same bird isn't pitched again.
     const second = await runHqDesk({ asOf: '2026-10-28', records, send: async (m) => { mails.push(m); return {} } })
     assert.equal(second.picks, 0)
