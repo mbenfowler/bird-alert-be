@@ -10,6 +10,7 @@ const { nearbyPublic } = require('../../lib/nearby')
 const { placeSearch, parsePoints } = require('../../lib/placeSearch')
 const { drive } = require('../../lib/routing')
 const { getShare, sharePage } = require('../../lib/shares')
+const { chase } = require('../../lib/chase')
 const { assertCronCaller } = require('../../lib/digest')
 
 const DAY = 86400
@@ -84,6 +85,12 @@ const resources = {
   drive: {
     handler: async ({ points }) => (await drive(parsePoints(points))) ?? null,
     cacheControl: cache(DAY, WEEK)
+  },
+  // GET /api/ebird/chase?locId=&code=[&cls=rare|passage|seasonal|resident] -> is it still there? the last report (or a
+  //   later checklist with the bird), checklists since that did and didn't have it, and the chance a visit now finds it
+  chase: {
+    handler: ({ locId, code, cls }) => chase({ locId, code, cls }),
+    cacheControl: cache(600, 1200)
   },
   // GET /api/ebird/share?id= -> a shared route or sighting (public, read-only)
   share: {
