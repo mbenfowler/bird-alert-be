@@ -8,7 +8,7 @@ const { isValidTimezone } = require('../lib/quietHours')
 const STRING_FIELDS = ['state', 'location']
 const BOOLEAN_FIELDS = ['alert_digest_email_enabled', 'rare_sightings_email_enabled', 'push_watchlist_enabled', 'push_notable_enabled', 'push_notable_batched', 'push_first_of_season', 'push_lifer_enabled', 'migration_email_enabled']
 
-// PATCH /api/user { email?, state?, location?, alert_digest_email_enabled?, rare_sightings_email_enabled?, push_watchlist_enabled?, push_notable_enabled?, push_notable_batched?, push_first_of_season?, push_lifer_enabled?, migration_email_enabled? }
+// PATCH /api/user { onboarded?: true (setup finished or skipped; it never shows again), email?, state?, location?, alert_digest_email_enabled?, rare_sightings_email_enabled?, push_watchlist_enabled?, push_notable_enabled?, push_notable_batched?, push_first_of_season?, push_lifer_enabled?, migration_email_enabled? }
 module.exports = route(['PATCH'], async (req, res) => {
   const user = await requireUser(req)
   const input = body(req)
@@ -38,6 +38,11 @@ module.exports = route(['PATCH'], async (req, res) => {
   if ('timezone' in input) {
     if (!isValidTimezone(input.timezone)) throw new HttpError(400, 'timezone must be an IANA time zone name')
     changes.timezone = input.timezone
+  }
+
+  if ('onboarded' in input) {
+    if (input.onboarded !== true) throw new HttpError(400, 'onboarded can only be set to true')
+    changes.onboarded_at = user.onboarded_at || new Date()
   }
 
   let emailChanged = false

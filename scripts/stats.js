@@ -23,6 +23,7 @@ const main = async () => {
   row('New accounts', await span('users'))
   row('  with a county', await span('users', 'created_at', (q) => q.whereNot('location', '')))
   row('  with email confirmed', await span('users', 'created_at', (q) => q.where('email_confirmed', true)))
+  row('  finished setup', await span('users', 'created_at', (q) => q.whereNotNull('onboarded_at')))
   row('Push devices added', await span('push_subscriptions'))
   row('Watch-list birds added', await span('saved_birds'))
   row('Life-list birds added', await span('seen_birds'))
