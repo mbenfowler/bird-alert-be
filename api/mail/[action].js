@@ -3,6 +3,7 @@ const { requireUser } = require('../../lib/auth')
 const { assertCronCaller, runDigest, previewDigest } = require('../../lib/digest')
 const { DIGESTS } = require('../../lib/digests')
 const { runHqDesk, approvePost } = require('../../lib/hqDesk')
+const { runConfirmReminders } = require('../../lib/confirmReminder')
 
 // One function for every email the app sends on a schedule, plus the preview; Vercel's Hobby plan
 // allows twelve functions per deployment, so routes that share a shape share a file.
@@ -20,6 +21,15 @@ const actions = {
   watchlist: cron('watchlist'),
   // GET /api/mail/rare (daily cron) -> emails subscribed, confirmed users eBird's notable sightings from yesterday
   rare: cron('rare'),
+  // GET /api/mail/reminders (hourly cron) -> one "confirm your email" reminder to each account a day to a week old that hasn't
+  //   confirmed yet; logged in digest_log, so never twice
+  reminders: {
+    methods: ['GET'],
+    handler: async (req, res) => {
+      assertCronCaller(req)
+      res.status(200).json(await runConfirmReminders())
+    }
+  },
   // GET /api/mail/migration (weekly, GitHub Actions) -> the week's arrivals, departures and expected species per region
   migration: cron('migration'),
   // GET /api/mail/hq-desk[?force=1] (daily cron) -> the country's top rarities, ranked, with drafted posts and share links, emailed

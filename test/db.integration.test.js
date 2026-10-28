@@ -637,6 +637,33 @@ test('feedback is kept, emailed with the sender as reply-to, and capped per day'
   await assert.rejects(sendFeedback(user, { message: 'one too many' }), (e) => e.status === 429)
 })
 
+test('an unconfirmed account gets one reminder a day after signing up, and never another', async () => {
+  const { runConfirmReminders } = require('../lib/confirmReminder')
+  const now = new Date('2026-11-10T12:00:00Z')
+  const hoursAgo = (h) => new Date(now.getTime() - h * 3600_000)
+  const [due] = await db('users').insert({ email: 'remind-me@example.com', password_hash: 'x', email_confirmed: false, created_at: hoursAgo(30) }).returning('id')
+  await db('users').insert([
+    { email: 'too-new@example.com', password_hash: 'x', email_confirmed: false, created_at: hoursAgo(5) },
+    { email: 'too-old@example.com', password_hash: 'x', email_confirmed: false, created_at: hoursAgo(24 * 9) },
+    { email: 'confirmed@example.com', password_hash: 'x', email_confirmed: true, created_at: hoursAgo(30) }
+  ])
+  const sent = []
+  const send = async (user) => { sent.push(user.email) }
+  assert.deepEqual(await runConfirmReminders({ send, now }), { due: 1, sent: 1 })
+  assert.deepEqual(sent, ['remind-me@example.com'])
+  assert.ok(await db('digest_log').where({ user_id: due.id ?? due, kind: 'confirm-reminder' }).first())
+  // An hour later: nothing more. The next day only the account that was too new then gets its one.
+  assert.deepEqual(await runConfirmReminders({ send, now: new Date(now.getTime() + 3600_000) }), { due: 0, sent: 0 })
+  assert.deepEqual(await runConfirmReminders({ send, now: new Date(now.getTime() + 86400_000) }), { due: 1, sent: 1 })
+  assert.deepEqual(sent, ['remind-me@example.com', 'too-new@example.com'])
+  sent.length = 0
+  // A failed send isn't logged, so the next run tries again.
+  await db('users').insert({ email: 'flaky@example.com', password_hash: 'x', email_confirmed: false, created_at: hoursAgo(26) })
+  assert.deepEqual(await runConfirmReminders({ send: async () => { throw new Error('SMTP down') }, now }), { due: 1, sent: 0 })
+  assert.deepEqual(await runConfirmReminders({ send, now }), { due: 1, sent: 1 })
+  assert.deepEqual(sent, ['flaky@example.com'])
+})
+
 test('the HQ desk stores its picks, makes share links, emails them, and never pitches a bird twice in a row', async () => {
   const { runHqDesk } = require('../lib/hqDesk')
   const noCheck = async () => null

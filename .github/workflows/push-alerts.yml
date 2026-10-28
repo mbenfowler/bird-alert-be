@@ -42,3 +42,13 @@ jobs:
           curl --fail-with-body --silent --show-error --max-time 120 \
             -H "Authorization: Bearer $CRON_SECRET" \
             "https://bird-alert-be.vercel.app/api/ebird/sync-checklists"
+      - name: Remind new accounts to confirm their email
+        # Runs even if a step above failed: a reminder doesn't depend on the push or the sync.
+        if: always()
+        env:
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+        run: |
+          curl --fail-with-body --silent --show-error --max-time 60 \
+            -H "Authorization: Bearer $CRON_SECRET" \
+            "https://bird-alert-be.vercel.app/api/mail/reminders"
+          echo
