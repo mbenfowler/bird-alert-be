@@ -105,3 +105,12 @@ test('with none of the user\'s birds about, the test previews the newest three r
   assert.deepEqual(testNotification(recent, new Set()).data.speciesCodes, ['a', 'b', 'c'])
   assert.equal(testNotification([], new Set()), null, 'nothing recent means the plain test goes out')
 })
+
+test('an alert link carries its county, so it opens on the right one whoever is signed in', () => {
+  const { sightingNotification, watchlistNotification } = require('../lib/notifications')
+  const s = { speciesCode: 'blksco2', comName: 'Black Scoter', subId: 'S406049926', locName: 'Madawaska Lake', obsDt: '2026-10-28 09:04', lat: 47.0, lng: -68.3, kind: 'notable' }
+  assert.ok(sightingNotification({ ...s, region: 'US-ME-003' }).data.url.endsWith('/sighting/blksco2/S406049926?region=US-ME-003'))
+  assert.ok(sightingNotification({ ...s, region: 'nonsense' }).data.url.endsWith('/sighting/blksco2/S406049926'), 'a bad code is left off')
+  assert.match(watchlistNotification([s], new Map(), 'US-ME-003').data.url, /\/sightings\?s=blksco2%3AS406049926&region=US-ME-003$/)
+  assert.match(watchlistNotification([s]).data.url, /\/sightings\?s=blksco2%3AS406049926$/)
+})
