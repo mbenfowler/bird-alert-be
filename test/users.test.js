@@ -31,3 +31,18 @@ test('only plain email addresses are accepted', () => {
     assert.throws(() => assertValidEmail(bad), /valid email/, bad)
   }
 })
+
+test('what brought someone in is cut down to safe pieces, and never sent back to the app', () => {
+  const { cleanSignupSource, sourceLabel } = require('../lib/signupSource')
+  const { sanitizeUser } = require('../lib/users')
+  assert.deepEqual(cleanSignupSource({ ref: 'WWW.Instagram.com', utm: 'Instagram', share: 'jHwrtfGDai', landing: 'share-sighting' }), { ref: 'instagram.com', utm: 'instagram', share: 'jHwrtfGDai', landing: 'share-sighting' })
+  assert.deepEqual(cleanSignupSource({ ref: 'https://evil.example/path?x=1', utm: 'x; drop table', share: '../../etc', landing: '/reset/abc' }), null, 'anything odd is dropped')
+  assert.equal(cleanSignupSource('nope'), null)
+  assert.equal(sourceLabel({ ref: 'l.instagram.com' }), 'instagram')
+  assert.equal(sourceLabel({ ref: 't.co', share: 'jHwrtfGDai' }), 'x')
+  assert.equal(sourceLabel({ utm: 'instagram', ref: 't.co' }), 'instagram', 'a tag wins over the referrer')
+  assert.equal(sourceLabel({ share: 'jHwrtfGDai' }), 'share link')
+  assert.equal(sourceLabel({ landing: 'home' }), 'direct')
+  assert.equal(sourceLabel(null), 'unknown')
+  assert.equal(sanitizeUser({ id: 1, email: 'a@b.co', password_hash: 'x', signup_source: { ref: 't.co' } }).signup_source, undefined)
+})
