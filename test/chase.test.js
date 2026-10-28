@@ -2,7 +2,7 @@ const { test } = require('node:test')
 const assert = require('node:assert/strict')
 const { assess } = require('../lib/chase')
 
-const now = Date.parse('2026-10-27T18:00')
+const now = Date.parse('2026-10-27T18:00Z')
 
 test('a bird on the latest checklists is fresh, and the newest find counts as last seen', () => {
   const r = assess({ lastSeen: '2026-10-27 08:54', now, looks: [{ obsDt: '2026-10-27 14:57', found: true }, { obsDt: '2026-10-27 14:40', found: true }, { obsDt: '2026-10-27 12:00', found: false }] })
@@ -34,4 +34,9 @@ test('a resident bird fades slower than a rarity', () => {
   const rare = assess({ lastSeen: '2026-10-24 18:00', now, looks: [] })
   const resident = assess({ lastSeen: '2026-10-24 18:00', now, looks: [], halfLifeHours: 504 })
   assert.ok(resident.stillThere > rare.stillThere)
+})
+
+test('local times are read in the place\'s zone, not the server\'s', () => {
+  const r = assess({ lastSeen: '2026-10-27 08:00', now, looks: [], offsetHours: -5 })
+  assert.equal(r.hoursAgo, 5)
 })

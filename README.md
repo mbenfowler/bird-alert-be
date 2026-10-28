@@ -73,6 +73,16 @@ Each place on a species' list gets a chance (0-100) that a visit there finds the
 
 Each species' `detectability` (`{ rate, basis: 'all' | 'night', lists }`) is in the `/api/ebird/where` response. What this model still leaves out: habitat (a marsh bird's county rate is low partly because most checklists are not from marshes), a place's own night effort, and the time of year within the 60-day window. The track record below is how to tell whether any of it is helping.
 
+### Is it still there? (`/api/ebird/chase`)
+
+For one bird at one place, used on a rarity's page and on shared sightings. eBird's report feed lags (a rarity's reports wait for review), so after the newest report the newest checklists filed at the place (up to 8) are opened one by one to see whether the bird is on them. A checklist that has it becomes the new "last seen".
+
+- **Fading with time.** Before any checklist is counted, the chance it's still there halves every 48 hours for a rarity, 4 days for a bird passing through, 10 days for a seasonal bird and 3 weeks for a resident (`?cls=`). eBird times are the place's local clock, read in a zone estimated from its longitude.
+- **Each miss counts.** Every checklist after the last find that doesn't have the bird lowers the chance, by Bayes, in proportion to how readily the bird is found when it's there. That rate comes only from checklists up to the last find (a miss after it may mean the bird left), pulled toward 60% until there are a few, and kept between 30% and 95%.
+- **The answer.** `stillThere` is the chance it's there; `chance` is that times the find rate, the odds a visit now turns it up. The verdict is `fresh` (no misses, seen in the last day), `likely` (60%+), `maybe` (30%+), `gone`, or `unknown` (no report in 14 days).
+
+Results are kept 10 minutes. It doesn't know about effort (a 5-minute drive-by and a 3-hour stakeout count the same) or whether the observer was looking for this bird.
+
 ### How good are the chances? (the track record)
 
 The chances on the species page and Where to go are checked against what birders go on to report. Once a day, inside the hourly sync, each region's species of interest (its users' watch-list birds and whatever eBird flags notable, reported there in the last 30 days, at most 40) have their ranked places written to `place_predictions`: the chance, its band, and the day. Seven days later each one is graded: did a checklist at that place report the bird within the week? That uses stored checklists only, never a live eBird call.
