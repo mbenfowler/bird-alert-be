@@ -142,6 +142,18 @@ pg_restore --clean --if-exists --no-owner --dbname "$TARGET_PG_URL" restore.dump
 
 `node scripts/backfill-images.js` fills in pictures for stored birds that have none (Nuthatch, then Wikipedia's lead image). Prefix with `NODE_ENV=production PROD_PG_URL=...` to run against production.
 
+## ABA Checklist codes
+
+The HQ desk ranks rarities nationally with the [ABA Checklist](https://www.aba.org/aba-checklist/)'s codes (1-2 regular, 3 rare, 4 casual, 5 accidental, 6 extinct or extirpated), used with permission of the American Birding Association (Oct 2026), credited in the HQ email and named in posts ("ABA Code 4"). A Code 3 adds 4 to a pick's score, Code 4 adds 7, Code 5 adds 10; codes 1-2 add nothing, so a bird rare only in its state still ranks on its chase.
+
+The checklist is the ABA's copyrighted work, so it is **not in this repository**: download the CSV from the ABA's page, unzip, and load it into `aba_codes` (it replaces whatever is there; rerun when the ABA publishes a new version):
+
+```bash
+node scripts/load-aba-checklist.js ~/Downloads/ABA_Checklist-8.19.csv   # prefix NODE_ENV=production PROD_PG_URL=... for production
+```
+
+Species are matched by scientific name, then English name. eBird splits the ABA hasn't adopted (Prairie Willet, Western Marsh Wren) and exotics not on the list get no code, which ranks them as codes 1-2 do.
+
 ## Schedules
 
 The scheduled jobs are GitHub workflows (`.github/workflows/`), but GitHub runs `schedule:` triggers late or not at all (in October 2026 the hourly push ran every 4 to 7 hours). So a free [cron-job.org](https://cron-job.org) account starts each one on time through GitHub's API, `POST https://api.github.com/repos/mbenfowler/bird-alert-be/actions/workflows/<file>/dispatches` with body `{"ref":"main"}` (the digests add `"inputs":{"kind":"watchlist"}` or `"rare"`). Its token is a fine-grained GitHub token limited to Actions read and write on this repository; the cron password never leaves GitHub and Vercel.
