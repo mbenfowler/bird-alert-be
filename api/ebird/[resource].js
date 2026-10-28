@@ -95,8 +95,10 @@ const resources = {
   //   the front end rewrites /share/:kind/:id here, so links pasted anywhere unfurl properly
   'share-page': {
     handler: (query, req) => sharePage(query, req),
-    // Short at the edge: the page names the app's current build, which changes with every release.
-    cacheControl: 'public, max-age=0, s-maxage=60, stale-while-revalidate=60',
+    // Never saved at the edge. The page names the build of the front end that asked for it (a preview
+    // or production), but this endpoint's address is the same for both, so a saved copy could hand one
+    // front end's build to the other: a blank page. Each request is one small database read.
+    cacheControl: 'no-store',
     html: true
   },
   // GET /api/ebird/regions?state=GA -> { code, name }[]
