@@ -2,7 +2,7 @@ const { route, body, HttpError } = require('../../lib/http')
 const { requireUser } = require('../../lib/auth')
 const { assertCronCaller, runDigest, previewDigest } = require('../../lib/digest')
 const { DIGESTS } = require('../../lib/digests')
-const { runHqDesk } = require('../../lib/hqDesk')
+const { runHqDesk, approvePost } = require('../../lib/hqDesk')
 
 // One function for every email the app sends on a schedule, plus the preview; Vercel's Hobby plan
 // allows twelve functions per deployment, so routes that share a shape share a file.
@@ -28,6 +28,17 @@ const actions = {
     handler: async (req, res) => {
       assertCronCaller(req)
       res.status(200).json(await runHqDesk())
+    }
+  },
+
+  // GET /api/mail/hq-post?token= -> a page to confirm one of the morning's picks; POST (its button) posts it to @BirdAlertHQ.
+  //   The signed token is the authority (it lasts two days, one post per pick); a GET never posts, so link scanners are harmless.
+  'hq-post': {
+    methods: ['GET', 'POST'],
+    handler: async (req, res) => {
+      res.setHeader('Cache-Control', 'no-store')
+      res.setHeader('Content-Type', 'text/html; charset=utf-8')
+      res.status(200).send(await approvePost({ method: req.method, token: req.query.token }))
     }
   },
 

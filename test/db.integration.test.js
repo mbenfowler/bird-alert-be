@@ -653,3 +653,30 @@ test('the HQ desk stores its picks, makes share links, emails them, and never pi
     assert.equal(mails.length, 1, 'nothing new, no email')
   } finally { delete process.env.FEEDBACK_TO }
 })
+
+test('an HQ pick is posted only from its confirmation page, once, and a failed post can be retried', async () => {
+  const { approvePost } = require('../lib/hqDesk')
+  const { signToken } = require('../lib/tokens')
+  const [pick] = await db('hq_picks').insert({ day: '2026-11-01', species_code: 'ruff', state: 'US-ME', score: 14, detail: JSON.stringify({ comName: 'Ruff', stateName: 'Maine', draft: '🚨 Ruff in Maine', intentUrl: 'https://x.com/intent/post?text=x' }) }).returning('id')
+  const token = signToken('hq-post', { pick: pick.id }, 3600)
+  const keys = ['X_API_KEY', 'X_API_SECRET', 'X_ACCESS_TOKEN', 'X_ACCESS_SECRET']
+  keys.forEach((k) => { process.env[k] = 'test' })
+  const original = globalThis.fetch
+  const calls = []
+  try {
+    // Opening the link (or a scanner opening it) only shows the page.
+    assert.match(await approvePost({ method: 'GET', token }), /Post this to @BirdAlertHQ\?/)
+    assert.equal(calls.length, 0)
+    globalThis.fetch = async (url, init) => { calls.push([url, init]); return new Response(JSON.stringify({ title: 'Forbidden' }), { status: 403 }) }
+    assert.match(await approvePost({ method: 'POST', token }), /didn’t post/)
+    assert.equal((await db('hq_picks').where({ id: pick.id }).first()).posted_at, null, 'a failure leaves it postable')
+    globalThis.fetch = async (url, init) => { calls.push([url, init]); return new Response(JSON.stringify({ data: { id: '1850000000000000000' } }), { status: 201 }) }
+    assert.match(await approvePost({ method: 'POST', token }), /Posted ✓/)
+    assert.equal(JSON.parse(calls.at(-1)[1].body).text, '🚨 Ruff in Maine')
+    assert.match(calls.at(-1)[1].headers.Authorization, /^OAuth /)
+    assert.match(await approvePost({ method: 'POST', token }), /Already posted/)
+    assert.equal(calls.length, 2, 'never posted twice')
+    assert.equal((await db('hq_picks').where({ id: pick.id }).first()).post_id, '1850000000000000000')
+    assert.match(await approvePost({ method: 'GET', token: 'forged' }), /expired/)
+  } finally { globalThis.fetch = original; keys.forEach((k) => delete process.env[k]) }
+})

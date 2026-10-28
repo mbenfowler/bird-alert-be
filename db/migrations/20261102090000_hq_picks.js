@@ -8,6 +8,9 @@ exports.up = async function (knex) {
     table.float('score').notNullable()
     table.string('share_id', 12)
     table.jsonb('detail').notNullable()
+    // Set once the owner approves and it goes out: one post per pick, never two.
+    table.timestamp('posted_at', { useTz: true })
+    table.string('post_id', 32)
     table.timestamp('created_at', { useTz: true }).notNullable().defaultTo(knex.fn.now())
     table.unique(['day', 'species_code', 'state'])
   })
