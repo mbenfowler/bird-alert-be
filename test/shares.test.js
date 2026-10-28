@@ -28,6 +28,7 @@ test('a preview card says what was shared, and is escaped into the page head', (
   assert.match(html, /property="og:image" content="https:\/\/img.example\/pb.jpg"/)
   assert.equal((html.match(/name="description"/g) || []).length, 1, 'the old description is replaced')
   assert.ok(!html.includes('<b>'))
+  assert.match(html, /addEventListener\('error'/, 'a page whose code fails to load reloads itself once')
   const route = previewFor({ kind: 'route', regionName: 'Hall', stops: [{ name: 'Lake Lanier--Longwood Park', lat: 34.3, lng: -83.8 }, { name: 'Chicopee Lake', lat: 34.25, lng: -83.85 }], drive: { minutes: 42, miles: 20.4 } })
   assert.match(previewFor({ ...sighting, id: 'abc123defg' }).image, /\/api\/map\?card=abc123defg$/, 'a sighting with a photo gets its own card')
   assert.equal(route.title, 'A birding route in Hall: 2 stops')
