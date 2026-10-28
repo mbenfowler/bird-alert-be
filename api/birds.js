@@ -2,6 +2,7 @@ const { route, HttpError } = require('../lib/http')
 const db = require('../lib/db')
 const { assertSpecies } = require('../lib/ebird')
 const { findOrCreateBirds } = require('../lib/enrich')
+const { withAba } = require('../lib/abaCodes')
 const { withTips } = require('../lib/tips')
 
 const MAX_CODES = 50
@@ -21,7 +22,8 @@ module.exports = route(['GET'], async (req, res) => {
     const list = codes.split(',').map((code) => code.trim()).filter(Boolean).map(assertSpecies)
     if (!list.length) return res.status(200).json([])
     if (list.length > MAX_CODES) throw new HttpError(400, `At most ${MAX_CODES} codes per request`)
-    const birds = withTips(await findOrCreateBirds(list))
+    // `aba`: the ABA Checklist code (credited wherever the app shows it), or null.
+    const birds = await withAba(withTips(await findOrCreateBirds(list)))
     res.setHeader('Cache-Control', BIRDS_CACHE)
     return res.status(200).json(birds)
   }

@@ -11,6 +11,7 @@ const { placeSearch, parsePoints } = require('../../lib/placeSearch')
 const { drive } = require('../../lib/routing')
 const { getShare, sharePage } = require('../../lib/shares')
 const { chase } = require('../../lib/chase')
+const { withAba } = require('../../lib/abaCodes')
 const { assertCronCaller } = require('../../lib/digest')
 
 const DAY = 86400
@@ -30,9 +31,9 @@ const resources = {
     handler: ({ region }) => ebird.recentObservations(ebird.assertRegion(region)),
     cacheControl: cache(300, 3600)
   },
-  // GET /api/ebird/notable?region=&back=30
+  // GET /api/ebird/notable?region=&back=30 -> eBird's notable sightings, each with its ABA Checklist code (`aba`, or null)
   notable: {
-    handler: ({ region, back }) => ebird.notableObservations(ebird.assertRegion(region), clampBack(back)),
+    handler: async ({ region, back }) => withAba(await ebird.notableObservations(ebird.assertRegion(region), clampBack(back))),
     cacheControl: cache(300, 3600)
   },
   // GET /api/ebird/species-observations?region=&code=&back=30

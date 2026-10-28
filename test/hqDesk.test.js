@@ -88,3 +88,14 @@ test('ABA Checklist codes rank a rarity for the whole ABA Area above a local odd
   assert.match(draftPost(withCodes[0], 'https://x.example/s', '2026-10-27'), /^🚨 Ruff in Maine · ABA Code 3\n/)
   assert.match(draftPost(withCodes[1], 'https://x.example/s', '2026-10-27'), /^🚨 Anhinga in New Jersey\n/, 'codes 1-2 are not shown')
 })
+
+test('codes 3-5 are shown and lead, rarest first; 1-2 and 6 keep their place', () => {
+  const { rarestFirst, isShown } = require('../lib/abaCodes')
+  const { sightingNotification } = require('../lib/notifications')
+  assert.deepEqual([1, 2, 3, 4, 5, 6].map(isShown), [false, false, true, true, true, false])
+  const items = [{ n: 'a', aba: 1 }, { n: 'b', aba: 3 }, { n: 'c', aba: null }, { n: 'd', aba: 5 }, { n: 'e', aba: 6 }, { n: 'f', aba: 3 }]
+  assert.deepEqual(rarestFirst(items).map((i) => i.n), ['d', 'b', 'f', 'a', 'c', 'e'])
+  const s = { speciesCode: 'roahaw', comName: 'Roadside Hawk', subId: 'S1', locName: 'Estero Llano Grande', obsDt: '2026-10-28 08:00', lat: 26.1, lng: -97.9, kind: 'notable' }
+  assert.equal(sightingNotification({ ...s, aba: 4 }).title, '❗ ABA Code 4: Roadside Hawk reported nearby')
+  assert.equal(sightingNotification({ ...s, aba: 1 }).title, '❗ Notable: Roadside Hawk reported nearby')
+})
