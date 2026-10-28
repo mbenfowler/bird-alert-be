@@ -69,3 +69,10 @@ test('the migration email has a section per movement, links out and an unsubscri
   assert.match(message.text, /- Winter Wren \(9 of 15 days this time last year\)/)
   assert.equal(migrationMessage(user, { arrived: [], departed: [], coming: [] }, null).subject, 'Migration this week in your area: a quiet week')
 })
+
+test('a sighting card carries its ABA code chip for codes 3-5 only', () => {
+  const base = { speciesCode: 'roahaw', comName: 'Roadside Hawk', subId: 'S1', locName: 'Estero Llano Grande', obsDt: '2026-10-28 08:00', lat: 26.1, lng: -97.9 }
+  assert.match(sightingsBody([{ ...base, aba: 4 }]), /Roadside Hawk <span[^>]*>ABA Code 4<\/span>/)
+  assert.ok(!sightingsBody([{ ...base, aba: 1 }]).includes('ABA Code'))
+  assert.ok(!sightingsBody([base]).includes('ABA Code'))
+})
