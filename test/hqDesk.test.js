@@ -1,6 +1,6 @@
 const { test } = require('node:test')
 const assert = require('node:assert/strict')
-const { pickRarities, draftPost, isWholeSpecies } = require('../lib/hqDesk')
+const { pickRarities, draftPost, isWholeSpecies, checkStillThere, stillLine } = require('../lib/hqDesk')
 
 const rec = (over) => ({ speciesCode: 'anhing', comName: 'Anhinga', sciName: 'Anhinga anhinga', subnational1Code: 'US-NJ', subnational1Name: 'New Jersey', subnational2Name: 'Burlington', locId: 'L1', locName: 'Laurel Acres Park', lat: 39.9, lng: -74.9, obsDt: '2026-10-27 08:00', subId: 'S1', userDisplayName: 'A', obsValid: true, obsReviewed: true, locationPrivate: false, ...over })
 
@@ -36,4 +36,31 @@ test('drafts fit a post, say how solid the report is, and carry the link', () =>
   assert.equal(isWholeSpecies('Brant (Pale-bellied)'), false)
   assert.equal(isWholeSpecies('Greater/Lesser Yellowlegs'), false)
   assert.equal(isWholeSpecies('Ruff'), true)
+})
+
+test('a post says the bird is still being seen, only when the checklists since say so', () => {
+  const [pick] = pickRarities(Array.from({ length: 5 }, (_, i) => rec({ subId: `S${i}`, userDisplayName: `B${i}` })))
+  const url = 'https://bird-alert.vercel.app/share/s/AbCdEfGhJk'
+  assert.match(draftPost({ ...pick, still: { checkedSince: 6, foundSince: 6, missesSince: 0 } }, url, '2026-10-27'), /👀 still there: on all 6 checklists since\n/)
+  assert.match(draftPost({ ...pick, still: { checkedSince: 6, foundSince: 5, missesSince: 1 } }, url, '2026-10-27'), /👀 on 5 of 6 checklists since\n/)
+  assert.equal(stillLine({ checkedSince: 3, foundSince: 0, missesSince: 3 }), null, 'misses only: say nothing rather than "0 of 3"')
+  assert.equal(stillLine({ checkedSince: 0, foundSince: 0, missesSince: 0 }), null)
+  assert.ok(!draftPost(pick, url, '2026-10-27').includes('👀'), 'unchecked: no line')
+  // A long name and place still fit: hashtags go before the "still there" line does.
+  const long = { ...pick, comName: 'Northern Rough-winged Swallow x Bank Swallow', place: { ...pick.place, locName: 'A'.repeat(150) }, still: { checkedSince: 2, foundSince: 2, missesSince: 0 } }
+  const text = draftPost(long, url, '2026-10-27')
+  assert.ok(text.length <= 280)
+  assert.ok(text.includes(url))
+})
+
+test('still-there checks run in rank order and stop when the time is up, leaving the rest unchecked', async () => {
+  const candidates = ['a', 'b', 'c', 'd', 'e', 'f'].map((code) => ({ speciesCode: code, place: { locId: 'L1' } }))
+  const asked = []
+  const slow = async ({ code, maxLooks }) => { asked.push([code, maxLooks]); await new Promise((r) => setTimeout(r, 30)); return { verdict: code === 'b' ? 'gone' : 'likely' } }
+  const out = await checkStillThere(candidates, { check: slow, budgetMs: 10 })
+  assert.deepEqual(asked.map((a) => a[0]), ['a', 'b', 'c', 'd'], 'four at a time, then the budget is spent')
+  assert.equal(asked[0][1], 4)
+  assert.deepEqual(out.map((p) => p.still?.verdict ?? null), ['likely', 'gone', 'likely', 'likely', null, null])
+  const failing = await checkStillThere(candidates.slice(0, 1), { check: async () => { throw new Error('eBird down') } })
+  assert.equal(failing[0].still, null, 'a failed check keeps the bird in')
 })

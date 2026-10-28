@@ -633,12 +633,13 @@ test('feedback is kept, emailed with the sender as reply-to, and capped per day'
 
 test('the HQ desk stores its picks, makes share links, emails them, and never pitches a bird twice in a row', async () => {
   const { runHqDesk } = require('../lib/hqDesk')
+  const noCheck = async () => null
   await db('birds').insert({ speciesCode: 'anhing', comName: 'Anhinga', sciName: 'Anhinga anhinga', birdImg: 'https://img.example/anhinga.jpg' }).onConflict('speciesCode').ignore()
   const records = Array.from({ length: 6 }, (_, i) => ({ speciesCode: 'anhing', comName: 'Anhinga', sciName: 'Anhinga anhinga', subnational1Code: 'US-NJ', subnational1Name: 'New Jersey', subnational2Name: 'Burlington', locId: 'L1', locName: 'Laurel Acres Park', lat: 39.9, lng: -74.9, obsDt: '2026-10-26 08:00', subId: `S${i}`, userDisplayName: `B${i}`, obsValid: true, obsReviewed: true, locationPrivate: false }))
   const mails = []
   process.env.FEEDBACK_TO = 'hq@example.com'
   try {
-    const first = await runHqDesk({ asOf: '2026-10-27', records, send: async (m) => { mails.push(m); return {} } })
+    const first = await runHqDesk({ asOf: '2026-10-27', records, check: noCheck, send: async (m) => { mails.push(m); return {} } })
     assert.deepEqual([first.picks, first.considered], [1, 6])
     assert.equal(mails[0].to, 'hq@example.com')
     assert.match(mails[0].text, /Anhinga in New Jersey/)
@@ -648,13 +649,23 @@ test('the HQ desk stores its picks, makes share links, emails them, and never pi
     const share = await db('shares').where({ id: row.share_id }).first()
     assert.equal(share.user_id, null)
     // A late scheduled run the same morning sends nothing more; a forced one sends again.
-    assert.equal((await runHqDesk({ asOf: '2026-10-27', records, send: async (m) => { mails.push(m); return {} } })).skipped, 'already sent today')
+    assert.equal((await runHqDesk({ asOf: '2026-10-27', records, check: noCheck, send: async (m) => { mails.push(m); return {} } })).skipped, 'already sent today')
     assert.equal(mails.length, 1)
-    await runHqDesk({ asOf: '2026-10-27', records, force: true, send: async (m) => { mails.push(m); return {} } })
+    await runHqDesk({ asOf: '2026-10-27', records, check: noCheck, force: true, send: async (m) => { mails.push(m); return {} } })
     assert.equal(mails.length, 2)
     mails.pop()
+    // A bird three checklists since have missed is left out, and the email says so; two misses aren't enough.
+    await db('birds').insert({ speciesCode: 'gocspa', comName: 'Golden-crowned Sparrow', sciName: 'Zonotrichia atricapilla' }).onConflict('speciesCode').ignore()
+    const sparrows = Array.from({ length: 4 }, (_, i) => ({ ...records[0], speciesCode: 'gocspa', comName: 'Golden-crowned Sparrow', locId: 'L2', locName: 'Palmyra Cove', subId: `G${i}` }))
+    const gone = async ({ code }) => ({ verdict: code === 'gocspa' ? 'gone' : 'fresh', checkedSince: 3, foundSince: 0, missesSince: 3 })
+    const ran = await runHqDesk({ asOf: '2026-11-15', records: sparrows, check: gone, send: async (m) => { mails.push(m); return {} } })
+    assert.deepEqual([ran.picks, ran.gone], [0, 1])
+    assert.equal(mails.length, 1, 'nothing to pitch, no email')
+    const twoMisses = async () => ({ verdict: 'gone', checkedSince: 2, foundSince: 0, missesSince: 2 })
+    assert.equal((await runHqDesk({ asOf: '2026-11-16', records: sparrows, check: twoMisses, send: async (m) => { mails.push(m); return {} } })).picks, 1)
+    assert.match(mails.pop().html, /Still there\?<\/strong> probably gone · 0 of 2 checklists since had it/)
     // The next morning the same bird isn't pitched again.
-    const second = await runHqDesk({ asOf: '2026-10-28', records, send: async (m) => { mails.push(m); return {} } })
+    const second = await runHqDesk({ asOf: '2026-10-28', records, check: noCheck, send: async (m) => { mails.push(m); return {} } })
     assert.equal(second.picks, 0)
     assert.equal(mails.length, 1, 'nothing new, no email')
   } finally { delete process.env.FEEDBACK_TO }
