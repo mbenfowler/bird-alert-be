@@ -1,5 +1,7 @@
 const { route, HttpError } = require('../lib/http')
 const { renderMap } = require('../lib/staticMap')
+const { renderCard } = require('../lib/shareCard')
+const db = require('../lib/db')
 
 const num = (value, min, max, label) => {
   const n = Number.parseFloat(value)
@@ -22,9 +24,17 @@ const parsePins = (value) => {
 // GET /api/map?lat=&lng=&zoom=14 -> JPEG map centred on the point with a pin: the picture on push
 // notifications. GET /api/map?pins=lat,lng,1;lat,lng,2 -> one map framed around several labelled
 // pins: the map in email digests. Cached hard: the same places always render the same map.
+// GET /api/map?card=<share id> -> the 1200x630 picture for a shared sighting's preview card: the
+// bird's photo whole, over a blurred copy of itself. Cached hard: a share never changes.
 module.exports = route(['GET'], async (req, res) => {
   let jpeg
-  if (req.query.pins !== undefined) {
+  if (req.query.card !== undefined) {
+    const id = String(req.query.card)
+    if (!/^[A-Za-z0-9]{6,12}$/.test(id)) throw new HttpError(404, 'Not found')
+    const share = await db('shares').where({ id, kind: 'sighting' }).first('payload')
+    if (!share?.payload?.birdImg) throw new HttpError(404, 'Not found')
+    jpeg = await renderCard(share.payload.birdImg)
+  } else if (req.query.pins !== undefined) {
     jpeg = await renderMap({ pins: parsePins(req.query.pins) })
   } else {
     const lat = num(req.query.lat, -85, 85, 'lat')
