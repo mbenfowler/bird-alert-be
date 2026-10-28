@@ -684,3 +684,24 @@ test('an HQ pick is posted only from its confirmation page, once, and a failed p
     assert.match(await approvePost({ method: 'GET', token: 'forged' }), /expired/)
   } finally { globalThis.fetch = original; keys.forEach((k) => delete process.env[k]) }
 })
+
+test('setup is marked done once, and only true is accepted', async () => {
+  const userApi = require('../api/user')
+  const { fakeReq, fakeRes } = require('./helpers')
+  const { createSession } = require('../lib/auth')
+  await db('users').where({ id: userId }).update({ onboarded_at: null })
+  const user = await db('users').where({ id: userId }).first()
+  const session = fakeRes(); createSession(session, user)
+  const cookie = String(session.headers['set-cookie']).split(';')[0]
+  const bad = fakeRes()
+  await userApi(fakeReq({ method: 'PATCH', headers: { cookie }, body: { onboarded: false } }), bad)
+  assert.equal(bad.statusCode, 400)
+  const done = fakeRes()
+  await userApi(fakeReq({ method: 'PATCH', headers: { cookie }, body: { onboarded: true } }), done)
+  assert.equal(done.statusCode, 200)
+  const first = done.body.onboarded_at
+  assert.ok(first)
+  const again = fakeRes()
+  await userApi(fakeReq({ method: 'PATCH', headers: { cookie }, body: { onboarded: true } }), again)
+  assert.equal(new Date(again.body.onboarded_at).getTime(), new Date(first).getTime(), 'the first time is kept')
+})
