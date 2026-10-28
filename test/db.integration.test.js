@@ -329,20 +329,24 @@ test('predictions are recorded once a day and graded a week later against the ch
   assert.equal(await recordPredictions('US-GA-139', 'norcar', asOf, result), 3)
   assert.equal(Number((await db('place_predictions').where({ region: 'US-GA-139', species_code: 'norcar' }).count('* as n').first()).n), 3)
 
-  // The week after: LA birded twice with the cardinal once; LB birded once without it; LC never birded.
+  // The week after: LA's first visit missed the cardinal and a later one found it (graded on the first,
+  // the one visit a chance is about; an unopened list before it doesn't count); LB birded once without
+  // it; LC never birded.
+  const opened = new Date()
   await db('checklists').insert([
-    { sub_id: 'SGA1', region: 'US-GA-139', loc_id: 'LA', loc_name: 'A', obs_day: '2026-10-03', num_species: 3 },
-    { sub_id: 'SGA2', region: 'US-GA-139', loc_id: 'LA', loc_name: 'A', obs_day: '2026-10-06', num_species: 3 },
-    { sub_id: 'SGB1', region: 'US-GA-139', loc_id: 'LB', loc_name: 'B', obs_day: '2026-10-05', num_species: 2 },
-    { sub_id: 'SGA0', region: 'US-GA-139', loc_id: 'LA', loc_name: 'A', obs_day: '2026-10-01', num_species: 1 }
+    { sub_id: 'SGAX', region: 'US-GA-139', loc_id: 'LA', loc_name: 'A', obs_day: '2026-10-02', num_species: 9 },
+    { sub_id: 'SGA1', region: 'US-GA-139', loc_id: 'LA', loc_name: 'A', obs_day: '2026-10-03', num_species: 3, detail_fetched_at: opened },
+    { sub_id: 'SGA2', region: 'US-GA-139', loc_id: 'LA', loc_name: 'A', obs_day: '2026-10-06', num_species: 3, detail_fetched_at: opened },
+    { sub_id: 'SGB1', region: 'US-GA-139', loc_id: 'LB', loc_name: 'B', obs_day: '2026-10-05', num_species: 2, detail_fetched_at: opened },
+    { sub_id: 'SGA0', region: 'US-GA-139', loc_id: 'LA', loc_name: 'A', obs_day: '2026-10-01', num_species: 1, detail_fetched_at: opened }
   ]).onConflict('sub_id').ignore()
   await db('checklist_species').insert([{ sub_id: 'SGA2', species_code: 'norcar', how_many: 1 }, { sub_id: 'SGA0', species_code: 'norcar', how_many: 1 }]).onConflict(['sub_id', 'species_code']).ignore()
   assert.equal(await gradeDue('2026-10-07'), 0, 'not due until a week has passed')
   assert.equal(await gradeDue('2026-10-08'), 3)
   const graded = Object.fromEntries((await db('place_predictions').where({ region: 'US-GA-139' }).select('loc_id', 'visits', 'outcome')).map((r) => [r.loc_id, [r.visits, r.outcome]]))
-  assert.deepEqual(graded, { LA: [2, true], LB: [1, false], LC: [0, null] })
+  assert.deepEqual(graded, { LA: [3, false], LB: [1, false], LC: [0, null] })
   const acc = await accuracy('US-GA-139', { asOf: '2026-10-08' })
-  assert.deepEqual(acc, { High: { n: 1, hits: 1, rate: 100, enough: false }, Fair: { n: 1, hits: 0, rate: 0, enough: false } })
+  assert.deepEqual(acc, { High: { n: 1, hits: 0, rate: 0, enough: false }, Fair: { n: 1, hits: 0, rate: 0, enough: false } })
 
   // The daily pass runs once per day per region and grades what is due.
   let whereCalls = 0
