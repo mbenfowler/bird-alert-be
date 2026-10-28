@@ -29,6 +29,7 @@ test('a preview card says what was shared, and is escaped into the page head', (
   assert.equal((html.match(/name="description"/g) || []).length, 1, 'the old description is replaced')
   assert.ok(!html.includes('<b>'))
   const route = previewFor({ kind: 'route', regionName: 'Hall', stops: [{ name: 'Lake Lanier--Longwood Park', lat: 34.3, lng: -83.8 }, { name: 'Chicopee Lake', lat: 34.25, lng: -83.85 }], drive: { minutes: 42, miles: 20.4 } })
+  assert.match(previewFor({ ...sighting, id: 'abc123defg' }).image, /\/api\/map\?card=abc123defg$/, 'a sighting with a photo gets its own card')
   assert.equal(route.title, 'A birding route in Hall: 2 stops')
   assert.match(route.description, /^Longwood Park → Chicopee Lake · 42 min, 20.4 mi\./)
   assert.match(route.image, /\/api\/map\?pins=34\.3000%2C-83\.8000%2C1%3B/)
@@ -38,4 +39,17 @@ test('share ids are short and unambiguous', () => {
   const id = newId()
   assert.match(id, /^[A-Za-z2-9]{10}$/)
   assert.ok(!/[0O1lI]/.test(id))
+})
+
+test('bird photos are asked for at card size where the host can resize them', () => {
+  const { cardImage } = require('../lib/shares')
+  const card = new URL(cardImage('https://images.unsplash.com/photo-1623798275980-c6dbd4c4d9f0?q=75&fm=jpg&w=400&fit=max'))
+  assert.deepEqual([card.searchParams.get('w'), card.searchParams.get('h'), card.searchParams.get('fit')], ['1200', '630', 'crop'])
+  assert.equal(cardImage('https://upload.wikimedia.org/a/bird.jpg'), 'https://upload.wikimedia.org/a/bird.jpg')
+})
+
+test('share cards only fetch photos from the hosts our birds come from', async () => {
+  const { renderCard } = require('../lib/shareCard')
+  await assert.rejects(renderCard('https://evil.example/x.jpg'), /not allowed/)
+  await assert.rejects(renderCard('http://images.unsplash.com/x.jpg'), /not allowed/)
 })
