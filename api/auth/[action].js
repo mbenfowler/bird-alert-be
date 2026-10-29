@@ -13,6 +13,7 @@ const passkeys = require('../../lib/passkeys')
 const { assertRegion } = require('../../lib/ebird')
 const { signupSourceFor } = require('../../lib/signupSource')
 const { stateOfRegion } = require('../../lib/regions')
+const { syncNewRegionSoon } = require('../../lib/checklists')
 
 /** A session starts (signup, login, passkey) or renews (each app load): note that they were here. */
 const startSession = async (res, user) => {
@@ -59,6 +60,7 @@ const actions = {
         .returning('*')
 
       await startSession(res, user)
+      if (user.location) syncNewRegionSoon(user.location)
       sendConfirmationEmail(user).catch((error) => console.error('Confirmation email failed:', error))
       res.status(201).json(await withPasskeys(user))
     }
