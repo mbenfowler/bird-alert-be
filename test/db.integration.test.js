@@ -859,6 +859,41 @@ test('setup is marked done once, and only true is accepted', async () => {
   assert.equal(new Date(again.body.onboarded_at).getTime(), new Date(first).getTime(), 'the first time is kept')
 })
 
+test('a person can delete their account: everything kept for it goes, shared links stay unattributed, and the session ends', async () => {
+  const userApi = require('../api/user')
+  const { fakeReq, fakeRes } = require('./helpers')
+  const { createSession, getSessionUser } = require('../lib/auth')
+  const [{ id }] = await db('users').insert({ email: 'leaving@example.com', password_hash: 'x', location: 'US-GA-139', state: 'GA' }).returning('id')
+  const [{ id: birdId }] = await db('birds').insert({ comName: 'Leaving Sparrow', sciName: 'Passer abiens', speciesCode: 'leaspa', category: 'species' }).returning('id')
+  await db('saved_birds').insert({ user_id: id, speciesCode: 'leaspa', bird_id: birdId })
+  await db('seen_birds').insert({ user_id: id, species_code: 'leaspa', source: 'manual' })
+  await db('shares').insert({ id: 'leavingAbc', user_id: id, kind: 'sighting', payload: JSON.stringify({}) })
+  await db('auth_throttle').insert({ key: 'login:leaving@example.com', attempts: 3, window_start: new Date() })
+  await db('auth_throttle').insert({ key: 'login:other@example.com', attempts: 1, window_start: new Date() })
+  const count = async (table, where) => Number((await db(table).where(where).count('* as n').first()).n)
+  assert.equal(await count('saved_birds', { user_id: id }), 1)
+  const user = await db('users').where({ id }).first()
+  const session = fakeRes(); createSession(session, user)
+  const cookie = String(session.headers['set-cookie']).split(';')[0]
+
+  const unconfirmed = fakeRes()
+  await userApi(fakeReq({ method: 'DELETE', headers: { cookie }, body: {} }), unconfirmed)
+  assert.equal(unconfirmed.statusCode, 400, 'nothing goes without the confirmation')
+  assert.ok(await db('users').where({ id }).first())
+
+  const res = fakeRes()
+  await userApi(fakeReq({ method: 'DELETE', headers: { cookie }, body: { confirm: 'delete' } }), res)
+  assert.equal(res.statusCode, 204)
+  assert.match(String(res.headers['set-cookie']), /Max-Age=0|Expires=Thu, 01 Jan 1970/i, 'the session cookie is cleared')
+  assert.equal(await db('users').where({ id }).first(), undefined)
+  assert.equal(await count('saved_birds', { user_id: id }), 0, 'the watch list goes with it')
+  assert.equal(await count('seen_birds', { user_id: id }), 0, 'and the life list')
+  assert.equal(await count('auth_throttle', { key: 'login:leaving@example.com' }), 0)
+  assert.equal(await count('auth_throttle', { key: 'login:other@example.com' }), 1, 'someone else’s attempts are left alone')
+  assert.equal((await db('shares').where({ id: 'leavingAbc' }).first()).user_id, null, 'a shared link stays up, unattributed')
+  assert.equal(await getSessionUser(fakeReq({ headers: { cookie } })), null, 'the old cookie no longer signs anyone in')
+})
+
 test('the admin numbers: signups with their source, who opened the app, late jobs, and the database against its limit', async () => {
   const { adminStats, adminSection } = require('../lib/adminStats')
   const { touchLastSeen } = require('../lib/users')
