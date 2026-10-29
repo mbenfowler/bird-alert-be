@@ -270,6 +270,42 @@ test('checklists are listed once, fetched in full newest first, and not fetched 
   assert.equal(fetched.length, 2)
 })
 
+test('the checklist sync takes the region synced longest ago first, and says more when out of time', async () => {
+  const { runChecklistSync } = require('../lib/checklists')
+  const regions = ['US-GA-139', 'US-NC-119', 'US-FL-071']
+  const order = []
+  // Each sync uses up the call's time, so one region fits per call.
+  const slow = (budget) => async (code) => { order.push(code); budget.left = 0; return { region: code } }
+  const call = async () => {
+    const budget = { left: 1 }
+    const fake = slow(budget)
+    let now = Date.now()
+    const realNow = Date.now
+    Date.now = () => (budget.left ? now : now + 60_000)
+    try { return await runChecklistSync({ regions, deadline: now + 45_000, sync: fake }) } finally { Date.now = realNow }
+  }
+  await db('job_runs').where('kind', 'like', 'checklist-sync:%').del()
+  // US-GA-139 was synced recently, the others never: they go first.
+  await db('job_runs').insert({ kind: 'checklist-sync:US-GA-139', ran_at: new Date(Date.now() - 3_600_000), detail: null })
+  const first = await call()
+  assert.equal(first.more, true)
+  const second = await call()
+  assert.equal(second.more, true)
+  const third = await call()
+  assert.equal(third.more, false, 'the third call reaches the last region due, so the round is done')
+  assert.deepEqual(order.slice(0, 2).sort(), ['US-FL-071', 'US-NC-119'])
+  assert.equal(order[2], 'US-GA-139')
+  // All three were synced in this round, so a further call has nothing left and says so.
+  const done = await runChecklistSync({ regions, deadline: Date.now() + 45_000, sync: async (code) => ({ region: code }) })
+  assert.equal(done.more, false)
+  assert.equal(done.regions.length, 0)
+  // An hour on, every region is due again, and with time to spare all are synced in one call.
+  await db('job_runs').where('kind', 'like', 'checklist-sync:%').update({ ran_at: new Date(Date.now() - 3_600_000) })
+  const hourLater = await runChecklistSync({ regions, deadline: Date.now() + 45_000, sync: async (code) => ({ region: code }) })
+  assert.equal(hourLater.more, false)
+  assert.equal(hourLater.regions.length, 3)
+})
+
 test('where to find a species: tables and the live feed become ranked places with evidence', async () => {
   const { whereToFind } = require('../lib/hotspots')
   const asOf = '2026-10-25'

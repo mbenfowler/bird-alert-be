@@ -2,7 +2,7 @@ const { route, HttpError } = require('../../lib/http')
 const ebird = require('../../lib/ebird')
 const db = require('../../lib/db')
 const { arrivingSoon, seasonality } = require('../../lib/seasonality')
-const { syncChecklists, userRegions } = require('../../lib/checklists')
+const { runChecklistSync, userRegions } = require('../../lib/checklists')
 const { whereToFind, notableCodes } = require('../../lib/hotspots')
 const { dailyPass, accuracy } = require('../../lib/grading')
 const { whereToGo, parseOrigin } = require('../../lib/whereToGo')
@@ -115,24 +115,16 @@ const resources = {
     cacheControl: cache(WEEK, 4 * WEEK)
   },
   // GET /api/ebird/sync-checklists[?region=] (hourly, GitHub Actions; cron auth) -> per region, what was
-  // listed, added and fetched in full. Keeps the checklists tables current within the function's time budget.
+  // listed, added and fetched in full, plus `more` when the time budget ran out (call again). The region
+  // synced longest ago goes first, so new regions with a big backlog can't starve the rest.
   'sync-checklists': {
     handler: async ({ region }, req) => {
       assertCronCaller(req)
       const regions = region ? [ebird.assertRegion(region)] : await userRegions()
       const deadline = Date.now() + 45_000
-      const results = []
-      for (const code of regions) {
-        if (Date.now() > deadline) break
-        results.push(await syncChecklists(code, { detailLimit: 40, deadline }))
-      }
       // Once a day per region: record what the ranking says and grade last week's predictions.
-      const grading = []
-      for (const code of regions) {
-        if (Date.now() > deadline) break
-        try { grading.push(await dailyPass(code, { where: whereToFind, notable: await notableCodes(code), deadline })) } catch (error) { console.error(`Grading for ${code} failed:`, error.message) }
-      }
-      return { regions: results, grading }
+      const grade = async (code) => dailyPass(code, { where: whereToFind, notable: await notableCodes(code), deadline })
+      return runChecklistSync({ regions, deadline, grade })
     },
     cacheControl: 'no-store'
   },
