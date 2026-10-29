@@ -3,6 +3,7 @@ const ebird = require('../../lib/ebird')
 const db = require('../../lib/db')
 const { arrivingSoon, seasonality } = require('../../lib/seasonality')
 const { runChecklistSync, userRegions } = require('../../lib/checklists')
+const { pruneDaily } = require('../../lib/retention')
 const { whereToFind, notableCodes } = require('../../lib/hotspots')
 const { dailyPass, accuracy } = require('../../lib/grading')
 const { whereToGo, parseOrigin } = require('../../lib/whereToGo')
@@ -124,7 +125,12 @@ const resources = {
       const deadline = Date.now() + 45_000
       // Once a day per region: record what the ranking says and grade last week's predictions.
       const grade = async (code) => dailyPass(code, { where: whereToFind, notable: await notableCodes(code), deadline })
-      return runChecklistSync({ regions, deadline, grade })
+      const result = await runChecklistSync({ regions, deadline, grade })
+      // Once a day, after a round is done: drop detail older than the app reads.
+      if (!result.more) {
+        try { result.retention = await pruneDaily() } catch (error) { console.error('Retention failed:', error.message) }
+      }
+      return result
     },
     cacheControl: 'no-store'
   },
