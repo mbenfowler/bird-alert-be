@@ -12,6 +12,7 @@ const { assertNotThrottled, recordAttempt, clearAttempts } = require('../../lib/
 const passkeys = require('../../lib/passkeys')
 const { assertRegion } = require('../../lib/ebird')
 const { signupSourceFor } = require('../../lib/signupSource')
+const { stateOfRegion } = require('../../lib/regions')
 
 /** A session starts (signup, login, passkey) or renews (each app load): note that they were here. */
 const startSession = async (res, user) => {
@@ -23,9 +24,9 @@ const startSession = async (res, user) => {
 const signupPlace = (state, location) => {
   if (!location) return { state: '', location: '' }
   const code = assertRegion(String(location))
-  const m = code.match(/^US-([A-Z]{2})-[A-Z0-9]{1,5}$/)
-  if (!m || (state && String(state).toUpperCase() !== m[1])) return { state: '', location: '' }
-  return { state: m[1], location: code }
+  const regionState = stateOfRegion(code)
+  if (!regionState || (state && String(state).toUpperCase() !== regionState)) return { state: '', location: '' }
+  return { state: regionState, location: code }
 }
 /** The user as the app sees them, with whether they have a passkey yet. */
 const withPasskeys = async (user) => ({ ...sanitizeUser(user), hasPasskey: Boolean(await db('passkeys').where({ user_id: user.id }).first('id')) })
