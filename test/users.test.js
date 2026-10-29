@@ -42,7 +42,20 @@ test('what brought someone in is cut down to safe pieces, and never sent back to
   assert.equal(sourceLabel({ ref: 't.co', share: 'jHwrtfGDai' }), 'x')
   assert.equal(sourceLabel({ utm: 'instagram', ref: 't.co' }), 'instagram', 'a tag wins over the referrer')
   assert.equal(sourceLabel({ share: 'jHwrtfGDai' }), 'share link')
+  assert.equal(sourceLabel({ landing: 'login', app: 'facebook' }), 'facebook', 'the in-app browser names a signup that brought nothing else')
+  assert.equal(sourceLabel({ utm: 'fb-ebird', app: 'facebook' }), 'fb-ebird')
   assert.equal(sourceLabel({ landing: 'home' }), 'direct')
   assert.equal(sourceLabel(null), 'unknown')
   assert.equal(sanitizeUser({ id: 1, email: 'a@b.co', password_hash: 'x', signup_source: { ref: 't.co' } }).signup_source, undefined)
+})
+
+test('signups through an app\'s built-in browser are tagged from the user agent', () => {
+  const { signupSourceFor, inAppBrowser } = require('../lib/signupSource')
+  const fb = 'Mozilla/5.0 (iPhone; CPU iPhone OS 26_6_1 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/23G83 Safari/604.1 [FBAN/FBIOS;FBAV/584.1.0.65.70;FBDV/iPhone16,2]'
+  assert.equal(inAppBrowser(fb), 'facebook')
+  assert.equal(inAppBrowser('Mozilla/5.0 (iPhone) AppleWebKit/605.1.15 Mobile/15E148 Instagram 400.0.0.0'), 'instagram')
+  assert.equal(inAppBrowser('Mozilla/5.0 (iPhone) AppleWebKit/605.1.15 Version/26.6.1 Mobile/15E148 Safari/604.1'), null)
+  assert.deepEqual(signupSourceFor(null, fb), { app: 'facebook' }, 'nothing from the browser, still tagged')
+  assert.deepEqual(signupSourceFor({ landing: 'home', utm: 'fb-ebird' }, fb), { landing: 'home', utm: 'fb-ebird', app: 'facebook' })
+  assert.equal(signupSourceFor(null, 'curl/8'), null)
 })

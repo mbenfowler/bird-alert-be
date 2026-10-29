@@ -11,7 +11,7 @@ const { sendConfirmationEmail, sendPasswordResetEmail } = require('../../lib/mai
 const { assertNotThrottled, recordAttempt, clearAttempts } = require('../../lib/throttle')
 const passkeys = require('../../lib/passkeys')
 const { assertRegion } = require('../../lib/ebird')
-const { cleanSignupSource } = require('../../lib/signupSource')
+const { signupSourceFor } = require('../../lib/signupSource')
 
 /** A signup may bring the county the visitor was looking at, so they land on their birds. */
 const signupPlace = (state, location) => {
@@ -48,7 +48,7 @@ const actions = {
       if (await findUserByEmail(email)) throw new HttpError(409, 'An account with that email already exists')
 
       const [user] = await db('users')
-        .insert({ email, password_hash: await hashPassword(password), ...signupPlace(state, location), signup_source: cleanSignupSource(source) })
+        .insert({ email, password_hash: await hashPassword(password), ...signupPlace(state, location), signup_source: signupSourceFor(source, req.headers['user-agent']) })
         .returning('*')
 
       createSession(res, user)
