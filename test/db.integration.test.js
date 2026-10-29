@@ -316,7 +316,7 @@ test('a newly chosen county is synced at once, and only the first time', async (
   assert.equal(await syncNewRegion('CA-QC-BH', { sync: fake }), null, 'a second save of the same area does not sync again')
   assert.equal(await syncNewRegion('', { sync: fake }), null)
   assert.equal(await syncNewRegion('US-GA', { sync: fake }), null, 'a state is not a county')
-  assert.deepEqual(synced, [['CA-QC-BH', 80]])
+  assert.deepEqual(synced, [['CA-QC-BH', 30]])
 })
 
 test('retention deletes checklists past 90 days and strips old history to region, day and species, once a day', async () => {

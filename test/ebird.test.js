@@ -43,7 +43,7 @@ test('the upstream status survives the 502 wrapper', async () => {
   console.error = () => {}
   try {
     await withFetch(() => new Response('slow down', { status: 429 }), async () => {
-      await assert.rejects(ebird.historicObservations('US-GA-139', '2026-10-13'), (error) => error.status === 502 && error.upstream === 429)
+      await assert.rejects(ebird.historicObservations('US-GA-139', '2026-10-13'), (error) => error.status === 503 && error.upstream === 429 && /eBird is busy/.test(error.message))
     })
   } finally {
     console.error = quiet
@@ -58,6 +58,6 @@ test('a throttled eBird call is retried once after a breath', async () => {
   assert.equal(calls, 2)
   assert.deepEqual(data, [{ speciesCode: 'cangoo' }])
   calls = 0
-  await assert.rejects(withFetch(() => { calls += 1; return new Response('slow down', { status: 429 }) }, () => ebird.recentObservations('US-GA-139')), (error) => error.status === 502 && error.upstream === 429)
+  await assert.rejects(withFetch(() => { calls += 1; return new Response('slow down', { status: 429 }) }, () => ebird.recentObservations('US-GA-139')), (error) => error.status === 503 && error.upstream === 429 && /eBird is busy/.test(error.message))
   assert.equal(calls, 2)
 })
