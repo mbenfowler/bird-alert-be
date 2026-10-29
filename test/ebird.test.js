@@ -9,7 +9,9 @@ test('identifier validation blocks anything that is not eBird-shaped', () => {
   assert.equal(ebird.assertSpecies('cangoo'), 'cangoo')
   assert.throws(() => ebird.assertSpecies('DROP TABLE'), /Invalid species/)
   assert.equal(ebird.assertState('ga'), 'ga')
-  assert.throws(() => ebird.assertState('GAA'), /Invalid state/)
+  assert.equal(ebird.assertState('JAL'), 'JAL', 'Mexican states are three letters')
+  assert.throws(() => ebird.assertState('GAAA'), /Invalid state/)
+  assert.throws(() => ebird.assertState('G'), /Invalid state/)
 })
 
 test('requests carry the API key and encode parameters', async () => {

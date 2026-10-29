@@ -34,7 +34,7 @@ const resources = {
   },
   // GET /api/ebird/notable?region=&back=30 -> eBird's notable sightings, each with its ABA Checklist code (`aba`, or null)
   notable: {
-    handler: async ({ region, back }) => withAba(await ebird.notableObservations(ebird.assertRegion(region), clampBack(back))),
+    handler: async ({ region, back }) => withAba(await ebird.notableObservations(ebird.assertRegion(region), clampBack(back)), { region }),
     cacheControl: cache(300, 3600)
   },
   // GET /api/ebird/species-observations?region=&code=&back=30
