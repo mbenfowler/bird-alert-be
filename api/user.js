@@ -1,6 +1,6 @@
 const { route, body, HttpError } = require('../lib/http')
 const db = require('../lib/db')
-const { requireUser } = require('../lib/auth')
+const { requireUser, clearSession } = require('../lib/auth')
 const { normalizeEmail, assertValidEmail, findUserByEmail, sanitizeUser } = require('../lib/users')
 const { sendConfirmationEmail } = require('../lib/mailer')
 const { isValidTimezone } = require('../lib/quietHours')
@@ -9,8 +9,24 @@ const { syncNewRegionSoon } = require('../lib/checklists')
 const STRING_FIELDS = ['state', 'location']
 const BOOLEAN_FIELDS = ['alert_digest_email_enabled', 'rare_sightings_email_enabled', 'push_watchlist_enabled', 'push_notable_enabled', 'push_notable_batched', 'push_first_of_season', 'push_lifer_enabled', 'migration_email_enabled']
 
+// DELETE /api/user { confirm: 'delete' } -> 204: the account and everything kept for it (watch list, life
+// list, alerts, passkeys, routes) are gone for good, and the session ends. Shared links stay up,
+// unattributed; they hold no personal data.
+const deleteAccount = async (req, res) => {
+  const user = await requireUser(req)
+  if (body(req).confirm !== 'delete') throw new HttpError(400, 'Confirm by sending { confirm: "delete" }')
+  await db.transaction(async (trx) => {
+    // Throttle rows are keyed 'scope:email' (login, forgot), not by id, so they go by address.
+    await trx('auth_throttle').whereRaw("substring(key from position(':' in key) + 1) = ?", [user.email]).del()
+    await trx('users').where({ id: user.id }).del()
+  })
+  clearSession(res)
+  res.status(204).end()
+}
+
 // PATCH /api/user { onboarded?: true (setup finished or skipped; it never shows again), email?, state?, location?, alert_digest_email_enabled?, rare_sightings_email_enabled?, push_watchlist_enabled?, push_notable_enabled?, push_notable_batched?, push_first_of_season?, push_lifer_enabled?, migration_email_enabled? }
-module.exports = route(['PATCH'], async (req, res) => {
+module.exports = route(['PATCH', 'DELETE'], async (req, res) => {
+  if (req.method === 'DELETE') return deleteAccount(req, res)
   const user = await requireUser(req)
   const input = body(req)
   const changes = { updated_at: new Date() }
