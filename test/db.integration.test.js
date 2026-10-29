@@ -851,3 +851,10 @@ test('the admin numbers: signups with their source, who opened the app, late job
   assert.match(text, /Database: \d+ MB of 512 MB/)
   await db('users').where({ id }).del()
 })
+
+test('where to go in an area chosen minutes ago: no places, and it says nothing is on file yet', async () => {
+  const { whereToGo } = require('../lib/whereToGo')
+  const go = await whereToGo('CA-QC-BH', ['cangoo', 'killde'])
+  assert.deepEqual(go.places, [])
+  assert.deepEqual(go.onFile, { checklists: 0 })
+})
