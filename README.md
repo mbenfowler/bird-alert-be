@@ -140,7 +140,9 @@ pg_restore --clean --if-exists --no-owner --dbname "$TARGET_PG_URL" restore.dump
 
 `node scripts/stats.js` prints how the app is doing from our own tables: new accounts (and how many set a county or confirmed their email), push devices, watch-list and life-list birds added, passkeys, saved routes, share links made and opened, for the last 7 and 30 days and all time. Page views, referrers and countries are in Vercel Web Analytics on the front end. Prefix with `NODE_ENV=production PROD_PG_URL=...` to read production.
 
-`node scripts/backfill-images.js` fills in pictures for stored birds that have none (Nuthatch, then Wikipedia's lead image). Prefix with `NODE_ENV=production PROD_PG_URL=...` to run against production.
+`node scripts/backfill-images.js` fills in pictures for stored birds that have none (the lead photo of the Wikipedia article that names the bird). Prefix with `NODE_ENV=production PROD_PG_URL=...` to run against production.
+
+`node scripts/refresh-photos.js --report photos.json` re-checks every species' photo and Wikipedia link and writes the planned changes without touching the database; after a look, `--apply photos.json` writes exactly those. A bird whose article can't be confirmed loses its photo rather than keep a wrong one.
 
 ## ABA Checklist codes
 
@@ -171,7 +173,7 @@ The workflows keep their own `schedule:` as a backup. Running a job twice is har
 
 ## Deploying
 
-Set these in the Vercel project: `PROD_PG_URL`, `SESSION_SECRET`, `CRON_SECRET`, `APP_BASE_URL`, `EBIRD_API_KEY`, `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY`, `VAPID_SUBJECT` (web push; generate the keys with `npx web-push generate-vapid-keys`), `NUTHATCH_API_KEY` (bird images; optional), and `APP_EMAIL` plus `APP_PW` (a Gmail app password). Run `NODE_ENV=production npx knex migrate:latest` against the production database before the first deploy of a migration.
+Set these in the Vercel project: `PROD_PG_URL`, `SESSION_SECRET`, `CRON_SECRET`, `APP_BASE_URL`, `EBIRD_API_KEY`, `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY`, `VAPID_SUBJECT` (web push; generate the keys with `npx web-push generate-vapid-keys`), and `APP_EMAIL` plus `APP_PW` (a Gmail app password). Run `NODE_ENV=production npx knex migrate:latest` against the production database before the first deploy of a migration.
 
 ## Running at scale
 

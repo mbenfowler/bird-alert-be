@@ -1,12 +1,12 @@
 #!/usr/bin/env node
-// Fills in birdImg for stored birds that have none, using Nuthatch then Wikipedia.
+// Fills in birdImg for stored birds that have none, from their Wikipedia article.
 // Usage: node scripts/backfill-images.js            (DEV_PG_URL)
 //        NODE_ENV=production PROD_PG_URL=... node scripts/backfill-images.js
 require('dotenv').config({ quiet: true })
 const db = require('../lib/db')
 const { lookupImage } = require('../lib/enrich')
 
-// Wikipedia and Nuthatch rate-limit bursts; one lookup at a time with a short pause stays under it.
+// Wikipedia rate-limits bursts; one lookup at a time with a short pause stays under it.
 const PAUSE_MS = 250
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms))
 
