@@ -4,14 +4,15 @@
  */
 const bcrypt = require('bcryptjs')
 
-// Seed accounts all use the password below; change it before seeding a real database.
+// Local development only: every seed account uses this password, and the repository is public,
+// so never run these seeds against a real database (db/seeds/prod has random passwords).
 const password_hash = bcrypt.hashSync('birdalert', 10)
 
 exports.seed = async function(knex) {
   try {
     await knex('users').insert({
       password_hash,
-      email: 'robinware456@gmail.com',
+      email: 'birder@example.com',
       location: '',
       state: '',
       email_confirmed: false,
@@ -20,7 +21,7 @@ exports.seed = async function(knex) {
     }, 'id')
     await knex('users').insert({
       password_hash,
-      email: 'mbfowler@gmail.com',
+      email: 'robin@example.com',
       location: 'US-GA-139',
       state: 'GA',
       email_confirmed: true,
@@ -29,7 +30,7 @@ exports.seed = async function(knex) {
     }, 'id')
     await knex('users').insert({
       password_hash,
-      email: 'joyce.fowler@bellsouth.net',
+      email: 'wren@example.com',
       location: 'US-GA-139',
       state: 'GA',
       email_confirmed: true,
