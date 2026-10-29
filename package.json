@@ -4,6 +4,7 @@
   "private": true,
   "dependencies": {
     "@simplewebauthn/server": "^13.3.3",
+    "@vercel/functions": "3.9.11",
     "bcryptjs": "^3.0.3",
     "dotenv": "^18.0.8",
     "jimp": "^1.6.1",

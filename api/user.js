@@ -4,6 +4,7 @@ const { requireUser } = require('../lib/auth')
 const { normalizeEmail, assertValidEmail, findUserByEmail, sanitizeUser } = require('../lib/users')
 const { sendConfirmationEmail } = require('../lib/mailer')
 const { isValidTimezone } = require('../lib/quietHours')
+const { syncNewRegionSoon } = require('../lib/checklists')
 
 const STRING_FIELDS = ['state', 'location']
 const BOOLEAN_FIELDS = ['alert_digest_email_enabled', 'rare_sightings_email_enabled', 'push_watchlist_enabled', 'push_notable_enabled', 'push_notable_batched', 'push_first_of_season', 'push_lifer_enabled', 'migration_email_enabled']
@@ -58,6 +59,7 @@ module.exports = route(['PATCH'], async (req, res) => {
   }
 
   const [updated] = await db('users').where({ id: user.id }).update(changes).returning('*')
+  if (updated.location && updated.location !== user.location) syncNewRegionSoon(updated.location)
   if (emailChanged) sendConfirmationEmail(updated).catch((error) => console.error('Confirmation email failed:', error))
 
   res.status(200).json(sanitizeUser(updated))

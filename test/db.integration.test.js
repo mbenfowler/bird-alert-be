@@ -306,6 +306,19 @@ test('the checklist sync takes the region synced longest ago first, and says mor
   assert.equal(hourLater.regions.length, 3)
 })
 
+test('a newly chosen county is synced at once, and only the first time', async () => {
+  const { syncNewRegion } = require('../lib/checklists')
+  await db('job_runs').where('kind', 'like', 'checklist-sync:%').del()
+  const synced = []
+  const fake = async (code, opts) => { synced.push([code, opts.detailLimit]); return { region: code } }
+  assert.deepEqual(await syncNewRegion('CA-QC-BH', { sync: fake }), { region: 'CA-QC-BH' })
+  assert.ok(await db('job_runs').where({ kind: 'checklist-sync:CA-QC-BH' }).first(), 'the claim also tells the hourly run it was just done')
+  assert.equal(await syncNewRegion('CA-QC-BH', { sync: fake }), null, 'a second save of the same area does not sync again')
+  assert.equal(await syncNewRegion('', { sync: fake }), null)
+  assert.equal(await syncNewRegion('US-GA', { sync: fake }), null, 'a state is not a county')
+  assert.deepEqual(synced, [['CA-QC-BH', 80]])
+})
+
 test('retention deletes checklists past 90 days and strips old history to region, day and species, once a day', async () => {
   const { pruneOld, pruneDaily } = require('../lib/retention')
   const ago = (n) => new Date(Date.now() - n * 86_400_000).toISOString().slice(0, 10)
