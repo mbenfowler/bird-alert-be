@@ -144,7 +144,7 @@ pg_restore --clean --if-exists --no-owner --dbname "$TARGET_PG_URL" restore.dump
 
 ## ABA Checklist codes
 
-The HQ desk ranks rarities nationally with the [ABA Checklist](https://www.aba.org/aba-checklist/)'s codes (1-2 regular, 3 rare, 4 casual, 5 accidental, 6 extinct or extirpated), used with permission of the American Birding Association (Oct 2026), credited in the HQ email and named in posts ("ABA Code 4"). A Code 3 adds 4 to a pick's score, Code 4 adds 7, Code 5 adds 10; codes 1-2 add nothing, so a bird rare only in its state still ranks on its chase.
+The HQ desk ranks rarities nationally with the [ABA Checklist](https://www.aba.org/aba-checklist/)'s codes (1-2 regular, 3 rare, 4 casual, 5 accidental, 6 extinct or extirpated; the app and emails say these in plain words, since "casual" reads as commoner than "rare": a few each year, not every year, a few records ever), used with permission of the American Birding Association (Oct 2026), credited in the HQ email and named in posts ("ABA Code 4"). A Code 3 adds 4 to a pick's score, Code 4 adds 7, Code 5 adds 10; codes 1-2 add nothing, so a bird rare only in its state still ranks on its chase.
 
 The checklist is the ABA's copyrighted work, so it is **not in this repository**: download the CSV from the ABA's page, unzip, and load it into `aba_codes` (it replaces whatever is there; rerun when the ABA publishes a new version):
 
