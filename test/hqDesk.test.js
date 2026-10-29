@@ -99,3 +99,27 @@ test('codes 3-5 are shown and lead, rarest first; 1-2 and 6 keep their place', (
   assert.equal(sightingNotification({ ...s, aba: 4 }).title, '❗ ABA Code 4: Roadside Hawk reported nearby')
   assert.equal(sightingNotification({ ...s, aba: 1 }).title, '❗ Notable: Roadside Hawk reported nearby')
 })
+
+test('Canada and Mexico: areas stand alone in drafts, and a Mexican bird has no ABA code', () => {
+  const ontario = { subnational1Code: 'CA-ON', subnational1Name: 'Ontario', subnational2Name: 'Toronto', locName: 'Tommy Thompson Park' }
+  const [pick] = pickRarities(Array.from({ length: 3 }, (_, i) => rec({ ...ontario, subId: `C${i}`, userDisplayName: `C${i}` })))
+  const text = draftPost(pick, 'x', '2026-10-27')
+  assert.match(text, /^🚨 Anhinga in Ontario\n📍 Tommy Thompson Park, Toronto\n/)
+  assert.match(text, /#Ontariobirds/)
+  const jalisco = { subnational1Code: 'MX-JAL', subnational1Name: 'Jalisco', subnational2Name: 'Zapopan', locName: 'Bosque La Primavera' }
+  const [mx] = pickRarities(Array.from({ length: 3 }, (_, i) => rec({ ...jalisco, subId: `M${i}`, userDisplayName: `M${i}` })))
+  assert.match(draftPost(mx, 'x', '2026-10-27'), /📍 Bosque La Primavera, Zapopan\n/)
+})
+
+test('the desk reads every covered country, and one that fails is left out rather than sinking the morning', async () => {
+  const { notableEverywhere } = require('../lib/hqDesk')
+  const ebird = require('../lib/ebird')
+  const original = ebird.countryNotable
+  const asked = []
+  ebird.countryNotable = async (country) => { asked.push(country); if (country === 'CA') throw new Error('eBird is busy'); return [rec({ subnational1Code: `${country}-XX` })] }
+  try {
+    const all = await notableEverywhere()
+    assert.deepEqual(asked, ['US', 'CA', 'MX'])
+    assert.deepEqual(all.map((r) => r.subnational1Code), ['US-XX', 'MX-XX'])
+  } finally { ebird.countryNotable = original }
+})
