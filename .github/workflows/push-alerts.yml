@@ -39,9 +39,15 @@ jobs:
         env:
           CRON_SECRET: ${{ secrets.CRON_SECRET }}
         run: |
-          curl --fail-with-body --silent --show-error --max-time 120 \
-            -H "Authorization: Bearer $CRON_SECRET" \
-            "https://bird-alert-be.vercel.app/api/ebird/sync-checklists"
+          # Each call works for 45 seconds, oldest-synced region first, and says "more" if regions
+          # are left; repeat until done.
+          for i in $(seq 1 10); do
+            out=$(curl --fail-with-body --silent --show-error --max-time 120 \
+              -H "Authorization: Bearer $CRON_SECRET" \
+              "https://bird-alert-be.vercel.app/api/ebird/sync-checklists")
+            echo "$out" | head -c 600; echo
+            echo "$out" | grep -q '"more":true' || break
+          done
       - name: Remind new accounts to confirm their email
         # Runs even if a step above failed: a reminder doesn't depend on the push or the sync.
         if: always()
