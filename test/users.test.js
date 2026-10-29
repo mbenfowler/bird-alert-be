@@ -59,3 +59,16 @@ test('signups through an app\'s built-in browser are tagged from the user agent'
   assert.deepEqual(signupSourceFor({ landing: 'home', utm: 'fb-ebird' }, fb), { landing: 'home', utm: 'fb-ebird', app: 'facebook' })
   assert.equal(signupSourceFor(null, 'curl/8'), null)
 })
+
+test('Canada: provinces map to CA codes, and county-level regions are recognised in both countries', () => {
+  const { countryOf, subnational1, stateOfRegion } = require('../lib/regions')
+  assert.equal(countryOf('ON'), 'CA')
+  assert.equal(countryOf('GA'), 'US')
+  assert.equal(subnational1('qc'), 'CA-QC')
+  assert.equal(subnational1('GA'), 'US-GA')
+  assert.equal(stateOfRegion('US-GA-139'), 'GA')
+  assert.equal(stateOfRegion('CA-ON-TO'), 'ON')
+  assert.equal(stateOfRegion('CA-ZZ-TO'), null, 'not a province')
+  assert.equal(stateOfRegion('US-GA'), null, 'a state is not a county')
+  assert.equal(stateOfRegion('MX-ROO-01'), null)
+})
