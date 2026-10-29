@@ -31,7 +31,8 @@ jobs:
             out=$(curl --fail-with-body --silent --show-error --max-time 120 \
               -H "Authorization: Bearer $CRON_SECRET" \
               "https://bird-alert-be.vercel.app/api/push/alerts?after=$after")
-            echo "$out" | head -c 400; echo
+            # The logs are public: counts only, never which users or counties.
+            echo "$out" | jq -c '.summary |= (if type == "array" then length else . end)' 2>/dev/null || echo "$out" | head -c 300; echo
             echo "$out" | grep -q '"more":true' || break
             after=$(echo "$out" | grep -o '"next":[0-9]*' | cut -d: -f2)
           done
@@ -45,7 +46,7 @@ jobs:
             out=$(curl --fail-with-body --silent --show-error --max-time 120 \
               -H "Authorization: Bearer $CRON_SECRET" \
               "https://bird-alert-be.vercel.app/api/ebird/sync-checklists")
-            echo "$out" | head -c 600; echo
+            echo "$out" | jq -c '{regions: (.regions | length), detailed: ([.regions[].detailed // 0] | add), errors: ([.regions[] | select(.error)] | length), throttled, more, retention}' 2>/dev/null || echo "$out" | head -c 300; echo
             echo "$out" | grep -q '"more":true' || break
           done
       - name: Remind new accounts to confirm their email

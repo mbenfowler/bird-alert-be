@@ -282,7 +282,7 @@ test('the checklist sync takes the region synced longest ago first, and says mor
     let now = Date.now()
     const realNow = Date.now
     Date.now = () => (budget.left ? now : now + 60_000)
-    try { return await runChecklistSync({ regions, deadline: now + 45_000, sync: fake }) } finally { Date.now = realNow }
+    try { return await runChecklistSync({ regions, deadline: now + 45_000, sync: fake, budget: 200 }) } finally { Date.now = realNow }
   }
   await db('job_runs').where('kind', 'like', 'checklist-sync:%').del()
   // US-GA-139 was synced recently, the others never: they go first.
@@ -296,14 +296,36 @@ test('the checklist sync takes the region synced longest ago first, and says mor
   assert.deepEqual(order.slice(0, 2).sort(), ['US-FL-071', 'US-NC-119'])
   assert.equal(order[2], 'US-GA-139')
   // All three were synced in this round, so a further call has nothing left and says so.
-  const done = await runChecklistSync({ regions, deadline: Date.now() + 45_000, sync: async (code) => ({ region: code }) })
+  const done = await runChecklistSync({ regions, deadline: Date.now() + 45_000, sync: async (code) => ({ region: code }), budget: 200 })
   assert.equal(done.more, false)
   assert.equal(done.regions.length, 0)
   // An hour on, every region is due again, and with time to spare all are synced in one call.
   await db('job_runs').where('kind', 'like', 'checklist-sync:%').update({ ran_at: new Date(Date.now() - 3_600_000) })
-  const hourLater = await runChecklistSync({ regions, deadline: Date.now() + 45_000, sync: async (code) => ({ region: code }) })
+  const hourLater = await runChecklistSync({ regions, deadline: Date.now() + 45_000, sync: async (code) => ({ region: code }), budget: 200 })
   assert.equal(hourLater.more, false)
   assert.equal(hourLater.regions.length, 3)
+})
+
+test('the hourly sync shares one budget of full fetches, and stops at the first sign of throttling', async () => {
+  const { runChecklistSync } = require('../lib/checklists')
+  const regions = ['US-GA-139', 'US-NC-119', 'US-FL-071']
+  await db('job_runs').where('kind', 'like', 'checklist-sync:%').del()
+  const asked = []
+  const fetching = async (code, { detailLimit }) => { asked.push([code, detailLimit]); return { region: code, detailed: detailLimit } }
+  const shared = await runChecklistSync({ regions, deadline: Date.now() + 45_000, sync: fetching, detailLimit: 40, budget: 50 })
+  assert.deepEqual(asked.map(([, limit]) => limit), [40, 10, 0], 'once the budget is spent, regions are still listed but not fetched')
+  assert.equal(shared.more, false)
+
+  await db('job_runs').where('kind', 'like', 'checklist-sync:%').del()
+  const reached = []
+  const busy = async (code) => { reached.push(code); const error = new Error('eBird is busy right now. Trying again in a moment.'); error.upstream = 429; throw error }
+  let graded = 0
+  const stopped = await runChecklistSync({ regions, deadline: Date.now() + 45_000, sync: busy, grade: async () => { graded += 1 }, budget: 200 })
+  assert.equal(reached.length, 1, 'no more eBird calls once it says busy')
+  assert.equal(stopped.throttled, true)
+  assert.equal(stopped.more, false, 'the workflow stops calling; the next hour carries on')
+  assert.equal(graded, 0)
+  assert.equal(await db('job_runs').where('kind', 'like', 'checklist-sync:%').count('* as n').first().then((r) => Number(r.n)), 0, 'the throttled region stays first in line')
 })
 
 test('a newly chosen county is synced at once, and only the first time', async () => {
