@@ -22,7 +22,8 @@ jobs:
             out=$(curl --fail-with-body --silent --show-error --max-time 120 \
               -H "Authorization: Bearer $CRON_SECRET" \
               https://bird-alert-be.vercel.app/api/mail/migration)
-            echo "$out" | head -c 400; echo
+            # The logs are public: counts only, never which users or counties.
+            echo "$out" | jq -c '.summary |= (if type == "array" then length else . end)' 2>/dev/null || echo "$out" | head -c 300; echo
             echo "$out" | grep -q '"capped":true' && { echo "Daily mail cap reached."; exit 1; }
             echo "$out" | grep -q '"more":true' || break
           done
