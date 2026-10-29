@@ -306,6 +306,34 @@ test('the checklist sync takes the region synced longest ago first, and says mor
   assert.equal(hourLater.regions.length, 3)
 })
 
+test('retention deletes checklists past 90 days and strips old history to region, day and species, once a day', async () => {
+  const { pruneOld, pruneDaily } = require('../lib/retention')
+  const ago = (n) => new Date(Date.now() - n * 86_400_000).toISOString().slice(0, 10)
+  await db('checklists').insert([
+    { sub_id: 'S900000001', region: 'US-GA-139', loc_id: 'L1', obs_day: ago(120), detail_fetched_at: new Date() },
+    { sub_id: 'S900000002', region: 'US-GA-139', loc_id: 'L1', obs_day: ago(10), detail_fetched_at: new Date() }
+  ])
+  await db('checklist_species').insert([{ sub_id: 'S900000001', species_code: 'cangoo' }, { sub_id: 'S900000002', species_code: 'cangoo' }])
+  await db('region_species_days').insert([
+    { region: 'US-GA-139', day: ago(200), speciesCode: 'retenta', locId: 'L1', locName: 'Old Lake', obsTime: '07:00', subId: 'S1' },
+    { region: 'US-GA-139', day: ago(20), speciesCode: 'retenta', locId: 'L1', locName: 'New Lake', obsTime: '08:00', subId: 'S2' }
+  ])
+  const result = await pruneOld()
+  assert.ok(result.checklists >= 1)
+  assert.equal(await db('checklists').where({ sub_id: 'S900000001' }).first(), undefined)
+  assert.equal(await db('checklist_species').where({ sub_id: 'S900000001' }).first(), undefined, 'species rows go with their checklist')
+  assert.ok(await db('checklist_species').where({ sub_id: 'S900000002' }).first())
+  const rows = await db('region_species_days').where({ speciesCode: 'retenta' }).orderBy('day')
+  assert.equal(rows.length, 2, 'seasonality keeps every day')
+  assert.deepEqual([rows[0].locId, rows[0].locName, rows[0].obsTime, rows[0].subId], [null, null, null, null])
+  assert.equal(rows[1].locName, 'New Lake')
+  await db('job_runs').where({ kind: 'retention' }).del()
+  assert.ok(await pruneDaily())
+  assert.equal(await pruneDaily(), null, 'a second pass the same day does nothing')
+  await db('region_species_days').where({ speciesCode: 'retenta' }).del()
+  await db('checklists').whereIn('sub_id', ['S900000002']).del()
+})
+
 test('where to find a species: tables and the live feed become ranked places with evidence', async () => {
   const { whereToFind } = require('../lib/hotspots')
   const asOf = '2026-10-25'
