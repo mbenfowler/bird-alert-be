@@ -5,6 +5,7 @@ const { shortLabel, parsePoints, words } = require('../lib/placeSearch')
 test('Nominatim labels lose the county, zip and country', () => {
   assert.equal(shortLabel('Yahoola Creek Park, Dahlonega, Lumpkin County, Georgia, 30533, United States'), 'Yahoola Creek Park, Dahlonega, Georgia')
   assert.equal(shortLabel('Gainesville, Hall County, Georgia, United States'), 'Gainesville, Georgia')
+  assert.equal(shortLabel('Bosque de Chapultepec, Miguel Hidalgo, Ciudad de México, 11580, México'), 'Bosque de Chapultepec, Miguel Hidalgo, Ciudad de México')
 })
 
 test('route points are parsed and bounded', () => {
