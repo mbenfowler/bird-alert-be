@@ -1,7 +1,7 @@
 const { route, body, HttpError } = require('../../lib/http')
 const db = require('../../lib/db')
 const {
-  normalizeEmail, assertValidEmail, assertValidPassword, findUserByEmail, findUserById, sanitizeUser
+  normalizeEmail, assertValidEmail, assertValidPassword, findUserByEmail, findUserById, sanitizeUser, touchLastSeen
 } = require('../../lib/users')
 const {
   hashPassword, verifyPassword, createSession, clearSession, getSessionUser, requireUser
@@ -12,6 +12,12 @@ const { assertNotThrottled, recordAttempt, clearAttempts } = require('../../lib/
 const passkeys = require('../../lib/passkeys')
 const { assertRegion } = require('../../lib/ebird')
 const { signupSourceFor } = require('../../lib/signupSource')
+
+/** A session starts (signup, login, passkey) or renews (each app load): note that they were here. */
+const startSession = async (res, user) => {
+  createSession(res, user)
+  try { await touchLastSeen(user) } catch (error) { console.error('last_seen_at:', error.message) }
+}
 
 /** A signup may bring the county the visitor was looking at, so they land on their birds. */
 const signupPlace = (state, location) => {
@@ -51,7 +57,7 @@ const actions = {
         .insert({ email, password_hash: await hashPassword(password), ...signupPlace(state, location), signup_source: signupSourceFor(source, req.headers['user-agent']) })
         .returning('*')
 
-      createSession(res, user)
+      await startSession(res, user)
       sendConfirmationEmail(user).catch((error) => console.error('Confirmation email failed:', error))
       res.status(201).json(await withPasskeys(user))
     }
@@ -71,7 +77,7 @@ const actions = {
         throw new HttpError(401, 'Incorrect email or password')
       }
       await clearAttempts('login', email)
-      createSession(res, user)
+      await startSession(res, user)
       res.status(200).json(await withPasskeys(user))
     }
   },
@@ -88,7 +94,7 @@ const actions = {
       const userId = await passkeys.authenticate(req, body(req))
       const user = await findUserById(userId)
       if (!user) throw new HttpError(401, 'That account no longer exists')
-      createSession(res, user)
+      await startSession(res, user)
       res.status(200).json(await withPasskeys(user))
     }
   },
@@ -129,7 +135,7 @@ const actions = {
       const user = await getSessionUser(req)
       if (!user) throw new HttpError(401, 'Not logged in')
       // Each visit renews the session, so only thirty days away logs someone out.
-      createSession(res, user)
+      await startSession(res, user)
       res.status(200).json(await withPasskeys(user))
     }
   },
