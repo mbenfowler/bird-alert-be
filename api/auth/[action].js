@@ -16,10 +16,10 @@ const { stateOfRegion } = require('../../lib/regions')
 const { syncNewRegionSoon } = require('../../lib/checklists')
 
 /** A session starts (signup, login, passkey) or renews (each app load): note that they were here. */
-// The app says whether it's running installed to the home screen (?mode=app) or in a browser tab.
+// The app says whether it's running installed to the home screen (X-App-Mode: app) or in a browser tab.
 const startSession = async (res, user, req = null) => {
   createSession(res, user)
-  const mode = req?.query?.mode
+  const mode = req?.headers?.['x-app-mode']
   const device = req ? { platform: platformOf(req.headers['user-agent']), installed: mode === 'app' ? true : mode === 'browser' ? false : null } : {}
   try { await touchLastSeen(user, device) } catch (error) { console.error('last_seen_at:', error.message) }
 }
