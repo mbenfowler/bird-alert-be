@@ -341,15 +341,23 @@ test('the hourly sync shares one budget of full fetches, and stops at the first 
   await db('job_runs').where('kind', 'like', 'checklist-sync:%').del()
   const asked = []
   const fetching = async (code, { detailLimit }) => { asked.push([code, detailLimit]); return { region: code, detailed: detailLimit } }
-  const shared = await runChecklistSync({ regions, deadline: Date.now() + 45_000, sync: fetching, detailLimit: 40, budget: 50 })
-  assert.deepEqual(asked.map(([, limit]) => limit), [40, 10, 0], 'once the budget is spent, regions are still listed but not fetched')
+  const allActive = async (codes) => new Map(codes.map((c) => [c, { active: true, detailed14: 0 }]))
+  const shared = await runChecklistSync({ regions, deadline: Date.now() + 45_000, sync: fetching, detailLimit: 40, budget: 50, needs: allActive })
+  assert.deepEqual(asked.map(([, limit]) => limit), [17, 17, 16], 'the hour is split evenly among the regions waiting')
+
+  await db('job_runs').where('kind', 'like', 'checklist-sync:%').del()
+  asked.length = 0
+  const mixed = async (codes) => new Map(codes.map((c, i) => [c, [{ active: false, detailed14: 0 }, { active: true, detailed14: 5000 }, { active: true, detailed14: 10 }][i]]))
+  await runChecklistSync({ regions, deadline: Date.now() + 45_000, sync: fetching, detailLimit: 40, budget: 200, needs: mixed })
+  const limitFor = Object.fromEntries(asked)
+  assert.deepEqual(Object.values(limitFor).sort((x, y) => x - y), [0, 5, 40], 'a quiet region is only listed, a well-stocked one tops up, a thin one gets its fill')
   assert.equal(shared.more, false)
 
   await db('job_runs').where('kind', 'like', 'checklist-sync:%').del()
   const reached = []
   const busy = async (code) => { reached.push(code); const error = new Error('eBird is busy right now. Trying again in a moment.'); error.upstream = 429; throw error }
   let graded = 0
-  const stopped = await runChecklistSync({ regions, deadline: Date.now() + 45_000, sync: busy, grade: async () => { graded += 1 }, budget: 200 })
+  const stopped = await runChecklistSync({ regions, deadline: Date.now() + 45_000, sync: busy, grade: async () => { graded += 1 }, budget: 200, needs: allActive })
   assert.equal(reached.length, 1, 'no more eBird calls once it says busy')
   assert.equal(stopped.throttled, true)
   assert.equal(stopped.more, false, 'the workflow stops calling; the next hour carries on')
