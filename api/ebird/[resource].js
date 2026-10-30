@@ -3,6 +3,7 @@ const ebird = require('../../lib/ebird')
 const db = require('../../lib/db')
 const { arrivingSoon, seasonality } = require('../../lib/seasonality')
 const { runChecklistSync, userRegions } = require('../../lib/checklists')
+const { EBIRD_THROTTLED } = require('../../lib/adminStats')
 const { pruneDaily } = require('../../lib/retention')
 const { whereToFind, notableCodes } = require('../../lib/hotspots')
 const { dailyPass, accuracy } = require('../../lib/grading')
@@ -126,6 +127,8 @@ const resources = {
       // Once a day per region: record what the ranking says and grade last week's predictions.
       const grade = async (code) => dailyPass(code, { where: whereToFind, notable: await notableCodes(code), deadline })
       const result = await runChecklistSync({ regions, deadline, grade })
+      // Logged so the morning admin numbers can count how often eBird pushed back.
+      if (result.throttled) await require('../../lib/errors').reportError(EBIRD_THROTTLED, new Error('eBird throttled the key; the round stopped'))
       // Once a day, after a round is done: drop detail older than the app reads.
       if (!result.more) {
         try { result.retention = await pruneDaily() } catch (error) { console.error('Retention failed:', error.message) }
