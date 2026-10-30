@@ -34,6 +34,21 @@ test('every email goes out through the transport with the sender, recipient and 
   assert.ok(sent.some((m) => m.subject.includes('Snow Goose')))
 })
 
+test('account emails read like a note from a person: plain text and one visible link, no images', async () => {
+  sent.length = 0
+  await mailer.sendConfirmationEmail(user)
+  await mailer.sendConfirmationReminder(user)
+  await mailer.sendPasswordResetEmail(user)
+  assert.equal(sent.length, 3)
+  for (const message of sent) {
+    assert.doesNotMatch(message.html, /<img|<table/i, 'no images or layout, which Gmail files as promotions')
+    const link = message.text.match(/https?:\/\/\S+\/(confirm|reset)\/\S+/)
+    assert.ok(link, 'the text names the link in full')
+    assert.ok(message.html.includes(`>${link[0]}</a>`), 'and the html shows it as written')
+    assert.match(message.text, /Matt, Bird Alert$/)
+  }
+})
+
 test('outside production without FORCE_SEND_MAIL a send is simulated, not attempted', async () => {
   process.env.FORCE_SEND_MAIL = 'false'
   const before = sent.length
