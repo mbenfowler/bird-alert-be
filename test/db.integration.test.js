@@ -362,12 +362,16 @@ test('a newly chosen county is synced at once, and only the first time', async (
   await db('job_runs').where('kind', 'like', 'checklist-sync:%').del()
   const synced = []
   const fake = async (code, opts) => { synced.push([code, opts.detailLimit]); return { region: code } }
-  assert.deepEqual(await syncNewRegion('CA-QC-BH', { sync: fake }), { region: 'CA-QC-BH' })
+  assert.deepEqual(await syncNewRegion('CA-QC-BH', { sync: fake, left: 200 }), { region: 'CA-QC-BH' })
   assert.ok(await db('job_runs').where({ kind: 'checklist-sync:CA-QC-BH' }).first(), 'the claim also tells the hourly run it was just done')
   assert.equal(await syncNewRegion('CA-QC-BH', { sync: fake }), null, 'a second save of the same area does not sync again')
   assert.equal(await syncNewRegion('', { sync: fake }), null)
   assert.equal(await syncNewRegion('US-GA', { sync: fake }), null, 'a state is not a county')
   assert.deepEqual(synced, [['CA-QC-BH', 30]])
+  // The hourly budget is shared: a new area when it's nearly spent fetches only what's left.
+  await syncNewRegion('CA-ON-TO', { sync: fake, left: 12 })
+  await syncNewRegion('CA-ON-OT', { sync: fake, left: 0 })
+  assert.deepEqual(synced.slice(1), [['CA-ON-TO', 12], ['CA-ON-OT', 0]], 'past the budget it is still listed, and the hourly run fills it in')
 })
 
 test('retention deletes checklists past 90 days and strips old history to region, day and species, once a day', async () => {
