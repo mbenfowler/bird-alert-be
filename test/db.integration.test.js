@@ -20,6 +20,35 @@ before(async () => {
 })
 after(async () => { await db.destroy() })
 
+test('watch-list alerts with no device to push to come by email instead, until that is turned off', async () => {
+  const { DIGESTS } = require('../lib/digests')
+  const base = { password_hash: 'x', location: 'US-ZZ-001', state: 'GA', email_confirmed: true, alert_digest_email_enabled: false, push_watchlist_enabled: true }
+  const ids = {}
+  for (const [name, over] of Object.entries({
+    noDevice: {}, hasDevice: {}, optedOut: { watchlist_email_fallback: false }, chose: { alert_digest_email_enabled: true, push_watchlist_enabled: false },
+    noAlerts: { push_watchlist_enabled: false }, unconfirmed: { email_confirmed: false }
+  })) [{ id: ids[name] }] = await db('users').insert({ ...base, email: `fallback-${name}@example.com`, ...over }).returning('id')
+  await db('push_subscriptions').insert({ user_id: ids.hasDevice, endpoint: 'https://push.example/fallback', p256dh: 'k', auth: 'a' })
+  const sent = []
+  await runDigest({ ...DIGESTS.watchlist, kind: 'watchlist-fallback-test', fetchSightings: async () => [{ speciesCode: 'cangoo', subId: 'S1' }], select: async (_u, s) => s, send: async (user) => { sent.push(user.id) } })
+  assert.deepEqual(sent.filter((id) => Object.values(ids).includes(id)).sort(), [ids.noDevice, ids.chose].sort())
+
+  // The email says why it came, and its unsubscribe link turns off the fallback only.
+  const { alertDigestMessage } = require('../lib/mailer')
+  const { verifyToken } = require('../lib/tokens')
+  const sighting = [{ speciesCode: 'cangoo', comName: 'Canada Goose', locName: 'Lake', obsDt: '2026-10-29 08:00', subId: 'S1' }]
+  const fallback = alertDigestMessage(await db('users').where({ id: ids.noDevice }).first(), sighting, new Map())
+  assert.match(fallback.html, /alerts aren’t set up on a phone or computer yet/)
+  const tokenOf = (html) => verifyToken(html.match(/unsubscribe\/([A-Za-z0-9._-]+)/)[1], 'unsubscribe').emailType
+  assert.equal(tokenOf(fallback.html), 'watchlist_email_fallback')
+  const chosen = alertDigestMessage(await db('users').where({ id: ids.chose }).first(), sighting, new Map())
+  assert.doesNotMatch(chosen.html, /aren’t set up/)
+  assert.equal(tokenOf(chosen.html), 'alert_digest_email_enabled')
+  await db('push_subscriptions').whereIn('user_id', Object.values(ids)).del()
+  await db('digest_log').whereIn('user_id', Object.values(ids)).del()
+  await db('users').whereIn('id', Object.values(ids)).del()
+})
+
 test('login throttle opens after ten failures and clears on success', async () => {
   for (let i = 0; i < 10; i += 1) await recordAttempt('login', 'tester@example.com')
   await assert.rejects(assertNotThrottled('login', 'tester@example.com'), (error) => error.status === 429)

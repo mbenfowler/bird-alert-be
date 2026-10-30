@@ -32,7 +32,7 @@ const signupPlace = (state, location) => {
 /** The user as the app sees them, with whether they have a passkey yet. */
 const withPasskeys = async (user) => ({ ...sanitizeUser(user), hasPasskey: Boolean(await db('passkeys').where({ user_id: user.id }).first('id')) })
 
-const EMAIL_PREFERENCES = ['alert_digest_email_enabled', 'rare_sightings_email_enabled', 'migration_email_enabled']
+const EMAIL_PREFERENCES = ['alert_digest_email_enabled', 'rare_sightings_email_enabled', 'migration_email_enabled', 'watchlist_email_fallback']
 
 const actions = {
   // GET /api/auth/exists?email= -> { userExists }

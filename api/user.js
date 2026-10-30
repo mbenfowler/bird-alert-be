@@ -7,7 +7,7 @@ const { isValidTimezone } = require('../lib/quietHours')
 const { syncNewRegionSoon } = require('../lib/checklists')
 
 const STRING_FIELDS = ['state', 'location']
-const BOOLEAN_FIELDS = ['alert_digest_email_enabled', 'rare_sightings_email_enabled', 'push_watchlist_enabled', 'push_notable_enabled', 'push_notable_batched', 'push_first_of_season', 'push_lifer_enabled', 'migration_email_enabled']
+const BOOLEAN_FIELDS = ['alert_digest_email_enabled', 'rare_sightings_email_enabled', 'push_watchlist_enabled', 'push_notable_enabled', 'push_notable_batched', 'push_first_of_season', 'push_lifer_enabled', 'migration_email_enabled', 'watchlist_email_fallback']
 
 // DELETE /api/user { confirm: 'delete' } -> 204: the account and everything kept for it (watch list, life
 // list, alerts, passkeys, routes) are gone for good, and the session ends. Shared links stay up,
