@@ -112,6 +112,61 @@ test('a pushed observation is logged and never pushed again', async () => {
   }
 })
 
+test('rare birds in range but past the county alert with how far, never repeat at a place, and stay away when range is off', async () => {
+  const ebird = require('../lib/ebird')
+  const { runPushAlerts } = require('../lib/pushAlerts')
+  const originals = { recent: ebird.recentObservations, notable: ebird.notableObservations, geo: ebird.geoNotable }
+  const [{ id }] = await db('users').insert({ email: 'range@example.com', password_hash: 'x', location: 'US-ZZ-002', state: 'GA', push_notable_enabled: true, push_watchlist_enabled: false, range_mi: 30, home_lat: 34.3, home_lng: -83.8, push_quiet_start: null, push_quiet_end: null }).returning('id')
+  await db('push_subscriptions').insert({ user_id: id, endpoint: 'https://push.example/range', p256dh: 'k', auth: 'a' })
+  await db('birds').insert({ speciesCode: 'snoowl1', comName: 'Snowy Owl', sciName: 'Bubo scandiacus', category: 'species' }).onConflict('speciesCode').ignore()
+  await db('birds').insert({ speciesCode: 'rthhum', comName: 'Ruby-throated Hummingbird', sciName: 'Archilochus colubris', category: 'species' }).onConflict('speciesCode').ignore()
+  const owl = (subId, locId, lat) => ({ speciesCode: 'snoowl1', comName: 'Snowy Owl', locId, locName: 'Owl Field', obsDt: '2026-10-30 08:00', lat, lng: -83.8, subId, subnational2Code: 'US-ZZ-003', subnational2Name: 'Forsyth' })
+  let geo = []
+  let geoCalls = 0
+  ebird.recentObservations = async () => []
+  ebird.notableObservations = async (region) => (region === 'US-ZZ-002' ? [{ speciesCode: 'rthhum', comName: 'Ruby-throated Hummingbird', locId: 'LH', locName: 'Yard', obsDt: '2026-10-30 07:00', lat: 34.3, lng: -83.8, subId: 'H1' }] : [])
+  ebird.geoNotable = async () => { geoCalls += 1; return geo }
+  const sent = []
+  const send = async (userId, payload) => { if (userId === id) sent.push(payload); return { sent: 1, gone: 0 } }
+  try {
+    // The county's own rarity and the owl one county over; the hummingbird in range too is the county's, so it isn't repeated.
+    geo = [owl('R1', 'L9', 34.6), { speciesCode: 'rthhum', comName: 'Ruby-throated Hummingbird', locId: 'LH2', locName: 'Elsewhere', obsDt: '2026-10-30 07:30', lat: 34.4, lng: -83.8, subId: 'H2', subnational2Code: 'US-ZZ-003', subnational2Name: 'Forsyth' }]
+    await runPushAlerts({ send })
+    const titles = sent.map((n) => n.title)
+    assert.ok(titles.some((t) => /Ruby-throated Hummingbird reported nearby/.test(t)), titles.join(' | '))
+    const owlPush = sent.find((n) => /Snowy Owl/.test(n.title))
+    assert.match(owlPush.title, /Snowy Owl reported 21 mi away/)
+    assert.match(owlPush.body, /Owl Field · 21 mi away in Forsyth/)
+    assert.match(owlPush.data.url, /region=US-ZZ-003/, 'the sighting opens on the county it is in')
+    assert.equal(sent.filter((n) => /Hummingbird/.test(n.title)).length, 1)
+
+    // A newer checklist of the owl at the same field is not news again.
+    sent.length = 0
+    geo = [owl('R2', 'L9', 34.6)]
+    await runPushAlerts({ send })
+    assert.equal(sent.length, 0, 'same bird, same place, new checklist: no second alert')
+
+    // The owl somewhere new is.
+    geo = [owl('R3', 'L10', 34.65)]
+    await runPushAlerts({ send })
+    assert.equal(sent.filter((n) => /Snowy Owl/.test(n.title)).length, 1)
+
+    // Range off: the county only, no range lookups.
+    sent.length = 0
+    geoCalls = 0
+    await db('users').where({ id }).update({ range_mi: 0 })
+    geo = [owl('R4', 'L11', 34.7)]
+    await runPushAlerts({ send })
+    assert.equal(geoCalls, 0)
+    assert.equal(sent.length, 0)
+  } finally {
+    Object.assign(ebird, { recentObservations: originals.recent, notableObservations: originals.notable, geoNotable: originals.geo })
+    await db('push_log').where({ user_id: id }).del()
+    await db('push_subscriptions').where({ user_id: id }).del()
+    await db('users').where({ id }).del()
+  }
+})
+
 test('a push is handed to the open app through the server: offered, tapped, opened', async () => {
   const handoff = require('../lib/handoff')
   const url = 'https://bird-alert.vercel.app/sightings?s=cangoo:S1'
@@ -925,6 +980,23 @@ test('a person can delete their account: everything kept for it goes, shared lin
   assert.equal(await count('auth_throttle', { key: 'login:other@example.com' }), 1, 'someone else’s attempts are left alone')
   assert.equal((await db('shares').where({ id: 'leavingAbc' }).first()).user_id, null, 'a shared link stays up, unattributed')
   assert.equal(await getSessionUser(fakeReq({ headers: { cookie } })), null, 'the old cookie no longer signs anyone in')
+})
+
+test('the alert range is one of the offered distances, measured from a home spot or the county center', async () => {
+  const userApi = require('../api/user')
+  const { fakeReq, fakeRes } = require('./helpers')
+  const { createSession } = require('../lib/auth')
+  const user = await db('users').where({ id: userId }).first()
+  const session = fakeRes(); createSession(session, user)
+  const cookie = String(session.headers['set-cookie']).split(';')[0]
+  const patch = async (body) => { const res = fakeRes(); await userApi(fakeReq({ method: 'PATCH', headers: { cookie }, body }), res); return res }
+  assert.equal((await patch({ range_mi: 25 })).statusCode, 400)
+  assert.equal((await patch({ home_lat: 34.3 })).statusCode, 400, 'a point needs both halves')
+  const ok = await patch({ range_mi: 15, home_lat: 34.3, home_lng: -83.8 })
+  assert.equal(ok.statusCode, 200)
+  assert.deepEqual([ok.body.range_mi, ok.body.home_lat, ok.body.home_lng], [15, 34.3, -83.8])
+  const back = await patch({ home_lat: null, home_lng: null, range_mi: 30 })
+  assert.deepEqual([back.body.range_mi, back.body.home_lat, back.body.home_lng], [30, null, null], 'back to the county center')
 })
 
 test('the admin numbers: signups with their source, who opened the app, late jobs, and the database against its limit', async () => {
