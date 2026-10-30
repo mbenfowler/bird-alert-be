@@ -1,7 +1,7 @@
 const { route, body, HttpError } = require('../../lib/http')
 const db = require('../../lib/db')
 const {
-  normalizeEmail, assertValidEmail, assertValidPassword, findUserByEmail, findUserById, sanitizeUser, touchLastSeen
+  normalizeEmail, assertValidEmail, assertValidPassword, findUserByEmail, findUserById, sanitizeUser, touchLastSeen, platformOf
 } = require('../../lib/users')
 const {
   hashPassword, verifyPassword, createSession, clearSession, getSessionUser, requireUser
@@ -16,9 +16,12 @@ const { stateOfRegion } = require('../../lib/regions')
 const { syncNewRegionSoon } = require('../../lib/checklists')
 
 /** A session starts (signup, login, passkey) or renews (each app load): note that they were here. */
-const startSession = async (res, user) => {
+// The app says whether it's running installed to the home screen (?mode=app) or in a browser tab.
+const startSession = async (res, user, req = null) => {
   createSession(res, user)
-  try { await touchLastSeen(user) } catch (error) { console.error('last_seen_at:', error.message) }
+  const mode = req?.query?.mode
+  const device = req ? { platform: platformOf(req.headers['user-agent']), installed: mode === 'app' ? true : mode === 'browser' ? false : null } : {}
+  try { await touchLastSeen(user, device) } catch (error) { console.error('last_seen_at:', error.message) }
 }
 
 /** A signup may bring the county the visitor was looking at, so they land on their birds. */
@@ -59,7 +62,7 @@ const actions = {
         .insert({ email, password_hash: await hashPassword(password), ...signupPlace(state, location), signup_source: signupSourceFor(source, req.headers['user-agent']) })
         .returning('*')
 
-      await startSession(res, user)
+      await startSession(res, user, req)
       if (user.location) syncNewRegionSoon(user.location)
       sendConfirmationEmail(user).catch((error) => console.error('Confirmation email failed:', error))
       res.status(201).json(await withPasskeys(user))
@@ -80,7 +83,7 @@ const actions = {
         throw new HttpError(401, 'Incorrect email or password')
       }
       await clearAttempts('login', email)
-      await startSession(res, user)
+      await startSession(res, user, req)
       res.status(200).json(await withPasskeys(user))
     }
   },
@@ -97,7 +100,7 @@ const actions = {
       const userId = await passkeys.authenticate(req, body(req))
       const user = await findUserById(userId)
       if (!user) throw new HttpError(401, 'That account no longer exists')
-      await startSession(res, user)
+      await startSession(res, user, req)
       res.status(200).json(await withPasskeys(user))
     }
   },
@@ -138,7 +141,7 @@ const actions = {
       const user = await getSessionUser(req)
       if (!user) throw new HttpError(401, 'Not logged in')
       // Each visit renews the session, so only thirty days away logs someone out.
-      await startSession(res, user)
+      await startSession(res, user, req)
       res.status(200).json(await withPasskeys(user))
     }
   },
