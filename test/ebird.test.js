@@ -37,6 +37,14 @@ test('a bird\'s sightings carry evidence only where eBird flagged them, and no o
   const api = require('../api/ebird/[resource]')
   const { fakeReq, fakeRes } = require('./helpers')
   const original = ebird.speciesObservations
+  const originalNotable = ebird.notableObservations
+  // The county's notable feed has every report: earlier, confirmed ones by other birders at the spot of S2.
+  ebird.notableObservations = async () => [
+    { speciesCode: 'paibun', subId: 'S2', locId: 'L2', lat: 33.1, lng: -84.9, obsValid: false, obsReviewed: false, hasRichMedia: true, userDisplayName: 'Bo' },
+    { speciesCode: 'paibun', subId: 'S0', locId: 'L2', lat: 33.1, lng: -84.9, obsValid: true, obsReviewed: true, userDisplayName: 'Di' },
+    { speciesCode: 'paibun', subId: 'S9', locId: 'L2', lat: 33.1, lng: -84.9, obsValid: true, obsReviewed: true, userDisplayName: 'Ed' },
+    { speciesCode: 'cangoo', subId: 'S8', locId: 'L2', lat: 33.1, lng: -84.9, obsValid: true, obsReviewed: true, userDisplayName: 'Fy' }
+  ]
   ebird.speciesObservations = async () => [
     { speciesCode: 'paibun', subId: 'S1', locId: 'L1', lat: 34.2, lng: -83.9, obsValid: true, obsReviewed: false, userDisplayName: 'Ann', obsDt: '2026-10-30 08:00' },
     { speciesCode: 'paibun', subId: 'S2', locId: 'L2', lat: 33.1, lng: -84.9, obsValid: false, obsReviewed: false, hasRichMedia: true, userDisplayName: 'Bo', obsDt: '2026-10-31 08:00' },
@@ -47,10 +55,11 @@ test('a bird\'s sightings carry evidence only where eBird flagged them, and no o
     await api(fakeReq({ query: { resource: 'species-observations', region: 'US-GA-139', code: 'paibun' } }), res)
     const [ordinary, pending, confirmed] = res.body
     assert.equal(ordinary.evidence, undefined, 'an ordinary report is never called unconfirmed')
-    assert.deepEqual(pending.evidence, { confirmed: false, media: 'photo', birders: 1 })
+    // The latest report there is unreviewed, but the bird at that spot was confirmed by others before it.
+    assert.deepEqual(pending.evidence, { confirmed: true, media: 'photo', birders: 3 })
     assert.equal(confirmed.evidence.confirmed, true)
     assert.ok(res.body.every((o) => !('userDisplayName' in o)), 'observer names stay on the server')
-  } finally { ebird.speciesObservations = original }
+  } finally { ebird.speciesObservations = original; ebird.notableObservations = originalNotable }
 })
 
 test('a failing eBird call becomes a 502, not a crash', async () => {
