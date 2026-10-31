@@ -1081,3 +1081,53 @@ test('where to go in an area chosen minutes ago: no places, and it says nothing 
   assert.deepEqual(go.places, [])
   assert.deepEqual(go.onFile, { checklists: 0 })
 })
+
+test('best hotspots: ranked by species reported lately, birders\' way of counting, then checklists, with the best list', async () => {
+  const { bestHotspots, parseDays, assertCounty } = require('../lib/bestHotspots')
+  const region = 'US-ZZ-777'
+  const asOf = '2026-10-31'
+  await db('taxonomy_ref').insert([
+    { species_code: 'duck', sci_name: 'Anatidae sp.', com_name: 'duck sp.', category: 'spuh' },
+    { species_code: 'yerwar1', sci_name: 'Setophaga coronata coronata', com_name: 'Yellow-rumped Warbler (Myrtle)', category: 'issf', report_as: 'yerwar' }
+  ]).onConflict('species_code').ignore()
+  const list = (sub, loc, day, numSpecies, { detailed = true, hotspot = true, name = `Place ${loc}` } = {}) => ({
+    sub_id: sub, region, loc_id: loc, loc_name: name, lat: 34.3, lng: -83.9, is_hotspot: hotspot, obs_day: day, obs_time: '08:00',
+    num_species: numSpecies, detail_fetched_at: detailed ? new Date() : null
+  })
+  await db('checklists').insert([
+    // L1: three species once the warbler's forms and the duck sp. are counted the birders' way; two lists.
+    list('SBH1', 'L1', '2026-10-30', 4), list('SBH2', 'L1', '2026-10-28', 2),
+    // L2: two species but three lists; one never opened (counts as a checklist, not for species).
+    list('SBH3', 'L2', '2026-10-29', 2), list('SBH4', 'L2', '2026-10-29', 2), list('SBH5', 'L2', '2026-10-27', 9, { detailed: false }),
+    // L3: only an unopened list: ranked last, species 0.
+    list('SBH6', 'L3', '2026-10-30', 5, { detailed: false, name: 'Alpha Pond' }),
+    // Out of the week, and a private spot: neither counts.
+    list('SBH7', 'L1', '2026-10-05', 40), list('SBH8', 'L9', '2026-10-30', 30, { hotspot: false })
+  ])
+  await db('checklist_species').insert([
+    ...['yerwar', 'yerwar1', 'norcar', 'duck'].map((code) => ({ sub_id: 'SBH1', species_code: code })),
+    ...['norcar', 'blujay'].map((code) => ({ sub_id: 'SBH2', species_code: code })),
+    ...['norcar', 'carwre'].map((code) => ({ sub_id: 'SBH3', species_code: code })),
+    ...['norcar', 'carwre'].map((code) => ({ sub_id: 'SBH4', species_code: code })),
+    ...['bkbplo', 'baleag'].map((code) => ({ sub_id: 'SBH7', species_code: code }))
+  ])
+  const week = await bestHotspots(region, 7, { asOf })
+  assert.equal(week.since, '2026-10-25')
+  assert.deepEqual(week.hotspots.map((h) => [h.locId, h.species, h.checklists]), [['L1', 3, 2], ['L2', 2, 3], ['L3', 0, 1]])
+  assert.deepEqual(week.hotspots[0].bestList, { species: 4, subId: 'SBH1', day: '2026-10-30' })
+  // The unopened list's count still makes it L2's best list.
+  assert.equal(week.hotspots[1].bestList.subId, 'SBH5')
+  assert.equal(week.hotspots[2].name, 'Alpha Pond')
+  // On file counts the county's every list in the week, private spots too.
+  assert.deepEqual(week.onFile, { checklists: 7, detailed: 5, firstDay: '2026-10-05' })
+  // A month reaches the older list at L1: its two species join, and it's the best list.
+  const month = await bestHotspots(region, 30, { asOf })
+  assert.deepEqual(month.hotspots.map((h) => [h.locId, h.species]), [['L1', 5], ['L2', 2], ['L3', 0]])
+  assert.equal(month.hotspots[0].bestList.subId, 'SBH7')
+  assert.equal(parseDays(undefined), 7)
+  assert.equal(parseDays('90'), 90)
+  assert.throws(() => parseDays('14'), /days must be 7, 30 or 90/)
+  assert.throws(() => assertCounty('US-GA'), /county/)
+  assert.equal(assertCounty('CA-ON-OT'), 'CA-ON-OT')
+  await db('checklists').where({ region }).del()
+})
