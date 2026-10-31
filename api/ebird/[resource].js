@@ -52,8 +52,19 @@ const resources = {
   },
   // GET /api/ebird/species-observations?region=&code=&back=30
   'species-observations': {
-    handler: ({ region, code, back }) =>
-      ebird.speciesObservations(ebird.assertRegion(region), ebird.assertSpecies(code), clampBack(back)),
+    // Reports still awaiting review are included (a rarity's first day looks like that), and those
+    // eBird flagged for review carry their evidence, as in the notable feed; an ordinary report
+    // (accepted as it came in) has none, so a common bird is never called unconfirmed.
+    handler: async ({ region, code, back }) => {
+      const rows = await ebird.speciesObservations(ebird.assertRegion(region), ebird.assertSpecies(code), clampBack(back), { detail: 'full', provisional: true })
+      const flagged = withEvidence(rows.filter((o) => o.obsReviewed || o.obsValid === false))
+      const evidenceOf = new Map(flagged.map((o) => [`${o.subId}|${o.speciesCode}`, o.evidence]))
+      return rows.map((o) => {
+        const { userDisplayName, firstName, lastName, ...rest } = o
+        const evidence = evidenceOf.get(`${o.subId}|${o.speciesCode}`)
+        return evidence ? { ...rest, evidence } : rest
+      })
+    },
     cacheControl: cache(300, 3600)
   },
   // GET /api/ebird/arriving?region= -> { arrivals: [{ speciesCode, comName, birdImg, daysLastYear, windowDays, firstLastYear }], learning }
