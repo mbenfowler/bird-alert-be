@@ -1007,6 +1007,25 @@ test('the alert range is one of the offered distances, measured from a home spot
   assert.deepEqual([back.body.range_mi, back.body.home_lat, back.body.home_lng], [30, null, null], 'back to the county center')
 })
 
+test('each visit notes the platform and whether it is the installed app, at once when they change', async () => {
+  const { platformOf, touchLastSeen } = require('../lib/users')
+  assert.equal(platformOf('Mozilla/5.0 (iPhone; CPU iPhone OS 18_7 like Mac OS X) AppleWebKit/605.1.15'), 'ios')
+  assert.equal(platformOf('Mozilla/5.0 (Linux; Android 14; Pixel 8) Chrome/131'), 'android')
+  assert.equal(platformOf('Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) Safari/605'), 'desktop')
+  assert.equal(platformOf(''), null)
+  const [{ id }] = await db('users').insert({ email: 'platform@example.com', password_hash: 'x' }).returning('id')
+  await touchLastSeen(await db('users').where({ id }).first(), { platform: 'ios', installed: false })
+  let row = await db('users').where({ id }).first()
+  assert.deepEqual([row.last_platform, row.last_installed, Boolean(row.last_seen_at)], ['ios', false, true])
+  // Added to the home screen a minute later: noted straight away, though the hour isn't up.
+  await touchLastSeen(row, { platform: 'ios', installed: true })
+  row = await db('users').where({ id }).first()
+  assert.equal(row.last_installed, true)
+  const { sanitizeUser } = require('../lib/users')
+  assert.equal('last_platform' in sanitizeUser(row), false, 'not sent back to the app')
+  await db('users').where({ id }).del()
+})
+
 test('the admin numbers: signups with their source, who opened the app, late jobs, and the database against its limit', async () => {
   const { adminStats, adminSection } = require('../lib/adminStats')
   const { touchLastSeen } = require('../lib/users')
@@ -1047,6 +1066,8 @@ test('the admin numbers: signups with their source, who opened the app, late job
   assert.match(html, /Reaching people:.*confirmed overall/)
   assert.match(html, /idea: “Could it show owls first\?”/, 'feedback shows its first line')
   assert.ok(s.shares.today >= 1 && s.shares.views >= 7)
+  assert.ok(s.platforms.length >= 1)
+  assert.match(html, /<strong>Devices:<\/strong>/)
   await db('digest_log').where({ user_id: back }).del()
   await db('feedback').where({ user_id: id }).del()
   await db('shares').where({ id: 'adminStat1' }).del()
