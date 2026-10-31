@@ -67,6 +67,9 @@ test('the migration email has a section per movement, links out and an unsubscri
   assert.match(message.html, /\/map\?code=whtspa/)
   assert.match(message.html, /\/unsubscribe\//)
   assert.match(message.text, /- Winter Wren \(9 of 15 days this time last year\)/)
+  // eBird is credited, as its API terms ask, in both versions.
+  assert.match(message.html, /from <a href="https:\/\/ebird\.org"[^>]*>eBird<\/a>, the Cornell Lab of Ornithology/)
+  assert.match(message.text, /from eBird \(https:\/\/ebird\.org\), the Cornell Lab of Ornithology/)
   assert.equal(migrationMessage(user, { arrived: [], departed: [], coming: [] }, null).subject, 'Migration this week in your area: a quiet week')
 })
 
