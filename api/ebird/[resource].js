@@ -8,7 +8,7 @@ const { pruneDaily } = require('../../lib/retention')
 const { whereToFind, notableCodes } = require('../../lib/hotspots')
 const { dailyPass, accuracy } = require('../../lib/grading')
 const { whereToGo, parseOrigin } = require('../../lib/whereToGo')
-const { bestHotspots, parseDays, assertCounty } = require('../../lib/bestHotspots')
+const { bestHotspots, bestHotspotsFor, parseDays, assertCounty } = require('../../lib/bestHotspots')
 const { nearbyPublic } = require('../../lib/nearby')
 const { placeSearch, parsePoints } = require('../../lib/placeSearch')
 const { drive } = require('../../lib/routing')
@@ -75,9 +75,15 @@ const resources = {
   },
   // GET /api/ebird/best-hotspots?region=<county>&days=7|30|90 -> { region, days, since, onFile: { checklists, detailed, firstDay },
   //   hotspots: [{ locId, name, lat, lng, species, checklists, bestList: { species, subId, day } | null }] } the county's
-  //   hotspots ranked by species reported lately, then checklists (top 25; from what's on file, no eBird calls)
+  //   hotspots ranked by species reported lately, then checklists (top 25; from what's on file, no eBird calls).
+  //   With &species=<code>: { region, days, since, onFile, species: { code, comName }, hotspots: [{ locId, name, lat, lng,
+  //   checklists, detailed, reports, frequency, lastSeen: { day, subId, howMany } }] } where that bird was reported most reliably
   'best-hotspots': {
-    handler: ({ region, days }) => bestHotspots(assertCounty(ebird.assertRegion(region)), parseDays(days)),
+    handler: ({ region, days, species }) => {
+      const county = assertCounty(ebird.assertRegion(region))
+      if (species === undefined || species === '') return bestHotspots(county, parseDays(days))
+      return bestHotspotsFor(county, parseDays(days), ebird.assertSpecies(String(species)))
+    },
     cacheControl: cache(600, 3600)
   },
   // GET /api/ebird/nearby?lat=&lng= -> { hotspots: [{ locId, name, lat, lng, miles, checklists, species, latest, lightlyBirded }],

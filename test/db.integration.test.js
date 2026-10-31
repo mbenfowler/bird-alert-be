@@ -1131,3 +1131,45 @@ test('best hotspots: ranked by species reported lately, birders\' way of countin
   assert.equal(assertCounty('CA-ON-OT'), 'CA-ON-OT')
   await db('checklists').where({ region }).del()
 })
+
+test('best hotspots for one bird: ranked by how reliably it was reported, a long record over a lucky list, its forms counted', async () => {
+  const { bestHotspotsFor, wilsonLow } = require('../lib/bestHotspots')
+  const ebird = require('../lib/ebird')
+  const region = 'US-ZZ-778'
+  const asOf = '2026-10-31'
+  await db('taxonomy_ref').insert([
+    { species_code: 'zzbun', sci_name: 'Passerina zz', com_name: 'Test Bunting', category: 'species' },
+    { species_code: 'zzbun1', sci_name: 'Passerina zz east', com_name: 'Test Bunting (Eastern)', category: 'issf', report_as: 'zzbun' }
+  ]).onConflict('species_code').ignore()
+  const list = (sub, loc, day, { detailed = true } = {}) => ({
+    sub_id: sub, region, loc_id: loc, loc_name: `Place ${loc}`, lat: 34.3, lng: -83.9, is_hotspot: true, obs_day: day, obs_time: '08:00',
+    num_species: 10, detail_fetched_at: detailed ? new Date() : null
+  })
+  // L1: the bird on its only list. L2: on 8 of 10 opened lists (one as its eastern form), plus one never opened.
+  // L3: three lists without it, so it isn't listed at all.
+  const l2 = Array.from({ length: 10 }, (_, i) => list(`SBS2${i}`, 'L2', `2026-10-${String(20 + i).padStart(2, '0')}`))
+  await db('checklists').insert([
+    list('SBS1', 'L1', '2026-10-30'), ...l2, list('SBS2X', 'L2', '2026-10-30', { detailed: false }),
+    list('SBS31', 'L3', '2026-10-30'), list('SBS32', 'L3', '2026-10-29'), list('SBS33', 'L3', '2026-10-28')
+  ])
+  await db('checklist_species').insert([
+    { sub_id: 'SBS1', species_code: 'zzbun', how_many: 1 },
+    ...l2.slice(0, 7).map((l) => ({ sub_id: l.sub_id, species_code: 'zzbun', how_many: 2 })),
+    { sub_id: 'SBS27', species_code: 'zzbun1', how_many: 3 },
+    ...['SBS31', 'SBS32', 'SBS33'].map((sub) => ({ sub_id: sub, species_code: 'norcar' }))
+  ])
+  assert.ok(wilsonLow(1, 1) < wilsonLow(8, 10))
+  const month = await bestHotspotsFor(region, 30, 'zzbun', { asOf })
+  assert.deepEqual(month.species, { code: 'zzbun', comName: 'Test Bunting' })
+  assert.deepEqual(month.hotspots.map((h) => [h.locId, h.reports, h.detailed, h.checklists]), [['L2', 8, 10, 11], ['L1', 1, 1, 1]])
+  assert.equal(month.hotspots[0].frequency, 0.8)
+  // The latest list with it at L2 is the eastern form's, Oct 27, three of them.
+  assert.deepEqual(month.hotspots[0].lastSeen, { day: '2026-10-27', subId: 'SBS27', howMany: 3 })
+  assert.deepEqual(month.onFile, { checklists: 15, detailed: 14, firstDay: '2026-10-20' })
+  const none = await bestHotspotsFor(region, 30, 'nobird1', { asOf })
+  assert.deepEqual(none.hotspots, [])
+  assert.deepEqual(none.species, { code: 'nobird1', comName: null })
+  assert.throws(() => ebird.assertSpecies('not a code!'), /species code/)
+  await db('checklists').where({ region }).del()
+  await db('taxonomy_ref').whereIn('species_code', ['zzbun', 'zzbun1']).del()
+})
