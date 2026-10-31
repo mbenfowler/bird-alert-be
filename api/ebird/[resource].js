@@ -12,7 +12,7 @@ const { bestHotspots, bestHotspotsFor, parseDays, assertCounty } = require('../.
 const { nearbyPublic } = require('../../lib/nearby')
 const { placeSearch, parsePoints } = require('../../lib/placeSearch')
 const { drive } = require('../../lib/routing')
-const { getShare, sharePage } = require('../../lib/shares')
+const { getShare, isBot, sharePage } = require('../../lib/shares')
 const { chase } = require('../../lib/chase')
 const { withAba } = require('../../lib/abaCodes')
 const { assertCronCaller } = require('../../lib/digest')
@@ -111,8 +111,8 @@ const resources = {
   },
   // GET /api/ebird/share?id= -> a shared route or sighting (public, read-only)
   share: {
-    handler: ({ id }) => getShare(id),
-    // Not cached at the edge, so every open is counted (one small read).
+    handler: ({ id }, req) => getShare(id, { count: !isBot(req?.headers?.['user-agent']) }),
+    // Not cached at the edge, so every open is counted (one small read); link previewers aren't.
     cacheControl: 'no-store'
   },
   // GET /api/ebird/share-page?kind=r|s&id= -> the app's page with the share's preview card (title, picture) in its head;
