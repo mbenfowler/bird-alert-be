@@ -36,6 +36,17 @@ jobs:
             echo "$out" | grep -q '"more":true' || break
             after=$(echo "$out" | grep -o '"next":[0-9]*' | cut -d: -f2)
           done
+      - name: HQ rarity alert (Code 4-6, to the owner only)
+        # Its own call, after the users' alerts: it can't hold them up, and if it fails the run carries on.
+        if: always()
+        continue-on-error: true
+        env:
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+        run: |
+          curl --fail-with-body --silent --show-error --max-time 60 \
+            -H "Authorization: Bearer $CRON_SECRET" \
+            "https://bird-alert-be.vercel.app/api/mail/hq-alerts"
+          echo
       - name: Sync the regions' checklists
         env:
           CRON_SECRET: ${{ secrets.CRON_SECRET }}
