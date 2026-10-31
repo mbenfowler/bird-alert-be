@@ -3,6 +3,7 @@ const { requireUser } = require('../../lib/auth')
 const { assertCronCaller, runDigest, previewDigest } = require('../../lib/digest')
 const { DIGESTS } = require('../../lib/digests')
 const { runHqDesk, approvePost } = require('../../lib/hqDesk')
+const { runHqAlerts } = require('../../lib/hqAlerts')
 const { runConfirmReminders } = require('../../lib/confirmReminder')
 
 // One function for every email the app sends on a schedule, plus the preview; Vercel's Hobby plan
@@ -39,6 +40,15 @@ const actions = {
     handler: async (req, res) => {
       assertCronCaller(req)
       res.status(200).json(await runHqDesk({ force: req.query.force === '1' }))
+    }
+  },
+  // GET /api/mail/hq-alerts (hourly cron) -> a Code 4-5 bird reported in the US or Canada goes to the owner at once, by push and
+  //   email, with a share link and a drafted post; a Code 6 (extinct) report gets a heads-up with neither. Once per bird per state a week.
+  'hq-alerts': {
+    methods: ['GET'],
+    handler: async (req, res) => {
+      assertCronCaller(req)
+      res.status(200).json(await runHqAlerts())
     }
   },
 
