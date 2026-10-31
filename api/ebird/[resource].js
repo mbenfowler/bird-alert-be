@@ -55,10 +55,21 @@ const resources = {
     // Reports still awaiting review are included (a rarity's first day looks like that), and those
     // eBird flagged for review carry their evidence, as in the notable feed; an ordinary report
     // (accepted as it came in) has none, so a common bird is never called unconfirmed.
+    // This feed holds only the latest report at each place, so a fresh unreviewed report would hide
+    // the confirmed ones before it: the evidence is read from the county's notable feed, which has
+    // every report of the bird, as the alerts do.
     handler: async ({ region, code, back }) => {
-      const rows = await ebird.speciesObservations(ebird.assertRegion(region), ebird.assertSpecies(code), clampBack(back), { detail: 'full', provisional: true })
-      const flagged = withEvidence(rows.filter((o) => o.obsReviewed || o.obsValid === false))
-      const evidenceOf = new Map(flagged.map((o) => [`${o.subId}|${o.speciesCode}`, o.evidence]))
+      const days = clampBack(back)
+      const species = ebird.assertSpecies(code)
+      const [rows, notable] = await Promise.all([
+        ebird.speciesObservations(ebird.assertRegion(region), species, days, { detail: 'full', provisional: true }),
+        ebird.notableObservations(region, days).catch(() => [])
+      ])
+      const isFlagged = (o) => o.obsReviewed || o.obsValid === false
+      const flaggedRows = rows.filter(isFlagged)
+      const pool = [...notable.filter((o) => o.speciesCode === species), ...flaggedRows.filter((o) => !notable.some((n) => n.subId === o.subId && n.speciesCode === o.speciesCode))]
+      const judged = new Map(withEvidence(pool).map((o) => [`${o.subId}|${o.speciesCode}`, o.evidence]))
+      const evidenceOf = new Map(flaggedRows.map((o) => [`${o.subId}|${o.speciesCode}`, judged.get(`${o.subId}|${o.speciesCode}`)]))
       return rows.map((o) => {
         const { userDisplayName, firstName, lastName, ...rest } = o
         const evidence = evidenceOf.get(`${o.subId}|${o.speciesCode}`)
