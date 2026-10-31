@@ -15,6 +15,7 @@ const { drive } = require('../../lib/routing')
 const { getShare, isBot, sharePage } = require('../../lib/shares')
 const { chase } = require('../../lib/chase')
 const { withAba } = require('../../lib/abaCodes')
+const { withEvidence, withoutEscapees } = require('../../lib/evidence')
 const { assertCronCaller } = require('../../lib/digest')
 
 const DAY = 86400
@@ -35,8 +36,18 @@ const resources = {
     cacheControl: cache(300, 3600)
   },
   // GET /api/ebird/notable?region=&back=30 -> eBird's notable sightings, each with its ABA Checklist code (`aba`, or null)
+  //   and the evidence behind it (`evidence: { confirmed, media, birders }`); escapees eBird marks are left out.
   notable: {
-    handler: async ({ region, back }) => withAba(await ebird.notableObservations(ebird.assertRegion(region), clampBack(back)), { region }),
+    handler: async ({ region, back }) => {
+      const days = clampBack(back)
+      const [notable, recent] = await Promise.all([
+        ebird.notableObservations(ebird.assertRegion(region), days),
+        // Only for eBird's escapee marks; a failure here costs that, not the sightings.
+        ebird.recentObservations(region, days).catch(() => [])
+      ])
+      const rows = withoutEscapees(withEvidence(notable), recent).map(publicNotable)
+      return withAba(rows, { region })
+    },
     cacheControl: cache(300, 3600)
   },
   // GET /api/ebird/species-observations?region=&code=&back=30
@@ -169,6 +180,10 @@ const speciesOnly = async (codes) => {
   }
   return codes.filter((code) => category.get(code) === 'species')
 }
+
+// The full notable feed names observers; the app needs the evidence, not who.
+const publicNotable = ({ speciesCode, comName, sciName, locId, locName, obsDt, howMany, lat, lng, obsValid, obsReviewed, locationPrivate, subId, evidence }) =>
+  ({ speciesCode, comName, sciName, locId, locName, obsDt, howMany, lat, lng, obsValid, obsReviewed, locationPrivate, subId, evidence })
 
 const clampBack = (value) => {
   const days = Number.parseInt(value ?? '30', 10)

@@ -25,7 +25,8 @@ test('requests carry the API key and encode parameters', async () => {
   assert.equal(seen.init.headers['X-eBirdApiToken'], 'k123')
 
   await withFetch((url) => { seen = { url }; return jsonResponse([]) }, () => ebird.notableObservations('US-GA-139', 7))
-  assert.equal(seen.url, 'https://api.ebird.org/v2/data/obs/US-GA-139/recent/notable?back=7')
+  // The full feed: review status, media and observer, the evidence behind each report.
+  assert.equal(seen.url, 'https://api.ebird.org/v2/data/obs/US-GA-139/recent/notable?back=7&detail=full')
 })
 
 test('a failing eBird call becomes a 502, not a crash', async () => {

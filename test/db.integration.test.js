@@ -1299,3 +1299,47 @@ test('best hotspots for one bird: ranked by how reliably it was reported, a long
   await db('checklists').where({ region }).del()
   await db('taxonomy_ref').whereIn('species_code', ['zzbun', 'zzbun1']).del()
 })
+
+test('a rare bird sent before review: one follow-up when eBird confirms it, none if rejected, never for Codes 1-2, never after a week', async () => {
+  const { runReviewChecks } = require('../lib/reviewWatch')
+  const [{ id }] = await db('users').insert({ email: 'review@example.com', password_hash: 'x', location: 'US-CA-081', state: 'CA', email_confirmed: true }).returning('id')
+  const row = (over) => ({ user_id: id, speciesCode: 'yebwar', sub_id: 'S1', kind: 'notable', aba: 4, sighting_region: 'US-CA-081', loc_name: 'Rancho Corral de Tierra', review_state: 'pending', ...over })
+  await db('push_log').insert([
+    row({}),
+    row({ speciesCode: 'rejected', sub_id: 'S2' }),
+    row({ speciesCode: 'common', sub_id: 'S3', aba: 2 })
+  ])
+  await db('push_log').insert(row({ speciesCode: 'old', sub_id: 'S4', created_at: db.raw("now() - interval '8 days'") }))
+  const feed = (reviewed) => [
+    { speciesCode: 'yebwar', subId: 'S1', comName: 'Yellow-browed Warbler', locName: 'Rancho Corral de Tierra', obsDt: '2026-10-22 12:50', obsReviewed: reviewed, obsValid: reviewed },
+    { speciesCode: 'common', subId: 'S3', comName: 'Common', obsReviewed: true, obsValid: true },
+    { speciesCode: 'old', subId: 'S4', comName: 'Old', obsReviewed: true, obsValid: true }
+  ]
+  const keep = ebird.notableObservations
+  const sent = []
+  const send = async (userId, payload) => { sent.push([userId, payload.title]); return { sent: 1, gone: 0 } }
+  try {
+    // Still unreviewed: it waits; the report missing from the feed was rejected and is dropped quietly.
+    ebird.notableObservations = async () => feed(false)
+    const first = await runReviewChecks({ send })
+    assert.deepEqual([first.pending, first.confirmed, first.dropped, sent.length], [2, 0, 1, 0])
+    // Confirmed: told once, and only once.
+    ebird.notableObservations = async () => feed(true)
+    await runReviewChecks({ send })
+    await runReviewChecks({ send })
+    assert.deepEqual(sent, [[id, '✅ Now confirmed by eBird: Yellow-browed Warbler']])
+    const states = Object.fromEntries((await db('push_log').where({ user_id: id }).select('speciesCode', 'review_state')).map((r) => [r.speciesCode, r.review_state]))
+    assert.deepEqual(states, { yebwar: 'confirmed', rejected: 'dropped', common: 'pending', old: 'pending' }, 'Code 2 and week-old rows are never acted on')
+    // Quiet hours hold a follow-up until they end.
+    await db('push_log').insert(row({ sub_id: 'S5' }))
+    await db('users').where({ id }).update({ push_quiet_start: 0, push_quiet_end: 24, timezone: 'UTC' })
+    ebird.notableObservations = async () => [{ ...feed(true)[0], subId: 'S5' }]
+    await runReviewChecks({ send })
+    assert.equal(sent.length, 1, 'held for quiet hours')
+    assert.equal((await db('push_log').where({ user_id: id, sub_id: 'S5' }).first()).review_state, 'pending')
+  } finally {
+    ebird.notableObservations = keep
+    await db('push_log').where({ user_id: id }).del()
+    await db('users').where({ id }).del()
+  }
+})
