@@ -4,6 +4,7 @@ const { requireUser, clearSession } = require('../lib/auth')
 const { normalizeEmail, assertValidEmail, findUserByEmail, sanitizeUser } = require('../lib/users')
 const { sendConfirmationEmail } = require('../lib/mailer')
 const { isValidTimezone } = require('../lib/quietHours')
+const { RANGE_CHOICES } = require('../lib/range')
 const { syncNewRegionSoon } = require('../lib/checklists')
 
 const STRING_FIELDS = ['state', 'location']
@@ -51,6 +52,20 @@ module.exports = route(['PATCH', 'DELETE'], async (req, res) => {
       if (value !== null && !(Number.isInteger(value) && value >= 0 && value <= 23)) throw new HttpError(400, `${field} must be an hour from 0 to 23, or null`)
       changes[field] = value
     }
+  }
+  // The alert range: one of the offered distances (0 keeps alerts to the county), and a home spot
+  // to measure it from (both null: the county's center).
+  if ('range_mi' in input) {
+    if (!RANGE_CHOICES.includes(input.range_mi)) throw new HttpError(400, `range_mi must be one of ${RANGE_CHOICES.join(', ')}`)
+    changes.range_mi = input.range_mi
+  }
+  if ('home_lat' in input || 'home_lng' in input) {
+    const { home_lat: lat = null, home_lng: lng = null } = input
+    const cleared = lat === null && lng === null
+    const valid = Number.isFinite(lat) && Number.isFinite(lng) && Math.abs(lat) <= 90 && Math.abs(lng) <= 180
+    if (!cleared && !valid) throw new HttpError(400, 'home_lat and home_lng must be a point, or both null')
+    changes.home_lat = cleared ? null : lat
+    changes.home_lng = cleared ? null : lng
   }
   if ('timezone' in input) {
     if (!isValidTimezone(input.timezone)) throw new HttpError(400, 'timezone must be an IANA time zone name')
