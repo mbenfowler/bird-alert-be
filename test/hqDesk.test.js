@@ -89,6 +89,39 @@ test('ABA Checklist codes rank a rarity for the whole ABA Area above a local odd
   assert.match(draftPost(withCodes[1], 'https://x.example/s', '2026-10-27'), /^🚨 Anhinga in New Jersey\n/, 'codes 1-2 are not shown')
 })
 
+test('the headliners lead: a quiet Code 3 outranks Code 1 county oddities with a modest chase, not a bird a whole state is chasing', () => {
+  // The late-October mix: county oddities with five confirmed checklists each, and Code 3s on two
+  // unreviewed checklists apiece.
+  const bird = (speciesCode, comName, sciName, state, n, over = {}) => Array.from({ length: n }, (_, i) => rec({ speciesCode, comName, sciName, subnational1Code: state, subnational1Name: state, locId: `L-${speciesCode}`, locName: comName, subId: `${speciesCode}${i}`, userDisplayName: `${speciesCode}${i}`, ...over }))
+  const unreviewed = { obsReviewed: false }
+  const records = [
+    ...bird('dowwoo', 'Downy Woodpecker', 'Dryobates pubescens', 'US-AZ', 5),
+    ...bird('chbchi', 'Chestnut-backed Chickadee', 'Poecile rufescens', 'US-OR', 5),
+    ...bird('brebla', "Brewer's Blackbird", 'Euphagus cyanocephalus', 'US-MN', 5),
+    ...bird('yegvir', 'Yellow-green Vireo', 'Vireo flavoviridis', 'US-CA', 2, unreviewed),
+    ...bird('tunbeg1', 'Tundra Bean-Goose', 'Anser serrirostris', 'US-NY', 2, unreviewed),
+    // A Code 1 a whole state is chasing still leads a quiet Code 3.
+    ...bird('whiibi', 'White Ibis', 'Eudocimus albus', 'US-TX', 30),
+    // Code 6 is never a morning pick, whatever the chase.
+    ...bird('ivbwoo', 'Ivory-billed Woodpecker', 'Campephilus principalis', 'US-AR', 9)
+  ]
+  const code = { 'Dryobates pubescens': 1, 'Poecile rufescens': 1, 'Euphagus cyanocephalus': 1, 'Vireo flavoviridis': 3, 'Anser serrirostris': 3, 'Eudocimus albus': 1, 'Campephilus principalis': 6 }
+  const picks = pickRarities(records, { codeOf: (g) => code[g.sciName] ?? null })
+  assert.deepEqual(picks.map((p) => p.comName), ['White Ibis', 'Yellow-green Vireo', 'Tundra Bean-Goose', 'Downy Woodpecker', 'Chestnut-backed Chickadee', "Brewer's Blackbird"])
+  // Before the change (Code 3 +4, Code 1 +0) the three oddities scored 13.2 and the Code 3s 11.2.
+  assert.deepEqual(picks.map((p) => p.score), [15.9, 15.2, 15.2, 11.2, 11.2, 11.2])
+  assert.ok(!picks.some((p) => p.aba === 6))
+})
+
+test('the instant alert counts a rarity from its first report, awaiting review, but never a rejected one', () => {
+  const { isRejected } = require('../lib/hqDesk')
+  assert.deepEqual([isRejected({ obsValid: false, obsReviewed: true }), isRejected({ obsValid: false, obsReviewed: false }), isRejected({ obsValid: true, obsReviewed: true })], [true, false, false])
+  const first = [rec({ speciesCode: 'yebwar3', comName: 'Yellow-browed Warbler', obsValid: false, obsReviewed: false })]
+  assert.equal(pickRarities(first).length, 0, 'the morning desk waits for a chase or a review')
+  assert.equal(pickRarities(first, { lone: true, pending: true }).length, 1)
+  assert.equal(pickRarities([{ ...first[0], obsReviewed: true }], { lone: true, pending: true }).length, 0)
+})
+
 test('codes 3-5 are shown and lead, rarest first; 1-2 and 6 keep their place', () => {
   const { rarestFirst, isShown } = require('../lib/abaCodes')
   const { sightingNotification } = require('../lib/notifications')

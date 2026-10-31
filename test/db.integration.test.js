@@ -11,7 +11,7 @@ const seasonality = require('../lib/seasonality')
 let userId
 before(async () => {
   await db.migrate.latest()
-  for (const table of ['hotspot_weeks', 'hq_picks', 'feedback', 'passkeys', 'shares', 'seen_birds', 'taxonomy_ref', 'user_routes', 'hotspot_ref', 'mail_counts', 'error_log', 'drive_cache', 'nearby_cache', 'place_predictions', 'checklist_species', 'checklists', 'bird_sounds', 'digest_log', 'push_handoff', 'push_log', 'push_subscriptions', 'saved_birds', 'auth_throttle', 'season_firsts', 'region_species_days', 'region_days', 'job_runs', 'users', 'birds']) await db(table).del()
+  for (const table of ['hq_alerts', 'hotspot_weeks', 'hq_picks', 'feedback', 'passkeys', 'shares', 'seen_birds', 'taxonomy_ref', 'user_routes', 'hotspot_ref', 'mail_counts', 'error_log', 'drive_cache', 'nearby_cache', 'place_predictions', 'checklist_species', 'checklists', 'bird_sounds', 'digest_log', 'push_handoff', 'push_log', 'push_subscriptions', 'saved_birds', 'auth_throttle', 'season_firsts', 'region_species_days', 'region_days', 'job_runs', 'users', 'birds']) await db(table).del()
   // Nothing in here may reach eBird; the hourly job's history fetch is a no-op unless a test says otherwise.
   ebird.historicObservations = async () => []
   ;[{ id: userId }] = await db('users').insert({
@@ -962,6 +962,61 @@ test('the HQ desk stores its picks, makes share links, emails them, and never pi
     assert.equal(mails.length, 2, 'nothing new to pitch: the app numbers alone')
     assert.match(mails.pop().subject, /no rarities/)
   } finally { delete process.env.FEEDBACK_TO }
+})
+
+test('an HQ rarity alert: a Code 4-5 bird goes to the owner at once with a post ready, a Code 6 report gets a heads-up, each once a week', async () => {
+  const { runHqAlerts } = require('../lib/hqAlerts')
+  const codes = { bySci: new Map([['Phylloscopus inornatus', 4], ['Anhinga anhinga', 1], ['Campephilus principalis', 6], ['Calidris pugnax', 3]]), byName: new Map() }
+  const base = { subnational1Code: 'US-CA', subnational1Name: 'California', subnational2Name: 'San Mateo', lat: 37.52, lng: -122.5, obsDt: '2026-10-22 12:50', userDisplayName: 'A', locationPrivate: false }
+  // Awaiting review (valid false, not reviewed) still counts: that's how a true rarity looks on day one.
+  const warbler = { ...base, speciesCode: 'yebwar3', comName: 'Yellow-browed Warbler', sciName: 'Phylloscopus inornatus', locId: 'L77', locName: 'Rancho Corral de Tierra--Moss Beach area', subId: 'S900', obsValid: false, obsReviewed: false }
+  const records = [
+    warbler,
+    // Rejected by reviewers: never.
+    { ...warbler, subnational1Code: 'US-OR', subnational1Name: 'Oregon', subId: 'S901', obsReviewed: true },
+    // A Code 3 waits for the morning desk.
+    { ...base, speciesCode: 'ruff', comName: 'Ruff', sciName: 'Calidris pugnax', locId: 'L2', locName: 'Somewhere', subId: 'S902', obsValid: true, obsReviewed: true },
+    // Code 6, in someone's yard: a heads-up, the place never named.
+    { ...base, speciesCode: 'ivbwoo', comName: 'Ivory-billed Woodpecker', sciName: 'Campephilus principalis', subnational1Code: 'US-AR', subnational1Name: 'Arkansas', subnational2Name: 'Monroe', locId: 'L3', locName: '12 Private Lane', subId: 'S903', obsValid: false, obsReviewed: false, locationPrivate: true },
+    // Mexico has no ABA codes.
+    { ...warbler, subnational1Code: 'MX-BCN', subnational1Name: 'Baja California', subId: 'S904' }
+  ]
+  await db('birds').insert({ speciesCode: 'yebwar3', comName: 'Yellow-browed Warbler', sciName: 'Phylloscopus inornatus', birdImg: 'https://img.example/ybw.jpg' }).onConflict('speciesCode').ignore()
+  const [{ id: owner }] = await db('users').insert({ email: 'Owner@example.com', password_hash: 'x' }).returning('id')
+  const [{ id: someone }] = await db('users').insert({ email: 'someone@example.com', password_hash: 'x' }).returning('id')
+  const pushes = []
+  const mails = []
+  const run = (now) => runHqAlerts({ records, codes, now, push: async (userId, payload) => { pushes.push({ userId, payload }); return { sent: 1 } }, send: async (m) => { mails.push(m); return {} } })
+  process.env.FEEDBACK_TO = 'owner@example.com'
+  try {
+    const first = await run(new Date('2026-10-22T20:00:00Z'))
+    assert.deepEqual([first.post, first.extinct, first.pushed, first.emailed], [1, 1, true, true])
+    assert.deepEqual([...new Set(pushes.map((p) => p.userId))], [owner], 'the owner\'s devices only')
+    assert.ok(!pushes.some((p) => p.userId === someone))
+    const [code4, code6] = pushes.map((p) => p.payload)
+    assert.equal(code4.title, '🚨 ABA Code 4: Yellow-browed Warbler in California')
+    assert.match(code4.body, /Rancho Corral de Tierra – Moss Beach area, San Mateo Co\. · Oct 22, 12:50 PM · 1 checklist, awaiting review/)
+    assert.match(code4.data.url, /\/share\/s\/[A-Za-z0-9]{10}$/)
+    assert.match(mails[0].subject, /^HQ alert: ABA Code 4 Yellow-browed Warbler in California$/)
+    assert.match(mails[0].html, /🚨 Yellow-browed Warbler in California · ABA Code 4/)
+    assert.match(mails[0].html, /Post on X/)
+    assert.equal(code6.title, '⚠️ Unconfirmed: Ivory-billed Woodpecker reported in Arkansas')
+    assert.match(code6.body, /Almost certainly a misidentification/)
+    assert.equal(code6.data.url, 'https://ebird.org/checklist/S903', 'no share page for a Code 6')
+    assert.match(mails[1].subject, /^HQ heads-up: unconfirmed Ivory-billed Woodpecker report in Arkansas$/)
+    assert.doesNotMatch(mails[1].html, /Post on X|\/share\/|Private Lane/)
+    assert.equal(await db('shares').whereRaw("payload->>'speciesCode' = 'ivbwoo'").count('* as n').first().then((r) => Number(r.n)), 0)
+    // Reported again the next day: already told this week.
+    records.push({ ...warbler, subId: 'S905', obsDt: '2026-10-23 08:37', userDisplayName: 'B' })
+    const again = await run(new Date('2026-10-23T18:00:00Z'))
+    assert.deepEqual([again.post, again.extinct, pushes.length, mails.length], [0, 0, 2, 2])
+    // A week on, it would be news again.
+    assert.equal((await run(new Date('2026-10-30T21:00:00Z'))).post, 1)
+  } finally {
+    delete process.env.FEEDBACK_TO
+    await db('hq_alerts').del()
+    await db('users').whereIn('id', [owner, someone]).del()
+  }
 })
 
 test('an HQ pick is posted only from its confirmation page, once, and a failed post can be retried', async () => {
