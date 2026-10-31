@@ -44,6 +44,8 @@ test('watch-list alerts with no device to push to come by email instead, until t
   const chosen = alertDigestMessage(await db('users').where({ id: ids.chose }).first(), sighting, new Map())
   assert.doesNotMatch(chosen.html, /aren’t set up/)
   assert.equal(tokenOf(chosen.html), 'alert_digest_email_enabled')
+  assert.match(chosen.html, /eBird<\/a>, the Cornell Lab of Ornithology/)
+  assert.match(chosen.text, /from eBird \(https:\/\/ebird\.org\)/)
   await db('push_subscriptions').whereIn('user_id', Object.values(ids)).del()
   await db('digest_log').whereIn('user_id', Object.values(ids)).del()
   await db('users').whereIn('id', Object.values(ids)).del()
