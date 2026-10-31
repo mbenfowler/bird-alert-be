@@ -11,7 +11,7 @@ const seasonality = require('../lib/seasonality')
 let userId
 before(async () => {
   await db.migrate.latest()
-  for (const table of ['hq_picks', 'feedback', 'passkeys', 'shares', 'seen_birds', 'taxonomy_ref', 'user_routes', 'hotspot_ref', 'mail_counts', 'error_log', 'drive_cache', 'nearby_cache', 'place_predictions', 'checklist_species', 'checklists', 'bird_sounds', 'digest_log', 'push_handoff', 'push_log', 'push_subscriptions', 'saved_birds', 'auth_throttle', 'season_firsts', 'region_species_days', 'region_days', 'job_runs', 'users', 'birds']) await db(table).del()
+  for (const table of ['hotspot_weeks', 'hq_picks', 'feedback', 'passkeys', 'shares', 'seen_birds', 'taxonomy_ref', 'user_routes', 'hotspot_ref', 'mail_counts', 'error_log', 'drive_cache', 'nearby_cache', 'place_predictions', 'checklist_species', 'checklists', 'bird_sounds', 'digest_log', 'push_handoff', 'push_log', 'push_subscriptions', 'saved_birds', 'auth_throttle', 'season_firsts', 'region_species_days', 'region_days', 'job_runs', 'users', 'birds']) await db(table).del()
   // Nothing in here may reach eBird; the hourly job's history fetch is a no-op unless a test says otherwise.
   ebird.historicObservations = async () => []
   ;[{ id: userId }] = await db('users').insert({
@@ -459,10 +459,60 @@ test('retention deletes checklists past 90 days and strips old history to region
   assert.deepEqual([rows[0].locId, rows[0].locName, rows[0].obsTime, rows[0].subId], [null, null, null, null])
   assert.equal(rows[1].locName, 'New Lake')
   await db('job_runs').where({ kind: 'retention' }).del()
-  assert.ok(await pruneDaily())
+  await db('hotspot_weeks').insert({ loc_id: 'L1', region: 'US-GA-139', week_start: '2025-07-14', checklists: 3, species: 40 })
+  const daily = await pruneDaily()
+  assert.ok(daily)
+  assert.equal(typeof daily.hotspotWeeks, 'number', 'the weekly tallies are brought up to date in the same pass')
+  assert.ok(await db('hotspot_weeks').where({ loc_id: 'L1', week_start: '2025-07-14' }).first(), 'and are never pruned')
   assert.equal(await pruneDaily(), null, 'a second pass the same day does nothing')
   await db('region_species_days').where({ speciesCode: 'retenta' }).del()
   await db('checklists').whereIn('sub_id', ['S900000002']).del()
+  await db('hotspot_weeks').del()
+})
+
+test('hotspot weeks: each hotspot\'s week tallied (lists, species the birders\' way, best list), redone in place as lists arrive', async () => {
+  const { rollupHotspotWeeks } = require('../lib/hotspotWeeks')
+  const region = 'US-ZZ-778'
+  await db('taxonomy_ref').insert([
+    { species_code: 'duck', sci_name: 'Anatidae sp.', com_name: 'duck sp.', category: 'spuh' },
+    { species_code: 'yerwar1', sci_name: 'Setophaga coronata coronata', com_name: 'Yellow-rumped Warbler (Myrtle)', category: 'issf', report_as: 'yerwar' }
+  ]).onConflict('species_code').ignore()
+  const list = (sub, loc, day, numSpecies, { detailed = true, hotspot = true } = {}) => ({
+    sub_id: sub, region, loc_id: loc, loc_name: `Place ${loc}`, is_hotspot: hotspot, obs_day: day, obs_time: '08:00',
+    num_species: numSpecies, detail_fetched_at: detailed ? new Date() : null
+  })
+  // Friday 2026-10-30 is in the week of Monday 2026-10-26; Sunday 2026-10-25 closes the week before.
+  await db('checklists').insert([
+    list('SHW1', 'LHW1', '2026-10-26', 4), list('SHW2', 'LHW1', '2026-10-30', 2), list('SHW3', 'LHW1', '2026-10-25', 7, { detailed: false }),
+    list('SHW4', 'LHW2', '2026-10-28', 3), list('SHW5', 'LHW9', '2026-10-28', 30, { hotspot: false }),
+    // Long past the window: left alone.
+    list('SHW6', 'LHW1', '2026-08-03', 12)
+  ])
+  await db('checklist_species').insert([
+    ...['yerwar', 'yerwar1', 'norcar', 'duck'].map((code) => ({ sub_id: 'SHW1', species_code: code })),
+    ...['norcar', 'blujay'].map((code) => ({ sub_id: 'SHW2', species_code: code })),
+    ...['carwre'].map((code) => ({ sub_id: 'SHW4', species_code: code }))
+  ])
+  const asOf = '2026-10-31'
+  const tally = async () => (await db('hotspot_weeks').where({ region }).orderBy(['loc_id', 'week_start']))
+    .map((r) => [r.loc_id, new Date(r.week_start).toISOString().slice(0, 10) <= '2026-10-25' ? 'before' : 'this', r.checklists, r.species, r.best_list, r.best_sub_id])
+  assert.ok(await rollupHotspotWeeks({ asOf }) >= 3)
+  assert.deepEqual(await tally(), [
+    ['LHW1', 'before', 1, 0, 7, 'SHW3'],
+    ['LHW1', 'this', 2, 3, 4, 'SHW1'],
+    ['LHW2', 'this', 1, 1, 3, 'SHW4']
+  ])
+  const weeks = await db('hotspot_weeks').where({ region, loc_id: 'LHW1' }).orderBy('week_start').pluck('week_start')
+  assert.deepEqual(weeks.map((d) => new Date(d).getDay()), [1, 1], 'weeks start on a Monday')
+  // A late list and its detail: the week is redone in place, not added to.
+  await db('checklists').insert(list('SHW7', 'LHW1', '2026-10-31', 9))
+  await db('checklist_species').insert(['baleag', 'norcar'].map((code) => ({ sub_id: 'SHW7', species_code: code })))
+  await rollupHotspotWeeks({ asOf })
+  await rollupHotspotWeeks({ asOf })
+  assert.deepEqual((await tally())[1], ['LHW1', 'this', 3, 4, 9, 'SHW7'])
+  assert.equal(await db('hotspot_weeks').where({ region }).count('* as n').first().then((r) => Number(r.n)), 3)
+  await db('checklists').where({ region }).del()
+  await db('hotspot_weeks').where({ region }).del()
 })
 
 test('where to find a species: tables and the live feed become ranked places with evidence', async () => {
