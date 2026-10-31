@@ -1012,8 +1012,17 @@ test('an HQ rarity alert: a Code 4-5 bird goes to the owner at once with a post 
     assert.deepEqual([again.post, again.extinct, pushes.length, mails.length], [0, 0, 2, 2])
     // A week on, it would be news again.
     assert.equal((await run(new Date('2026-10-30T21:00:00Z'))).post, 1)
+    // The owner can sign in with another address than the desk mails: HQ_PUSH_EMAIL names that account.
+    process.env.HQ_PUSH_EMAIL = 'someone@example.com'
+    await db('hq_alerts').del()
+    pushes.length = 0
+    mails.length = 0
+    await run(new Date('2026-10-30T22:00:00Z'))
+    assert.deepEqual([...new Set(pushes.map((p) => p.userId))], [someone], 'pushes go to the named account')
+    assert.ok(mails.every((m) => m.to === 'owner@example.com'), 'the email still goes to the desk\'s address')
   } finally {
     delete process.env.FEEDBACK_TO
+    delete process.env.HQ_PUSH_EMAIL
     await db('hq_alerts').del()
     await db('users').whereIn('id', [owner, someone]).del()
   }
