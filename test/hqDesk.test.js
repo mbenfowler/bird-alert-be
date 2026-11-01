@@ -152,7 +152,7 @@ test('the desk reads every covered country, and one that fails is left out rathe
   ebird.countryNotable = async (country) => { asked.push(country); if (country === 'CA') throw new Error('eBird is busy'); return [rec({ subnational1Code: `${country}-XX` })] }
   try {
     const all = await notableEverywhere()
-    assert.deepEqual(asked, ['US', 'CA', 'MX'])
-    assert.deepEqual(all.map((r) => r.subnational1Code), ['US-XX', 'MX-XX'])
+    assert.deepEqual(asked, ['US', 'CA', 'MX', 'ZA'])
+    assert.deepEqual(all.map((r) => r.subnational1Code), ['US-XX', 'MX-XX', 'ZA-XX'])
   } finally { ebird.countryNotable = original }
 })
