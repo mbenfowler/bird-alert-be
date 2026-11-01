@@ -1419,3 +1419,68 @@ test('strict alerts: a rare report waits for proof and then goes out once; watch
     await db('users').whereIn('id', [strict, open]).del()
   }
 })
+
+test('areas anywhere eBird covers: lists are kept, a point or a town becomes an area (never kept), and saves are checked', async () => {
+  const areas = require('../lib/areas')
+  const placeSearch = require('../lib/placeSearch')
+  const userApi = require('../api/user')
+  const { fakeReq, fakeRes } = require('./helpers')
+  const { createSession } = require('../lib/auth')
+  const saved = { ...ebird }
+  const savedSearch = placeSearch.searchAddresses
+  const calls = { countries: 0, near: [] }
+  ebird.countries = async () => { calls.countries += 1; return [{ code: 'GB', name: 'United Kingdom' }, { code: 'AU', name: 'Australia' }] }
+  ebird.provinces = async (country) => country === 'AU' ? [{ code: 'AU-ACT', name: 'Australian Capital Territory' }] : [{ code: 'GB-ENG', name: 'England' }]
+  ebird.subregions = async (state) => state === 'AU-ACT' ? [] : [{ code: 'GB-ENG-LND', name: 'London' }, { code: 'GB-ENG-KEN', name: 'Kent' }]
+  ebird.regionInfo = async (code) => ({ result: code === 'GB-ENG-LND' ? 'London, England, United Kingdom' : 'Kent, England, United Kingdom' })
+  // Nothing within 5 km of the point; London's hotspots within 15, the nearest first.
+  ebird.hotspotsNear = async (lat, lng, km) => {
+    calls.near.push(km)
+    return km < 15 ? [] : [
+      { locId: 'L2', countryCode: 'GB', subnational1Code: 'GB-ENG', subnational2Code: 'GB-ENG-KEN', lat: lat + 0.1, lng },
+      { locId: 'L1', countryCode: 'GB', subnational1Code: 'GB-ENG', subnational2Code: 'GB-ENG-LND', lat: lat + 0.01, lng }
+    ]
+  }
+  process.env.EBIRD_API_KEY = 'test-key'
+  try {
+    assert.deepEqual(await areas.countries(), [{ code: 'GB', name: 'United Kingdom' }, { code: 'AU', name: 'Australia' }])
+    await areas.countries()
+    assert.equal(calls.countries, 1, 'the list is kept, not asked for again')
+    assert.deepEqual(await areas.provincesOf('GB'), [{ code: 'GB-ENG', region: 'GB-ENG', name: 'England' }])
+    // Where eBird has no counties, the province is the one area.
+    assert.deepEqual(await areas.areasOf('AU-ACT'), [{ code: 'AU-ACT', name: 'Australian Capital Territory', whole: true }])
+
+    const area = await areas.areaAt(51.5, -0.12)
+    assert.deepEqual(calls.near, [5, 15], 'it widens until hotspots are near')
+    assert.deepEqual(area, { location: 'GB-ENG-LND', state: 'GB-ENG', country: 'GB', name: 'London', label: 'London, England, United Kingdom', countyWord: 'county' })
+    const kept = await db('nearby_cache').select('key')
+    assert.ok(kept.every((r) => !/51\.5|0\.12/.test(r.key)), 'the point itself is never kept')
+
+    placeSearch.searchAddresses = async (q, { countries }) => {
+      assert.equal(countries, null, 'towns anywhere')
+      return [{ kind: 'address', name: 'Westminster', lat: 51.5, lng: -0.12 }, { kind: 'address', name: 'Soho', lat: 51.5, lng: -0.12 }]
+    }
+    assert.deepEqual((await areas.areaSearch('westminster')).map((a) => [a.location, a.place]), [['GB-ENG-LND', 'Westminster']], 'one row per area')
+
+    // Saving: the county must sit in its state and be one eBird knows; people already set up are untouched.
+    const [{ id }] = await db('users').insert({ email: 'abroad@example.com', password_hash: 'x', location: 'US-GA-139', state: 'GA' }).returning('id')
+    const session = fakeRes(); createSession(session, await db('users').where({ id }).first())
+    const cookie = String(session.headers['set-cookie']).split(';')[0]
+    const patch = async (body) => { const res = fakeRes(); await userApi(fakeReq({ method: 'PATCH', headers: { cookie }, body }), res); return res }
+    assert.equal((await patch({ state: 'GB-ENG', location: 'GB-ENG-LND' })).statusCode, 200)
+    assert.deepEqual(await db('users').where({ id }).first('state', 'location'), { state: 'GB-ENG', location: 'GB-ENG-LND' })
+    assert.equal((await patch({ state: 'GA', location: 'GB-ENG-LND' })).statusCode, 400, 'not in that state')
+    assert.equal((await patch({ state: 'GB-ENG', location: 'GB-ENG-XYZ' })).statusCode, 400, 'not an area eBird has')
+    assert.equal((await patch({ state: 'AU-ACT', location: 'AU-ACT' })).statusCode, 200, 'a province standing in for its counties')
+    // eBird unreachable: the shape is trusted rather than locking anyone out.
+    ebird.subregions = async () => { throw new Error('eBird down') }
+    await db('nearby_cache').where('key', 'like', 'areas:counties:%').del()
+    assert.equal((await patch({ state: 'GA', location: 'US-GA-121' })).statusCode, 200)
+    await db('users').where({ id }).del()
+  } finally {
+    Object.assign(ebird, saved)
+    placeSearch.searchAddresses = savedSearch
+    delete process.env.EBIRD_API_KEY
+    await db('nearby_cache').where('key', 'like', 'areas:%').del()
+  }
+})
