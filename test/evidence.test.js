@@ -1,6 +1,6 @@
 const { test } = require('node:test')
 const assert = require('node:assert/strict')
-const { withEvidence, withoutEscapees, evidenceLine } = require('../lib/evidence')
+const { withEvidence, withoutEscapees, evidenceLine, hasProof } = require('../lib/evidence')
 const { sightingNotification, reviewNotification } = require('../lib/notifications')
 const { reviewFields } = require('../lib/pushAlerts')
 
@@ -55,4 +55,12 @@ test('a Code 3-5 bird sent before review is followed; confirmed ones and Codes 1
   assert.equal(follow.title, '✅ Now confirmed by eBird: Yellow-browed Warbler')
   assert.equal(follow.body, 'Rancho Corral de Tierra · Oct 22, 12:50 PM · ABA Code 4')
   assert.match(follow.data.url, /\/sighting\/yebwar\/S9\?region=US-CA-081$/)
+})
+
+test('proof for strict alerts: a reviewer, a photo or recording, or a second birder; an ordinary report always passes', () => {
+  assert.equal(hasProof({ evidence: { confirmed: false, media: null, birders: 1 } }), false)
+  assert.equal(hasProof({ evidence: { confirmed: true, media: null, birders: 1 } }), true)
+  assert.equal(hasProof({ evidence: { confirmed: false, media: 'audio', birders: 1 } }), true)
+  assert.equal(hasProof({ evidence: { confirmed: false, media: null, birders: 2 } }), true)
+  assert.equal(hasProof({ speciesCode: 'cangoo' }), true, 'a lifer from an ordinary report has nothing to prove')
 })
