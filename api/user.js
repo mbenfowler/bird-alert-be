@@ -1,3 +1,4 @@
+const { normalizeLocale, SUPPORTED_LOCALES } = require('../lib/i18n')
 const { route, body, HttpError } = require('../lib/http')
 const db = require('../lib/db')
 const { requireUser, clearSession } = require('../lib/auth')
@@ -73,6 +74,13 @@ module.exports = route(['PATCH', 'DELETE'], async (req, res) => {
   if ('timezone' in input) {
     if (!isValidTimezone(input.timezone)) throw new HttpError(400, 'timezone must be an IANA time zone name')
     changes.timezone = input.timezone
+  }
+
+  // The app's language and its bird names (lib/i18n); null goes back to English.
+  if ('locale' in input) {
+    const locale = input.locale === null ? null : normalizeLocale(input.locale)
+    if (input.locale !== null && !locale) throw new HttpError(400, `locale must be one of ${SUPPORTED_LOCALES.join(', ')}, or null`)
+    changes.locale = locale
   }
 
   if ('onboarded' in input) {
