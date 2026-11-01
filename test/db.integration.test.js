@@ -1118,13 +1118,20 @@ test('a person can delete their account: everything kept for it goes, shared lin
 test('the watch list follows the range: in range, or anywhere in the state, once, and never a county sighting twice', async () => {
   const ebird = require('../lib/ebird')
   const { runPushAlerts } = require('../lib/pushAlerts')
-  const originals = { recent: ebird.recentObservations, notable: ebird.notableObservations, geoRecent: ebird.geoRecent, info: ebird.regionInfo }
+  const originals = { recent: ebird.recentObservations, notable: ebird.notableObservations, geoRecent: ebird.geoRecent, info: ebird.regionInfo, subregions: ebird.subregions, provinces: ebird.provinces }
+  // eBird's state feed names no county: the hotspot list knows the owl's, the state's county list names it,
+  // and a yard nobody listed is just "in" the state.
+  ebird.subregions = async () => [{ code: 'US-ZZ-009', name: 'Division No. 11' }]
+  ebird.provinces = async () => [{ code: 'US-ZZ', name: 'Zedland' }]
+  await db('hotspot_ref').insert({ loc_id: 'L1', state: 'ZZ', county: 'US-ZZ-009', name: 'Owl Field', lat: 35.9, lng: -84.1 }).onConflict('loc_id').merge()
+  await db('birds').insert({ speciesCode: 'bkcchi', comName: 'Black-capped Chickadee', sciName: 'Poecile atricapillus', category: 'species' }).onConflict('speciesCode').ignore()
   const [{ id }] = await db('users').insert({ email: 'statewide@example.com', password_hash: 'x', location: 'US-ZZ-002', state: 'ZZ', push_notable_enabled: false, push_watchlist_enabled: true, range_mi: -1, push_quiet_start: null, push_quiet_end: null }).returning('id')
   await db('push_subscriptions').insert({ user_id: id, endpoint: 'https://push.example/statewide', p256dh: 'k', auth: 'a' })
   await db('birds').insert({ speciesCode: 'snoowl1', comName: 'Snowy Owl', sciName: 'Bubo scandiacus', category: 'species' }).onConflict('speciesCode').ignore()
   await db('birds').insert({ speciesCode: 'paibun', comName: 'Painted Bunting', sciName: 'Passerina ciris', category: 'species' }).onConflict('speciesCode').ignore()
-  await db('saved_birds').insert([{ user_id: id, speciesCode: 'snoowl1' }, { user_id: id, speciesCode: 'paibun' }])
-  const owl = (subId, locId, county = ['US-ZZ-009', 'Division No. 11']) => ({ speciesCode: 'snoowl1', comName: 'Snowy Owl', locId, locName: 'Owl Field', obsDt: '2026-10-30 08:00', lat: 35.9, lng: -84.1, subId, subnational2Code: county[0], subnational2Name: county[1] })
+  await db('saved_birds').insert([{ user_id: id, speciesCode: 'snoowl1' }, { user_id: id, speciesCode: 'paibun' }, { user_id: id, speciesCode: 'bkcchi' }])
+  const owl = (subId, locId) => ({ speciesCode: 'snoowl1', comName: 'Snowy Owl', locId, locName: 'Owl Field', obsDt: '2026-10-30 08:00', lat: 35.9, lng: -84.1, subId })
+  const yard = { speciesCode: 'bkcchi', comName: 'Black-capped Chickadee', locId: 'P9', locName: 'Backyard', obsDt: '2026-10-30 07:00', lat: 36.1, lng: -84.4, subId: 'Y1' }
   const bunting = { speciesCode: 'paibun', comName: 'Painted Bunting', locId: 'LB', locName: 'Feeder', obsDt: '2026-10-30 09:00', lat: 34.3, lng: -83.8, subId: 'B1', subnational2Code: 'US-ZZ-002', subnational2Name: 'Home' }
   let county = []
   let state = []
@@ -1139,12 +1146,14 @@ test('the watch list follows the range: in range, or anywhere in the state, once
   try {
     // Anywhere in the state: the owl two hundred miles off. The bunting is the county's own, in both feeds: one alert.
     county = [bunting]
-    state = [owl('S1', 'L1'), bunting]
+    state = [owl('S1', 'L1'), yard, { ...bunting, subnational2Code: undefined, subnational2Name: undefined }]
     await runPushAlerts({ send })
     assert.equal(calls.state, 1, 'one state feed per run')
     const text = sent.map((n) => `${n.title} | ${n.body}`).join('\n')
     assert.equal(sent.length, 1, text)
     assert.match(sent[0].body, /Snowy Owl · Owl Field · in Division No\. 11/)
+    assert.match(sent[0].body, /Black-capped Chickadee · Backyard · in Zedland/, 'no county known: the state')
+    assert.doesNotMatch(sent[0].body, /undefined|null/)
     assert.match(sent[0].body, /Painted Bunting · Feeder/)
     assert.doesNotMatch(sent[0].body, /Painted Bunting · Feeder · in /, 'the county bird is just nearby')
     assert.equal(await db('push_log').where({ user_id: id, speciesCode: 'paibun' }).count('* as n').first().then((r) => Number(r.n)), 1)
@@ -1173,7 +1182,9 @@ test('the watch list follows the range: in range, or anywhere in the state, once
     await runPushAlerts({ send })
     assert.equal(sent.length, 0)
   } finally {
-    Object.assign(ebird, { recentObservations: originals.recent, notableObservations: originals.notable, geoRecent: originals.geoRecent, regionInfo: originals.info })
+    Object.assign(ebird, { recentObservations: originals.recent, notableObservations: originals.notable, geoRecent: originals.geoRecent, regionInfo: originals.info, subregions: originals.subregions, provinces: originals.provinces })
+    await db('hotspot_ref').where({ loc_id: 'L1' }).del()
+    await db('nearby_cache').where('key', 'like', 'areas:%').del()
     await db('push_log').where({ user_id: id }).del()
     await db('saved_birds').where({ user_id: id }).del()
     await db('push_subscriptions').where({ user_id: id }).del()
@@ -1185,6 +1196,9 @@ test('the watch-list email follows the range too: a bird anywhere in the state, 
   const ebird = require('../lib/ebird')
   const { DIGESTS } = require('../lib/digests')
   const original = ebird.recentObservations
+  const lists = { subregions: ebird.subregions, provinces: ebird.provinces }
+  ebird.subregions = async () => []
+  ebird.provinces = async () => []
   const [{ id }] = await db('users').insert({ email: 'statemail@example.com', password_hash: 'x', location: 'US-ZY-002', state: 'ZY', range_mi: -1, home_lat: 34.3, home_lng: -83.8 }).returning('id')
   await db('saved_birds').insert([{ user_id: id, speciesCode: 'snoowl1' }])
   const owl = { speciesCode: 'snoowl1', comName: 'Snowy Owl', locId: 'LO', locName: 'Owl Field', obsDt: '2026-10-30 08:00', lat: 35.3, lng: -83.8, subId: 'E1', subnational2Code: 'US-ZY-009', subnational2Name: 'Division No. 11' }
@@ -1198,6 +1212,8 @@ test('the watch-list email follows the range too: a bird anywhere in the state, 
     assert.equal((await DIGESTS.watchlist.select({ ...user, range_mi: 0 }, [], { preview: true })).length, 0)
   } finally {
     ebird.recentObservations = original
+    Object.assign(ebird, lists)
+    await db('nearby_cache').where('key', 'like', 'areas:%').del()
     await db('saved_birds').where({ user_id: id }).del()
     await db('users').where({ id }).del()
   }
