@@ -1,3 +1,4 @@
+const { normalizeLocale } = require('../../lib/i18n')
 const { route, body, HttpError } = require('../../lib/http')
 const db = require('../../lib/db')
 const {
@@ -48,18 +49,18 @@ const actions = {
     }
   },
 
-  // POST /api/auth/signup { email, password, state?, location?, source? } -> user (sets session cookie); `source` is what
+  // POST /api/auth/signup { email, password, state?, location?, source?, locale? } -> user (sets session cookie); `source` is what
   //   brought them in (see lib/signupSource.js), kept for counting signups by where they came from
   signup: {
     methods: ['POST'],
     handler: async (req, res) => {
-      const { email: rawEmail, password, state, location, source } = body(req)
+      const { email: rawEmail, password, state, location, source, locale } = body(req)
       const email = assertValidEmail(normalizeEmail(rawEmail))
       assertValidPassword(password)
       if (await findUserByEmail(email)) throw new HttpError(409, 'An account with that email already exists')
 
       const [user] = await db('users')
-        .insert({ email, password_hash: await hashPassword(password), ...signupPlace(state, location), signup_source: signupSourceFor(source, req.headers['user-agent']) })
+        .insert({ email, password_hash: await hashPassword(password), ...signupPlace(state, location), signup_source: signupSourceFor(source, req.headers['user-agent']), locale: normalizeLocale(locale) })
         .returning('*')
 
       await startSession(res, user, req)

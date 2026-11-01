@@ -11,7 +11,7 @@ const seasonality = require('../lib/seasonality')
 let userId
 before(async () => {
   await db.migrate.latest()
-  for (const table of ['hq_alerts', 'hotspot_weeks', 'hq_picks', 'feedback', 'passkeys', 'shares', 'seen_birds', 'taxonomy_ref', 'user_routes', 'hotspot_ref', 'mail_counts', 'error_log', 'drive_cache', 'nearby_cache', 'place_predictions', 'checklist_species', 'checklists', 'bird_sounds', 'digest_log', 'push_handoff', 'push_log', 'push_subscriptions', 'saved_birds', 'auth_throttle', 'season_firsts', 'region_species_days', 'region_days', 'job_runs', 'users', 'birds']) await db(table).del()
+  for (const table of ['taxonomy_names', 'hq_alerts', 'hotspot_weeks', 'hq_picks', 'feedback', 'passkeys', 'shares', 'seen_birds', 'taxonomy_ref', 'user_routes', 'hotspot_ref', 'mail_counts', 'error_log', 'drive_cache', 'nearby_cache', 'place_predictions', 'checklist_species', 'checklists', 'bird_sounds', 'digest_log', 'push_handoff', 'push_log', 'push_subscriptions', 'saved_birds', 'auth_throttle', 'season_firsts', 'region_species_days', 'region_days', 'job_runs', 'users', 'birds']) await db(table).del()
   // Nothing in here may reach eBird; the hourly job's history fetch is a no-op unless a test says otherwise.
   ebird.historicObservations = async () => []
   ;[{ id: userId }] = await db('users').insert({
@@ -1482,5 +1482,74 @@ test('areas anywhere eBird covers: lists are kept, a point or a town becomes an 
     placeSearch.searchAddresses = savedSearch
     delete process.env.EBIRD_API_KEY
     await db('nearby_cache').where('key', 'like', 'areas:%').del()
+  }
+})
+
+test('languages: bird names come from eBird in the reader\'s language, the words stay English until a catalog exists, and distances follow the country', async () => {
+  const birdNames = require('../lib/birdNames')
+  const { sightingNotification } = require('../lib/notifications')
+  const { alertDigestMessage } = require('../lib/mailer')
+  const { langFor } = require('../lib/i18n')
+  const { createSession } = require('../lib/auth')
+  const { fakeReq, fakeRes } = require('./helpers')
+  const userApi = require('../api/user')
+  const api = require('../api/ebird/[resource]')
+  const saved = { fullTaxonomy: ebird.fullTaxonomy, notableObservations: ebird.notableObservations, recentObservations: ebird.recentObservations }
+  let calls = 0
+  ebird.fullTaxonomy = async (locale) => {
+    calls += 1
+    assert.equal(locale, 'es_MX', 'eBird is asked in its own code')
+    return [{ speciesCode: 'vermfl', comName: 'Mosquero Cardenal' }, { speciesCode: 'norcar', comName: 'Cardenal Norteño' }]
+  }
+  birdNames.forget()
+  try {
+    // One whole-language call, kept: asking again reads it back.
+    const named = await birdNames.localize([{ speciesCode: 'vermfl', comName: 'Vermilion Flycatcher' }, { speciesCode: 'zzz', comName: 'Unknown Bird' }], 'es-MX')
+    assert.deepEqual(named[0], { speciesCode: 'vermfl', comName: 'Mosquero Cardenal', comNameEn: 'Vermilion Flycatcher' })
+    assert.equal(named[1].comName, 'Unknown Bird', 'no translation, English stays')
+    birdNames.forget()
+    await birdNames.localize([], 'es-MX')
+    assert.equal(calls, 1, 'read back from taxonomy_names, not asked of eBird again')
+    assert.deepEqual(await birdNames.localize([{ speciesCode: 'vermfl', comName: 'Vermilion Flycatcher' }], 'en'), [{ speciesCode: 'vermfl', comName: 'Vermilion Flycatcher' }], 'English needs nothing')
+
+    // The API: ?locale= names every bird; without it, English (the CDN caches by URL).
+    ebird.notableObservations = async () => [{ speciesCode: 'vermfl', comName: 'Vermilion Flycatcher', locId: 'L1', subId: 'S1', obsDt: '2026-10-30 08:00', lat: 32, lng: -110 }]
+    ebird.recentObservations = async () => []
+    const spanish = fakeRes()
+    await api(fakeReq({ query: { resource: 'notable', region: 'US-AZ-019', locale: 'es-MX' } }), spanish)
+    assert.equal(spanish.body[0].comName, 'Mosquero Cardenal')
+    const english = fakeRes()
+    await api(fakeReq({ query: { resource: 'notable', region: 'US-AZ-019' } }), english)
+    assert.equal(english.body[0].comName, 'Vermilion Flycatcher')
+    const offered = fakeRes()
+    await api(fakeReq({ query: { resource: 'name-locales' } }), offered)
+    assert.deepEqual(offered.body.map((l) => l.locale), ['en', 'es-MX', 'fr-CA'])
+
+    // A push to someone reading Spanish in Mexico: the bird in Spanish, the words English (no catalog yet), km.
+    const reader = { locale: 'es-MX', state: 'SON' }
+    const inSpanish = await birdNames.inLanguage(reader.locale)
+    const push = sightingNotification(inSpanish({ kind: 'notable', speciesCode: 'vermfl', comName: 'Vermilion Flycatcher', subId: 'S1', locName: 'Río', obsDt: '2026-10-30 08:00', lat: 32, lng: -110, away: { miles: 12, county: 'Pima' } }), {}, langFor(reader))
+    assert.equal(push.title, '❗ Notable: Mosquero Cardenal reported 19 km away')
+    assert.match(push.body, /^Río · 19 km away in Pima · /)
+
+    // Units follow the country: miles in the US, km in Canada and everywhere else.
+    assert.deepEqual([langFor({ state: 'GA' }).unit, langFor({ state: 'ON' }).unit, langFor({ state: 'ZA-WC' }).unit], ['mi', 'km', 'km'])
+    const digest = alertDigestMessage({ id: 1, email: 'x@example.com', state: 'ON', alert_digest_email_enabled: true }, [{ speciesCode: 'norcar', comName: 'Northern Cardinal', subId: 'S2', locName: 'Pond', obsDt: '2026-10-30 08:00', lat: 43, lng: -79, away: { miles: 10, county: 'York' } }], new Map())
+    assert.match(digest.text, /Pond \(16 km away in York\)/)
+
+    // The setting: an offered locale, or null for English; it comes back with the user.
+    const [{ id }] = await db('users').insert({ email: 'lingua@example.com', password_hash: 'x', location: 'US-GA-139', state: 'GA' }).returning('id')
+    const session = fakeRes(); createSession(session, await db('users').where({ id }).first())
+    const cookie = String(session.headers['set-cookie']).split(';')[0]
+    const patch = async (body) => { const res = fakeRes(); await userApi(fakeReq({ method: 'PATCH', headers: { cookie }, body }), res); return res }
+    const ok = await patch({ locale: 'es-mx' })
+    assert.deepEqual([ok.statusCode, ok.body.locale], [200, 'es-MX'])
+    assert.equal((await patch({ locale: 'klingon' })).statusCode, 400)
+    assert.equal((await patch({ locale: null })).body.locale, null)
+    await db('users').where({ id }).del()
+  } finally {
+    Object.assign(ebird, saved)
+    birdNames.forget()
+    await db('taxonomy_names').del()
   }
 })

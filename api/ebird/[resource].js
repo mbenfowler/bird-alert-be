@@ -18,6 +18,8 @@ const { chase } = require('../../lib/chase')
 const { withAba } = require('../../lib/abaCodes')
 const { withEvidence, withoutEscapees } = require('../../lib/evidence')
 const { assertCronCaller } = require('../../lib/digest')
+const { localize } = require('../../lib/birdNames')
+const { normalizeLocale, NAME_LOCALES } = require('../../lib/i18n')
 
 const DAY = 86400
 const WEEK = 7 * DAY
@@ -26,6 +28,12 @@ const cache = (maxAge, swr) => `public, max-age=${Math.min(maxAge, 300)}, s-maxa
 // Read-only proxy for the eBird calls the app makes, so the API key stays on the server and the
 // CDN can absorb repeat requests. Each resource sets a cache lifetime that matches how often the data moves.
 const resources = {
+  // GET /api/ebird/name-locales -> [{ locale, name }]: the languages a person can choose for the app
+  // and its bird names (the app's words exist in English only so far; bird names in all of these).
+  'name-locales': {
+    handler: async () => Object.entries(NAME_LOCALES).map(([locale, { name }]) => ({ locale, name })),
+    cacheControl: cache(DAY, WEEK)
+  },
   // GET /api/ebird/species-list?region=US-GA-139 -> string[] of species codes (true species only)
   'species-list': {
     handler: async ({ region }) => speciesOnly(await ebird.speciesList(ebird.assertRegion(region))),
@@ -242,8 +250,12 @@ const clampBack = (value) => {
 module.exports = route(['GET'], async (req, res) => {
   const resource = resources[req.query.resource]
   if (!resource) throw new HttpError(404, 'Not found')
-  const data = await resource.handler(req.query, req)
+  let data = await resource.handler(req.query, req)
   res.setHeader('Cache-Control', resource.cacheControl)
+  // ?locale=es-MX names every bird in Spanish. Only the query asks (never a header or the
+  // session), so the CDN, which caches by URL, never hands one language's names to another.
+  const locale = normalizeLocale(req.query.locale)
+  if (locale && !resource.html) data = await localize(data, locale)
   if (resource.html) {
     res.setHeader('Content-Type', 'text/html; charset=utf-8')
     return res.status(200).send(data)

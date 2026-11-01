@@ -6,6 +6,8 @@ const push = require('../../lib/push')
 const { runPushAlerts } = require('../../lib/pushAlerts')
 const { lastRun, recordRun } = require('../../lib/jobRuns')
 const { testNotification } = require('../../lib/notifications')
+const { t, langFor } = require('../../lib/i18n')
+const { inLanguage } = require('../../lib/birdNames')
 const handoff = require('../../lib/handoff')
 const ebird = require('../../lib/ebird')
 
@@ -91,15 +93,15 @@ const actions = {
           const saved = new Set(await db('saved_birds').where('user_id', user.id).pluck('speciesCode'))
           const codes = [...new Set(recent.slice(0, 20).map((obs) => obs.speciesCode))]
           const birds = codes.length ? await db('birds').whereIn('speciesCode', codes) : []
-          payload = testNotification(recent, saved, new Map(birds.map((b) => [b.speciesCode, b])))
+          payload = testNotification(recent.map(await inLanguage(user.locale)), saved, new Map(birds.map((b) => [b.speciesCode, b])), langFor(user))
         } catch (error) {
           console.error('Test preview sighting failed, sending a plain test:', error.message)
         }
       }
       const { endpoint } = body(req)
       const result = await push.sendToUser(user.id, payload || {
-        title: 'Bird Alert notifications are on',
-        body: 'You will hear from us when a bird on your watch list is reported nearby.',
+        title: t(user.locale, 'push.testPlainTitle'),
+        body: t(user.locale, 'push.testPlainBody'),
         tag: 'bird-alert-test',
         data: { url: '/' }
       }, { endpoint: typeof endpoint === 'string' ? endpoint : undefined })

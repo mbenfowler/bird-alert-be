@@ -1,3 +1,4 @@
+const { localize } = require('../lib/birdNames')
 const { route, body, HttpError } = require('../lib/http')
 const db = require('../lib/db')
 const { requireUser } = require('../lib/auth')
@@ -30,6 +31,8 @@ const savedBirdsFor = (userId) =>
 //   -> { area, sampled, lean, strength: clear|mixed|thin, ranked: [{ speciesCode, comName, days }] } which of a slash it likely was, from local reports
 module.exports = route(['GET', 'POST', 'PUT', 'DELETE'], async (req, res) => {
   const user = await requireUser(req)
+  // Private and per person, so birds are named in the person's own language.
+  const named = (data) => localize(data, user.locale)
 
   if (req.query.kind === 'route') {
     res.setHeader('Cache-Control', 'no-store')
@@ -50,7 +53,7 @@ module.exports = route(['GET', 'POST', 'PUT', 'DELETE'], async (req, res) => {
   if (req.query.kind === 'seen') {
     res.setHeader('Cache-Control', 'no-store')
     if (req.method === 'GET') return res.status(200).json(await seenList(user.id))
-    if (req.method === 'POST' && req.query.evidence === '1') return res.status(200).json(await splitEvidence(body(req)))
+    if (req.method === 'POST' && req.query.evidence === '1') return res.status(200).json(await named(await splitEvidence(body(req))))
     if (req.method === 'POST' && req.query.import === '1') return res.status(200).json(await importLifeList(user.id, body(req).csv))
     const code = assertSpecies(String(req.method === 'POST' ? body(req).speciesCode || '' : req.query.speciesCode || ''))
     if (req.method === 'POST') { await markSeen(user.id, code); return res.status(201).json({ speciesCode: code }) }
@@ -60,7 +63,7 @@ module.exports = route(['GET', 'POST', 'PUT', 'DELETE'], async (req, res) => {
   if (req.method === 'PUT') throw new HttpError(405, 'Method not allowed')
 
   if (req.method === 'GET') {
-    return res.status(200).json(await savedBirdsFor(user.id))
+    return res.status(200).json(await named(await savedBirdsFor(user.id)))
   }
 
   if (req.method === 'POST') {
@@ -72,7 +75,7 @@ module.exports = route(['GET', 'POST', 'PUT', 'DELETE'], async (req, res) => {
       .insert({ user_id: user.id, bird_id: bird.id, speciesCode: bird.speciesCode })
       .onConflict(['user_id', 'bird_id'])
       .ignore()
-    return res.status(201).json(bird)
+    return res.status(201).json(await named(bird))
   }
 
   const { speciesCode } = req.query
