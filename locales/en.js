@@ -19,7 +19,9 @@ module.exports = {
     away: '{distance} away',
     awayIn: '{distance} away in {county}',
     awayParen: '{place} ({distance} away)',
-    awayInParen: '{place} ({distance} away in {county})'
+    awayInParen: '{place} ({distance} away in {county})',
+    in: 'in {county}',
+    inParen: '{place} (in {county})'
   },
   evidence: {
     confirmed: 'Confirmed by eBird reviewer',
@@ -36,6 +38,7 @@ module.exports = {
     abaCode: '❗ ABA Code {code}: {bird} reported {where}',
     notable: '❗ Notable: {bird} reported {where}',
     watched: '⭐ {bird} spotted nearby!',
+    watchedAway: '⭐ {bird} spotted {where}!',
     watchedMany: '⭐ {count} watch list birds spotted nearby',
     seen: '{count} seen',
     firstSince: 'first since {date}',
