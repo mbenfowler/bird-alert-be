@@ -1343,3 +1343,79 @@ test('a rare bird sent before review: one follow-up when eBird confirms it, none
     await db('users').where({ id }).del()
   }
 })
+
+test('strict alerts: a rare report waits for proof and then goes out once; watch list and everyone else unchanged', async () => {
+  const { runPushAlerts } = require('../lib/pushAlerts')
+  const { runReviewChecks } = require('../lib/reviewWatch')
+  const { DIGESTS } = require('../lib/digests')
+  const region = 'US-ZZ-077'
+  const base = { password_hash: 'x', location: region, state: 'GA', push_notable_enabled: true, push_watchlist_enabled: true, range_mi: 0, push_quiet_start: null, push_quiet_end: null }
+  const [{ id: strict }] = await db('users').insert({ ...base, email: 'strict@example.com', rare_alerts_need_proof: true }).returning('id')
+  const [{ id: open }] = await db('users').insert({ ...base, email: 'open@example.com' }).returning('id')
+  await db('push_subscriptions').insert([{ user_id: strict, endpoint: 'https://push.example/strict', p256dh: 'k', auth: 'a' }, { user_id: open, endpoint: 'https://push.example/open', p256dh: 'k', auth: 'a' }])
+  for (const [speciesCode, comName] of [['zzowl', 'Strict Owl'], ['zzwren', 'Watched Wren'], ['zzgull', 'Late Gull']]) {
+    await db('birds').insert({ speciesCode, comName, sciName: `${comName} sci`, category: 'species' }).onConflict('speciesCode').ignore()
+  }
+  await db('saved_birds').insert({ user_id: strict, speciesCode: 'zzwren', bird_id: (await db('birds').where({ speciesCode: 'zzwren' }).first('id')).id })
+  const owl = (subId, birder) => ({ speciesCode: 'zzowl', comName: 'Strict Owl', locId: 'LO', locName: 'Owl Marsh', obsDt: '2026-10-31 08:00', lat: 34.3, lng: -83.8, subId, userDisplayName: birder, obsReviewed: false, obsValid: false })
+  // The watched wren is rare here too: the person asked for it, so it is never held.
+  const wren = { speciesCode: 'zzwren', comName: 'Watched Wren', locId: 'LW', locName: 'Wren Wood', obsDt: '2026-10-31 07:00', lat: 34.1, lng: -83.7, subId: 'W1', userDisplayName: 'Al', obsReviewed: false, obsValid: false }
+  let notable = [owl('O1', 'Ann'), wren]
+  const keep = { recent: ebird.recentObservations, notable: ebird.notableObservations }
+  ebird.recentObservations = async () => [wren]
+  ebird.notableObservations = async () => notable
+  const sent = []
+  const send = async (userId, payload) => { sent.push([userId, payload.title, payload.body]); return { sent: 1, gone: 0 } }
+  const to = (userId, re) => sent.filter(([u, title]) => u === userId && re.test(title))
+  try {
+    // One birder, unreviewed: the open account hears at once; the strict one only about its watched wren.
+    await runPushAlerts({ send })
+    assert.equal(to(open, /Strict Owl/).length, 1)
+    assert.equal(to(strict, /Strict Owl/).length, 0, 'held for proof')
+    assert.ok(sent.some(([u, title, body]) => u === strict && /Watched Wren/.test(`${title} ${body}`)), 'watch list is never held')
+    assert.equal((await db('push_log').where({ user_id: strict, speciesCode: 'zzowl' }).first()).review_state, 'held')
+    // Still no proof next hour: still waiting, nothing sent.
+    await runPushAlerts({ send })
+    assert.equal(to(strict, /Strict Owl/).length, 0)
+    // A second birder reports it: out it goes, once, saying why.
+    notable = [owl('O1', 'Ann'), owl('O2', 'Bo'), wren]
+    await runPushAlerts({ send })
+    await runPushAlerts({ send })
+    const late = to(strict, /Strict Owl/)
+    assert.equal(late.length, 1, 'sent once the proof came, and only once')
+    assert.match(late[0][2], /Unconfirmed: not yet reviewed · 2 birders$/)
+    assert.equal(to(open, /Strict Owl/).length, 1, 'the open account was told the first time and not again')
+    assert.equal(await db('push_log').where({ user_id: strict, review_state: 'held' }).count('* as n').first().then((r) => Number(r.n)), 0)
+
+    // Proof that comes after the day's feed: the review pass releases it, once.
+    await db('push_log').insert({ user_id: strict, speciesCode: 'zzgull', sub_id: 'G1', loc_id: 'LG', kind: 'notable', review_state: 'held', sighting_region: region, loc_name: 'Gull Beach' })
+    const gull = (reviewed) => ({ speciesCode: 'zzgull', comName: 'Late Gull', locId: 'LG', locName: 'Gull Beach', obsDt: '2026-10-28 09:00', lat: 34.0, lng: -83.6, subId: 'G1', userDisplayName: 'Cy', obsReviewed: reviewed, obsValid: reviewed })
+    ebird.notableObservations = async () => [gull(false)]
+    assert.equal((await runReviewChecks({ send })).released, 0)
+    ebird.notableObservations = async () => [gull(true)]
+    assert.equal((await runReviewChecks({ send })).released, 1)
+    await runReviewChecks({ send })
+    const gullPush = to(strict, /Late Gull/)
+    assert.equal(gullPush.length, 1)
+    assert.match(gullPush[0][2], /Confirmed by eBird reviewer · 1 birder$/)
+    assert.equal((await db('push_log').where({ user_id: strict, speciesCode: 'zzgull' }).first()).review_state, 'released')
+
+    // The uncommon-sightings email shows a strict account only the reports with proof.
+    await db('push_log').whereIn('user_id', [strict, open]).del()
+    const rows = [
+      { speciesCode: 'zzowl', subId: 'E1', evidence: { confirmed: false, media: null, birders: 1 } },
+      { speciesCode: 'zzgull', subId: 'E2', evidence: { confirmed: true, media: null, birders: 1 } },
+      { speciesCode: 'zzwren', subId: 'E3' }
+    ]
+    const strictUser = await db('users').where({ id: strict }).first()
+    const openUser = await db('users').where({ id: open }).first()
+    assert.deepEqual((await DIGESTS.rare.select(strictUser, rows)).map((o) => o.subId).sort(), ['E2', 'E3'])
+    assert.equal((await DIGESTS.rare.select(openUser, rows)).length, 3)
+  } finally {
+    Object.assign(ebird, { recentObservations: keep.recent, notableObservations: keep.notable })
+    await db('push_log').whereIn('user_id', [strict, open]).del()
+    await db('saved_birds').where({ user_id: strict }).del()
+    await db('push_subscriptions').whereIn('user_id', [strict, open]).del()
+    await db('users').whereIn('id', [strict, open]).del()
+  }
+})
