@@ -1115,6 +1115,94 @@ test('a person can delete their account: everything kept for it goes, shared lin
   assert.equal(await getSessionUser(fakeReq({ headers: { cookie } })), null, 'the old cookie no longer signs anyone in')
 })
 
+test('the watch list follows the range: in range, or anywhere in the state, once, and never a county sighting twice', async () => {
+  const ebird = require('../lib/ebird')
+  const { runPushAlerts } = require('../lib/pushAlerts')
+  const originals = { recent: ebird.recentObservations, notable: ebird.notableObservations, geoRecent: ebird.geoRecent, info: ebird.regionInfo }
+  const [{ id }] = await db('users').insert({ email: 'statewide@example.com', password_hash: 'x', location: 'US-ZZ-002', state: 'ZZ', push_notable_enabled: false, push_watchlist_enabled: true, range_mi: -1, push_quiet_start: null, push_quiet_end: null }).returning('id')
+  await db('push_subscriptions').insert({ user_id: id, endpoint: 'https://push.example/statewide', p256dh: 'k', auth: 'a' })
+  await db('birds').insert({ speciesCode: 'snoowl1', comName: 'Snowy Owl', sciName: 'Bubo scandiacus', category: 'species' }).onConflict('speciesCode').ignore()
+  await db('birds').insert({ speciesCode: 'paibun', comName: 'Painted Bunting', sciName: 'Passerina ciris', category: 'species' }).onConflict('speciesCode').ignore()
+  await db('saved_birds').insert([{ user_id: id, speciesCode: 'snoowl1' }, { user_id: id, speciesCode: 'paibun' }])
+  const owl = (subId, locId, county = ['US-ZZ-009', 'Division No. 11']) => ({ speciesCode: 'snoowl1', comName: 'Snowy Owl', locId, locName: 'Owl Field', obsDt: '2026-10-30 08:00', lat: 35.9, lng: -84.1, subId, subnational2Code: county[0], subnational2Name: county[1] })
+  const bunting = { speciesCode: 'paibun', comName: 'Painted Bunting', locId: 'LB', locName: 'Feeder', obsDt: '2026-10-30 09:00', lat: 34.3, lng: -83.8, subId: 'B1', subnational2Code: 'US-ZZ-002', subnational2Name: 'Home' }
+  let county = []
+  let state = []
+  const calls = { state: 0 }
+  ebird.recentObservations = async (region) => { if (region === 'US-ZZ') { calls.state += 1; return state } return county }
+  ebird.notableObservations = async () => []
+  ebird.geoRecent = async () => [{ ...owl('G1', 'LG'), lat: 34.5, lng: -83.8, subnational2Code: 'US-ZZ-003', subnational2Name: 'Forsyth' }]
+  // No home to measure from (the county center can't be had): the whole state still works, just without a distance.
+  ebird.regionInfo = async () => { throw new Error('no center') }
+  const sent = []
+  const send = async (userId, payload) => { if (userId === id) sent.push(payload); return { sent: 1, gone: 0 } }
+  try {
+    // Anywhere in the state: the owl two hundred miles off. The bunting is the county's own, in both feeds: one alert.
+    county = [bunting]
+    state = [owl('S1', 'L1'), bunting]
+    await runPushAlerts({ send })
+    assert.equal(calls.state, 1, 'one state feed per run')
+    const text = sent.map((n) => `${n.title} | ${n.body}`).join('\n')
+    assert.equal(sent.length, 1, text)
+    assert.match(sent[0].body, /Snowy Owl · Owl Field · in Division No\. 11/)
+    assert.match(sent[0].body, /Painted Bunting · Feeder/)
+    assert.doesNotMatch(sent[0].body, /Painted Bunting · Feeder · in /, 'the county bird is just nearby')
+    assert.equal(await db('push_log').where({ user_id: id, speciesCode: 'paibun' }).count('* as n').first().then((r) => Number(r.n)), 1)
+
+    // Next hour: nothing new, nothing sent.
+    sent.length = 0
+    await runPushAlerts({ send })
+    assert.equal(sent.length, 0)
+
+    // A distance: the watch list reaches the birds within it, past the county line, with how far.
+    await db('push_log').where({ user_id: id }).del()
+    await db('users').where({ id }).update({ range_mi: 30, home_lat: 34.3, home_lng: -83.8 })
+    county = []
+    state = []
+    calls.state = 0
+    await runPushAlerts({ send })
+    assert.equal(calls.state, 0, 'no state feed for a distance')
+    assert.equal(sent.length, 1)
+    assert.match(sent[0].title, /Snowy Owl spotted 14 mi away!/)
+    assert.match(sent[0].body, /Owl Field · 14 mi away in Forsyth/)
+
+    // Just the county: nothing from beyond it.
+    sent.length = 0
+    await db('push_log').where({ user_id: id }).del()
+    await db('users').where({ id }).update({ range_mi: 0 })
+    await runPushAlerts({ send })
+    assert.equal(sent.length, 0)
+  } finally {
+    Object.assign(ebird, { recentObservations: originals.recent, notableObservations: originals.notable, geoRecent: originals.geoRecent, regionInfo: originals.info })
+    await db('push_log').where({ user_id: id }).del()
+    await db('saved_birds').where({ user_id: id }).del()
+    await db('push_subscriptions').where({ user_id: id }).del()
+    await db('users').where({ id }).del()
+  }
+})
+
+test('the watch-list email follows the range too: a bird anywhere in the state, beside the county\'s own', async () => {
+  const ebird = require('../lib/ebird')
+  const { DIGESTS } = require('../lib/digests')
+  const original = ebird.recentObservations
+  const [{ id }] = await db('users').insert({ email: 'statemail@example.com', password_hash: 'x', location: 'US-ZY-002', state: 'ZY', range_mi: -1, home_lat: 34.3, home_lng: -83.8 }).returning('id')
+  await db('saved_birds').insert([{ user_id: id, speciesCode: 'snoowl1' }])
+  const owl = { speciesCode: 'snoowl1', comName: 'Snowy Owl', locId: 'LO', locName: 'Owl Field', obsDt: '2026-10-30 08:00', lat: 35.3, lng: -83.8, subId: 'E1', subnational2Code: 'US-ZY-009', subnational2Name: 'Division No. 11' }
+  ebird.recentObservations = async (region) => (region === 'US-ZY' ? [owl] : [])
+  try {
+    const user = await db('users').where({ id }).first()
+    const rows = await DIGESTS.watchlist.select(user, [], { preview: true })
+    assert.equal(rows.length, 1)
+    assert.deepEqual([rows[0].comName, rows[0].away.county, rows[0].away.miles], ['Snowy Owl', 'Division No. 11', 69])
+    // Just the county: only the county's own.
+    assert.equal((await DIGESTS.watchlist.select({ ...user, range_mi: 0 }, [], { preview: true })).length, 0)
+  } finally {
+    ebird.recentObservations = original
+    await db('saved_birds').where({ user_id: id }).del()
+    await db('users').where({ id }).del()
+  }
+})
+
 test('the alert range is one of the offered distances, measured from a home spot or the county center', async () => {
   const userApi = require('../api/user')
   const { fakeReq, fakeRes } = require('./helpers')
@@ -1124,6 +1212,9 @@ test('the alert range is one of the offered distances, measured from a home spot
   const cookie = String(session.headers['set-cookie']).split(';')[0]
   const patch = async (body) => { const res = fakeRes(); await userApi(fakeReq({ method: 'PATCH', headers: { cookie }, body }), res); return res }
   assert.equal((await patch({ range_mi: 25 })).statusCode, 400)
+  assert.equal((await patch({ range_mi: -2 })).statusCode, 400)
+  const whole = await patch({ range_mi: -1 })
+  assert.deepEqual([whole.statusCode, whole.body.range_mi], [200, -1], 'the whole state or province')
   assert.equal((await patch({ home_lat: 34.3 })).statusCode, 400, 'a point needs both halves')
   const ok = await patch({ range_mi: 15, home_lat: 34.3, home_lng: -83.8 })
   assert.equal(ok.statusCode, 200)
