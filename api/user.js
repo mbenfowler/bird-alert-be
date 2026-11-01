@@ -6,6 +6,7 @@ const { sendConfirmationEmail } = require('../lib/mailer')
 const { isValidTimezone } = require('../lib/quietHours')
 const { RANGE_CHOICES } = require('../lib/range')
 const { syncNewRegionSoon } = require('../lib/checklists')
+const { assertArea } = require('../lib/areas')
 
 const STRING_FIELDS = ['state', 'location']
 const BOOLEAN_FIELDS = ['alert_digest_email_enabled', 'rare_sightings_email_enabled', 'push_watchlist_enabled', 'push_notable_enabled', 'push_notable_batched', 'push_first_of_season', 'push_lifer_enabled', 'migration_email_enabled', 'watchlist_email_fallback', 'rare_alerts_need_proof']
@@ -38,6 +39,8 @@ module.exports = route(['PATCH', 'DELETE'], async (req, res) => {
       changes[field] = input[field].trim()
     }
   }
+  // A county must sit in the state it's saved with, and be one eBird knows ('US-GA-139', 'GB-ENG-LND').
+  if (changes.location) await assertArea(changes.state ?? user.state, changes.location)
   for (const field of BOOLEAN_FIELDS) {
     if (field in input) {
       if (typeof input[field] !== 'boolean') throw new HttpError(400, `${field} must be true or false`)

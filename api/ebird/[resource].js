@@ -13,6 +13,7 @@ const { nearbyPublic } = require('../../lib/nearby')
 const { placeSearch, parsePoints } = require('../../lib/placeSearch')
 const { drive } = require('../../lib/routing')
 const { getShare, isBot, sharePage } = require('../../lib/shares')
+const { areasOf, countries, provincesOf, areaAt, areaSearch } = require('../../lib/areas')
 const { chase } = require('../../lib/chase')
 const { withAba } = require('../../lib/abaCodes')
 const { withEvidence, withoutEscapees } = require('../../lib/evidence')
@@ -158,10 +159,35 @@ const resources = {
     cacheControl: 'no-store',
     html: true
   },
-  // GET /api/ebird/regions?state=GA -> { code, name }[]
+  // GET /api/ebird/regions?state=GA -> { code, name, whole? }[]: the state's county-level areas, or the
+  // state itself as the one area (whole) where eBird has none ('AU-ACT').
   regions: {
-    handler: ({ state }) => ebird.subregions(ebird.assertState(state)),
+    handler: ({ state }) => areasOf(ebird.assertState(state)),
     cacheControl: cache(WEEK, 4 * WEEK)
+  },
+  // GET /api/ebird/countries -> { code, name }[]: every country eBird covers.
+  countries: {
+    handler: () => countries(),
+    cacheControl: cache(WEEK, 4 * WEEK)
+  },
+  // GET /api/ebird/provinces?country=GB -> { code (as the app keeps it: 'GA', 'GB-ENG'), region, name }[]
+  provinces: {
+    handler: ({ country }) => {
+      if (!/^[A-Z]{2}$/i.test(String(country || ''))) throw new HttpError(400, 'Invalid country')
+      return provincesOf(String(country).toUpperCase())
+    },
+    cacheControl: cache(WEEK, 4 * WEEK)
+  },
+  // GET /api/ebird/area-at?lat=&lng= -> { location, state, country, name, label, countyWord } | null: the area a
+  // point falls in. Not cached at the edge, and the point is never kept: only the area it names.
+  'area-at': {
+    handler: ({ lat, lng }) => areaAt(Number(lat), Number(lng)),
+    cacheControl: 'no-store'
+  },
+  // GET /api/ebird/area-search?q= -> { areas: [{ ...area, place }] }: areas for a town, address or county by name, anywhere.
+  'area-search': {
+    handler: async ({ q }) => ({ areas: await areaSearch(q) }),
+    cacheControl: cache(3600, 24 * 3600)
   },
   // GET /api/ebird/sync-checklists[?region=] (hourly, GitHub Actions; cron auth) -> per region, what was
   // listed, added and fetched in full, plus `more` when the time budget ran out (call again). The region

@@ -110,3 +110,29 @@ test('South Africa: provinces keep their ZA prefix (their letters clash), munici
   const items = await withAba([{ comName: 'Cape Sugarbird', sciName: 'Promerops cafer' }], { region: 'ZA-WC-21' })
   assert.equal(items[0].aba, null, 'outside the ABA Area')
 })
+
+test('anywhere eBird covers: other countries keep full province codes, any subnational2 shape is a county, and kept codes still read the same', async () => {
+  const { countryOf, subnational1, stateOfRegion, countyWord, keptState, COUNTY_REGION } = require('../lib/regions')
+  // Shapes seen in eBird's own lists.
+  for (const [region, state] of [['GB-ENG-LND', 'GB-ENG'], ['BR-AC-001', 'BR-AC'], ['DE-BW-UL2', 'DE-BW'], ['JP-23-46', 'JP-23'], ['AR-B-AA', 'AR-B'], ['FR-ARA-01', 'FR-ARA']]) {
+    assert.equal(stateOfRegion(region), state, region)
+  }
+  // Where eBird has no counties, the province is the area.
+  assert.equal(stateOfRegion('AU-ACT'), 'AU-ACT')
+  assert.equal(stateOfRegion('CR-A'), 'CR-A')
+  // A US, Canadian, Mexican or South African province alone is never a county, and a country never is.
+  for (const notCounty of ['US-GA', 'CA-ON', 'MX-JAL', 'ZA-WC', 'GB', 'US']) assert.equal(COUNTY_REGION.test(notCounty), false, notCounty)
+  // Codes people already have read exactly as before.
+  assert.deepEqual(['US-GA-139', 'CA-ON-TO', 'MX-JAL-039', 'ZA-WC-21'].map(stateOfRegion), ['GA', 'ON', 'JAL', 'ZA-WC'])
+  assert.deepEqual(['GA', 'ON', 'JAL', 'ZA-WC', 'GB-ENG', 'JP-23'].map(countryOf), ['US', 'CA', 'MX', 'ZA', 'GB', 'JP'])
+  assert.deepEqual(['GA', 'ON', 'GB-ENG'].map(subnational1), ['US-GA', 'CA-ON', 'GB-ENG'])
+  // eBird's province codes become the codes the app keeps: bare for the first three countries.
+  assert.deepEqual(['US-GA', 'CA-ON', 'MX-JAL', 'ZA-WC', 'GB-ENG'].map(keptState), ['GA', 'ON', 'JAL', 'ZA-WC', 'GB-ENG'])
+  assert.deepEqual(['GB-ENG', 'IE-L', 'AU-NSW', 'BR-SP'].map(countyWord), ['county', 'county', 'area', 'area'])
+  const ebird = require('../lib/ebird')
+  assert.equal(ebird.assertState('GB-ENG'), 'GB-ENG')
+  assert.equal(ebird.assertState('JP-23'), 'JP-23')
+  const { withAba } = require('../lib/abaCodes')
+  const items = await withAba([{ comName: 'European Robin', sciName: 'Erithacus rubecula' }], { region: 'GB-ENG-LND' })
+  assert.equal(items[0].aba, null, 'outside the ABA Area')
+})
