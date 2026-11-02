@@ -41,7 +41,7 @@ const savedBirdsFor = (userId) =>
 // PUT    /api/saved?kind=place-targets&id= { codes: [] } -> the place
 // GET    /api/saved?kind=place-seen&id=          -> [code] the place's own seen list ("Seen it" while there adds to it)
 // PUT    /api/saved?kind=place-seen&id= { codes: [] } -> [code] (manual edits, up to 2000)
-// GET    /api/saved?kind=place-suggestions&id=&from=&to=&scope=life|place -> { from, to, sampled, scope, suggestions: [{ speciesCode, comName, days, sampled }] }
+// GET    /api/saved?kind=place-suggestions&id=&from=&to=&scope=life|place&limit=1..50 (default 15) -> { from, to, sampled, scope, suggestions: [{ speciesCode, comName, days, sampled }] }
 // POST   /api/saved?kind=trip { place_id, starts_on, ends_on, kind?: trip|bigday, scout?, scout_days?: 7|14|21|28 } -> 201 the trip (a Big Day scouts by default)
 // PATCH  /api/saved?kind=trip&id= { place_id?, starts_on?, ends_on?, kind?, scout?, scout_days? } -> the trip
 // DELETE /api/saved?kind=trip&id=                -> 204
@@ -114,7 +114,7 @@ module.exports = route(['GET', 'POST', 'PUT', 'PATCH', 'DELETE'], async (req, re
   if (req.query.kind === 'place-suggestions') {
     if (req.method !== 'GET') throw new HttpError(405, 'Method not allowed')
     res.setHeader('Cache-Control', 'no-store')
-    const found = await places.suggestTargets(user, req.query.id, { from: req.query.from, to: req.query.to, scope: req.query.scope === 'place' ? 'place' : 'life' })
+    const found = await places.suggestTargets(user, req.query.id, { from: req.query.from, to: req.query.to, scope: req.query.scope === 'place' ? 'place' : 'life', limit: req.query.limit })
     return res.status(200).json({ ...found, suggestions: await named(found.suggestions) })
   }
   if (req.query.kind === 'place-seen') {

@@ -67,7 +67,8 @@ module.exports = {
       groupTitle: { one: '🔭 Scouting {place} with your group · {count} day to go', other: '🔭 Scouting {place} with your group · {count} days to go' },
       final: '🔭 Final scouting report: {place} tomorrow',
       line: '{bird} · {where} ({date})',
-      none: 'No targets reported in the last 3 days'
+      none: 'No targets reported in the last 3 days',
+      standIn: 'No targets picked yet, so here are likely lifers for your dates:'
     },
     abaCodeShort: 'ABA Code {code}',
     test: 'Test: {title}',
@@ -133,7 +134,10 @@ module.exports = {
       line: '{bird} · {where} · {date}',
       noneSeen: 'None of your target birds were reported there in the last 3 days.',
       unreported: 'Still unreported (nothing in the last 2 weeks): {birds}',
-      targets: 'Your targets and trip:'
+      targets: 'Your targets and trip:',
+      standIn: 'You haven’t picked target birds yet, so here are likely lifers for your dates.',
+      pickTargets: 'Pick your targets:',
+      standInSeenHeading: 'Likely lifers reported there in the last 3 days:'
     },
     digest: {
       subject: { one: '{bird} was spotted near you', other: '{count} birds from your watch list were spotted near you' },
