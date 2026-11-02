@@ -6,12 +6,15 @@ const { withAba } = require('../lib/abaCodes')
 const { withTips } = require('../lib/tips')
 const { localize } = require('../lib/birdNames')
 const { normalizeLocale, ebirdLocale } = require('../lib/i18n')
+const { guard } = require('../lib/apiGuard')
 
 const MAX_CODES = 50
 const MAX_RESULTS = 50
 
-// Bird records never change once stored, so let browsers and the CDN hold them.
-const BIRDS_CACHE = 'public, max-age=3600, s-maxage=86400, stale-while-revalidate=604800'
+// Bird records never change once stored, so the browser holds them; not Vercel's edge, which would
+// hand them on to requests that never passed the app check (lib/apiGuard). They come from our own
+// table, so there's nothing to spare eBird here.
+const BIRDS_CACHE = 'private, max-age=3600'
 
 // GET /api/birds?codes=a,b,c  -> birds for those eBird species codes, in request order (unknown codes are
 //                                resolved from eBird plus image and wiki lookups and stored), each with
@@ -19,6 +22,7 @@ const BIRDS_CACHE = 'public, max-age=3600, s-maxage=86400, stale-while-revalidat
 // GET /api/birds?q=term       -> up to 50 stored birds whose common name contains the term
 // ?locale=es-MX: names in that language (and search matches them), keyed by URL like the rest.
 module.exports = route(['GET'], async (req, res) => {
+  await guard(req)
   const { codes, q } = req.query
   const locale = normalizeLocale(req.query.locale)
 
@@ -44,7 +48,7 @@ module.exports = route(['GET'], async (req, res) => {
       .orderBy('comName')
       .limit(MAX_RESULTS)
     // Short, because a bird stored by an enrichment moments ago should turn up in search promptly.
-    res.setHeader('Cache-Control', 'public, max-age=60, s-maxage=60')
+    res.setHeader('Cache-Control', 'private, max-age=60')
     return res.status(200).json(locale ? await localize(birds, locale) : birds)
   }
 

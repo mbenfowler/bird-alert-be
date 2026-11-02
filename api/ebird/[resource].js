@@ -1,4 +1,5 @@
 const { route, HttpError } = require('../../lib/http')
+const { guard, shared, requestKey, privately, sharedSeconds } = require('../../lib/apiGuard')
 const ebird = require('../../lib/ebird')
 const db = require('../../lib/db')
 const { arrivingSoon, seasonality } = require('../../lib/seasonality')
@@ -264,11 +265,26 @@ const clampBack = (value) => {
   return days
 }
 
+// Open to anyone: a share link and its page (meant to be passed around), the hourly sync (its own
+// cron check), and the list of languages. Everything else hands out eBird data and is for the app.
+const OPEN = new Set(['share', 'share-page', 'sync-checklists', 'name-locales'])
+
 module.exports = route(['GET'], async (req, res) => {
-  const resource = resources[req.query.resource]
+  const name = req.query.resource
+  const resource = resources[name]
   if (!resource) throw new HttpError(404, 'Not found')
-  let data = await resource.handler(req.query, req)
-  res.setHeader('Cache-Control', resource.cacheControl)
+  let data
+  if (OPEN.has(name)) {
+    data = await resource.handler(req.query, req)
+    res.setHeader('Cache-Control', resource.cacheControl)
+  } else {
+    await guard(req)
+    // Cached here for everyone and privately in the browser, never at Vercel's edge, which would
+    // answer later requests without these checks (see lib/apiGuard).
+    const seconds = sharedSeconds(resource.cacheControl)
+    data = seconds ? await shared(requestKey(name, req.query), seconds, () => resource.handler(req.query, req)) : await resource.handler(req.query, req)
+    res.setHeader('Cache-Control', privately(resource.cacheControl))
+  }
   // ?locale=es-MX names every bird in Spanish. Only the query asks (never a header or the
   // session), so the CDN, which caches by URL, never hands one language's names to another.
   const locale = normalizeLocale(req.query.locale)
