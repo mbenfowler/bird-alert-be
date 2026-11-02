@@ -2707,7 +2707,7 @@ test('events are kept: each member archives their own, a past one says how it we
   }
 })
 
-test('the event route: the same members-only rule as scouting, from rounded to 2 decimals, a routed plan kept an hour and a failed one not', async () => {
+test('the event route: the same members-only rule as scouting, every report this week, the event\'s spot as the start, a routed plan kept an hour and a failed one not', async () => {
   const { eventRoute } = require('../lib/eventRoute')
   await db('birds').insert([['eletro', 'Elegant Trogon'], ['whewoo', 'White-eared Hummingbird']].map(([speciesCode, comName]) => ({ speciesCode, comName, sciName: comName }))).onConflict('speciesCode').ignore()
   const [{ id }] = await db('users').insert({ email: 'route@example.com', password_hash: 'x', location: 'US-GA-139', state: 'GA', email_confirmed: true }).returning('id')
@@ -2717,36 +2717,58 @@ test('the event route: the same members-only rule as scouting, from rounded to 2
     const [place] = await db('places').insert({ user_id: id, name: 'Chiricahuas', state: 'AZ', location: 'US-AZ-099', range_mi: 0 }).returning('*')
     await db('place_targets').insert(['eletro', 'whewoo'].map((code) => ({ place_id: place.id, species_code: code })))
     const event = await eventAt(id, place, { starts_on: dayFrom(10), ends_on: dayFrom(10), kind: 'bigday', scout: true, scout_days: 21 })
+    // The feed: each species' newest report only (the trogon at a yard by Ramsey Canyon).
     const feed = [
-      { speciesCode: 'eletro', comName: 'Elegant Trogon', locName: 'Ramsey Canyon', locId: 'L1', lat: 31.45, lng: -110.3, obsDt: `${dayFrom(-1)} 07:10`, subId: 'S1', obsValid: true },
-      { speciesCode: 'whewoo', comName: 'White-eared Hummingbird', locName: 'Beatty\'s', locId: 'L3', lat: 31.4, lng: -110.25, obsDt: `${dayFrom(-3)} 09:00`, subId: 'S3', obsValid: true }
+      { speciesCode: 'eletro', comName: 'Elegant Trogon', locName: 'A yard', locId: 'P1', lat: 31.4501, lng: -110.3001, obsDt: `${dayFrom(-1)} 07:10`, subId: 'S1', locationPrivate: true },
+      { speciesCode: 'whewoo', comName: 'White-eared Hummingbird', locName: 'Ramsey Canyon', locId: 'L1', lat: 31.45, lng: -110.3, obsDt: `${dayFrom(-3)} 09:00`, subId: 'S3', locationPrivate: false }
     ]
+    // Each species' own feed: the hummingbird also at Miller Canyon, and a report too old to count.
+    const species = {
+      eletro: [feed[0], { ...feed[0], locId: 'L9', locName: 'Old spot', lat: 31.3, lng: -110.1, obsDt: `${dayFrom(-12)} 08:00`, locationPrivate: false }],
+      whewoo: [feed[1], { ...feed[1], locId: 'L2', locName: 'Miller Canyon', lat: 31.42, lng: -110.27, obsDt: `${dayFrom(-2)} 08:00` }]
+    }
     const fetchFeed = async () => feed
-    let trips = 0
-    const trip = async (points) => { trips += 1; return { order: points.map((_, i) => i), legs: points.slice(1).map(() => ({ minutes: 12.4, miles: 6.6 })), minutes: 24.8, miles: 13.2, geometry: points.map((p) => [p.lat, p.lng]) } }
+    let speciesCalls = 0
+    const fetchSpecies = async (key, code) => { speciesCalls += 1; assert.equal(key, 'county:US-AZ-099'); return species[code] }
+    let tables = 0
+    const table = async (points) => { tables += 1; const f = (k) => points.map((a) => points.map((b) => (Math.abs(a.lat - b.lat) + Math.abs(a.lng - b.lng)) * k)); return { minutes: f(100), miles: f(70) } }
+    const drive = async (points) => ({ legs: points.slice(1).map(() => ({ minutes: 12.4, miles: 6.6 })), minutes: 12.4 * (points.length - 1), miles: 6.6 * (points.length - 1), geometry: points.map((p) => [p.lat, p.lng]) })
     const failing = async () => { throw new Error('OSRM down') }
+    const tools = { fetchFeed, fetchSpecies, table, drive }
 
     // Exactly as scouting: not a member, or no such event, is a 404.
     for (const [who, eventId] of [[{ id: stranger }, event.id], [user, 'nope']]) {
       const events = require('../lib/events')
       await assert.rejects(events.eventScouting(who, eventId, { fetchFeed }), (e) => e.status === 404)
-      await assert.rejects(eventRoute(who, eventId, { fetchFeed, trip }), (e) => e.status === 404)
+      await assert.rejects(eventRoute(who, eventId, tools), (e) => e.status === 404)
     }
-    assert.equal(trips, 0)
+    assert.equal(tables + speciesCalls, 0)
 
-    const plan = await eventRoute(user, event.id, { from: '31.5049,-110.3449', fetchFeed, trip })
-    assert.deepEqual(plan.from, { lat: 31.5, lng: -110.34 })
-    assert.deepEqual(plan.stops.map((s) => [s.n, s.locId, s.new_birds.map((b) => b.code), s.leg_min, s.leg_mi]), [[1, 'L1', ['eletro'], 12, 7], [2, 'L3', ['whewoo'], 12, 7]])
-    assert.deepEqual([plan.total_min, plan.total_mi, plan.covered, plan.reported, plan.skipped, plan.routed], [25, 13, 2, 2, 0, true])
-    // The same reports from the same rounded start: kept, not routed again.
-    await eventRoute(user, event.id, { from: '31.4951,-110.3351', fetchFeed, trip })
-    assert.equal(trips, 1)
+    // No from, no event spot: the start is the first stop. The yard folds into Ramsey Canyon: both birds, one stop.
+    const plan = await eventRoute(user, event.id, tools)
+    assert.equal(plan.from, null)
+    assert.deepEqual(plan.stops.map((s) => [s.n, s.locId, s.new_birds.map((b) => b.code).sort(), s.leg_min, s.private, s.merged]),
+      [[1, 'L1', ['eletro', 'whewoo'], 0, false, [{ locId: 'P1', locName: 'A yard' }]]])
+    assert.deepEqual([plan.extras, plan.covered, plan.covered_with_extras, plan.reported, plan.skipped, plan.routed], [[], 2, 2, 2, 1, true])
+    assert.equal(speciesCalls, 2)
+
+    // The event's own spot is the start (rounded), and the first leg counts.
+    await db('events').where({ id: event.id }).update({ home_lat: 31.4049, home_lng: -110.2551 })
+    const fromSpot = await eventRoute(user, event.id, tools)
+    assert.deepEqual(fromSpot.from, { lat: 31.4, lng: -110.26 })
+    assert.deepEqual(fromSpot.stops.map((s) => [s.locId, s.leg_min, s.leg_mi]), [['L1', 12, 7]])
+    // A from given wins, rounded; the same rounded start again is kept, not routed again; species feeds kept too.
+    const before = tables
+    const asked = await eventRoute(user, event.id, { ...tools, from: '31.5049,-110.3449' })
+    assert.deepEqual(asked.from, { lat: 31.5, lng: -110.34 })
+    await eventRoute(user, event.id, { ...tools, from: '31.4951,-110.3351' })
+    assert.equal(tables, before + 1)
+    assert.equal(speciesCalls, 2)
     // A start that fails to route: the straight-line plan, not kept.
-    const down = await eventRoute(user, event.id, { from: '31.6,-110.4', fetchFeed, trip: failing })
+    const down = await eventRoute(user, event.id, { ...tools, from: '31.6,-110.4', table: failing })
     assert.equal(down.routed, false)
-    const back = await eventRoute(user, event.id, { from: '31.6,-110.4', fetchFeed, trip })
+    const back = await eventRoute(user, event.id, { ...tools, from: '31.6,-110.4' })
     assert.equal(back.routed, true)
-    assert.equal(trips, 2)
   } finally {
     await db('events').where({ owner_id: id }).del()
     await db('places').where({ user_id: id }).del()
