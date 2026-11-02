@@ -6,6 +6,7 @@ const { runHqDesk, approvePost } = require('../../lib/hqDesk')
 const { runHqAlerts } = require('../../lib/hqAlerts')
 const { runConfirmReminders } = require('../../lib/confirmReminder')
 const { runTripNotices } = require('../../lib/places')
+const { runScouting } = require('../../lib/scouting')
 
 // One function for every email the app sends on a schedule, plus the preview; Vercel's Hobby plan
 // allows twelve functions per deployment, so routes that share a shape share a file.
@@ -22,6 +23,13 @@ const cron = (kind) => ({
         result.tripNotices = await runTripNotices({ deadline })
         if (result.tripNotices.more) result.more = true
       } catch (error) { console.error('Trip notes failed:', error.message) }
+      // Then the scouting reports for trips coming up (lib/scouting), each trip once a day.
+      if (!result.more) {
+        try {
+          result.scouting = await runScouting({ deadline })
+          if (result.scouting.more) result.more = true
+        } catch (error) { console.error('Scouting reports failed:', error.message) }
+      }
     }
     res.status(200).json(result)
   }

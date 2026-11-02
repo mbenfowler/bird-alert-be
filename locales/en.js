@@ -62,6 +62,12 @@ module.exports = {
     summaryBody: '{names}{more}.',
     summaryMore: ' and {count} more',
     reviewTitle: '✅ Now confirmed by eBird: {bird}',
+    scout: {
+      title: { one: '🔭 Scouting {place} · {count} day to go', other: '🔭 Scouting {place} · {count} days to go' },
+      final: '🔭 Final scouting report: {place} tomorrow',
+      line: '{bird} · {where} ({date})',
+      none: 'No targets reported in the last 3 days'
+    },
     abaCodeShort: 'ABA Code {code}',
     test: 'Test: {title}',
     testPlainTitle: 'Bird Alert notifications are on',
@@ -114,6 +120,17 @@ module.exports = {
       },
       extend: 'Extend my trip:',
       unsubscribe: 'Don’t want these trip notes? Turn them off:'
+    },
+    scout: {
+      subject: { one: 'Scouting {place}: {count} day to go', other: 'Scouting {place}: {count} days to go' },
+      finalSubject: 'Final scouting report: {place} tomorrow',
+      intro: { one: 'Here’s your scouting report for {place}, {count} day to go.', other: 'Here’s your scouting report for {place}, {count} days to go.' },
+      finalIntro: 'Your final scouting report for {place}: the trip is tomorrow.',
+      seenHeading: 'Your target birds reported there in the last 3 days:',
+      line: '{bird} · {where} · {date}',
+      noneSeen: 'None of your target birds were reported there in the last 3 days.',
+      unreported: 'Still unreported (nothing in the last 2 weeks): {birds}',
+      targets: 'Your targets and trip:'
     },
     digest: {
       subject: { one: '{bird} was spotted near you', other: '{count} birds from your watch list were spotted near you' },
