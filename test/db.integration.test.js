@@ -2332,7 +2332,7 @@ test('Big Day trips scout by default, and scouting sends one report a day in the
     await db('trips').where({ id: trip.id }).update({ last_scout_sent_on: null })
     pushes.length = 0
     await run()
-    assert.equal(pushes.filter((p) => p.userId === id).length, 0, 'no targets, no report')
+    assert.equal(pushes.filter((p) => p.userId === id).length, 0, 'no targets and no likely lifers on file: no report')
 
     // Which feed: the whole state, a circle round the place's spot, or the county.
     assert.equal((await feedFor({ location: 'US-AZ-003', range_mi: -1 })).key, 'state:US-AZ')
@@ -2492,6 +2492,69 @@ test('on the day a group event is an active place for every member (its targets 
   } finally {
     Object.assign(ebird, { recentObservations: originals.recent, notableObservations: originals.notable, subregions: originals.subregions, regionInfo: originals.info })
     await db('users').whereIn('id', [a.id, b.id]).del()
+  }
+})
+
+test('likely lifers: up to 50 when asked; and they stand in for scouting when no targets were picked, for a trip and for each member of an event', async () => {
+  const places = require('../lib/places')
+  const seasonality = require('../lib/seasonality')
+  const { runScouting } = require('../lib/scouting')
+  const area = 'US-ZU-009'
+  const tripDay = dayFrom(5)
+  const days = seasonality.daysBetween(seasonality.addDays(seasonality.yearAgo(tripDay), -6), seasonality.addDays(seasonality.yearAgo(tripDay), 6))
+  await db('region_days').insert(days.map((day) => ({ region: area, day, species_count: 1, has_locations: true }))).onConflict(['region', 'day']).ignore()
+  const species = Array.from({ length: 20 }, (_, i) => `lik${String(i).padStart(3, '0')}`)
+  await db('region_species_days').insert(species.flatMap((code, i) => days.slice(0, 13 - (i % 10)).map((day) => ({ region: area, day, speciesCode: code })))).onConflict(['region', 'day', 'speciesCode']).ignore()
+  await db('taxonomy_ref').insert(species.map((code, i) => ({ species_code: code, sci_name: `Avis ${i}`, com_name: `Likely Bird ${i}`, category: 'species' }))).onConflict('species_code').ignore()
+  const [{ id }] = await db('users').insert({ email: 'likely@example.com', password_hash: 'x', location: 'US-GA-139', state: 'GA', email_confirmed: true }).returning('id')
+  const [{ id: friend }] = await db('users').insert({ email: 'likely-friend@example.com', password_hash: 'x', location: 'US-GA-139', state: 'GA', email_confirmed: true }).returning('id')
+  await db('seen_birds').insert({ user_id: friend, species_code: species[0] })
+  try {
+    const user = await db('users').where({ id }).first()
+    const [place] = await db('places').insert({ user_id: id, name: 'Zu canyon', state: 'ZU', location: area, range_mi: 0 }).returning('*')
+    // The limit: 15 by default, up to 50 when asked, nothing outside 1-50.
+    assert.equal((await places.suggestTargets(user, place.id, { from: tripDay, to: tripDay })).suggestions.length, 15)
+    assert.equal((await places.suggestTargets(user, place.id, { from: tripDay, to: tripDay, limit: '50' })).suggestions.length, 20, 'every likely lifer, up to 50')
+    await assert.rejects(places.suggestTargets(user, place.id, { from: tripDay, to: tripDay, limit: 51 }), (e) => e.status === 400)
+    await assert.rejects(places.suggestTargets(user, place.id, { from: tripDay, to: tripDay, limit: 0 }), (e) => e.status === 400)
+
+    // A scouting trip with no targets: likely lifers stand in, and the report says so.
+    await db('trips').insert({ place_id: place.id, starts_on: tripDay, ends_on: tripDay, kind: 'bigday', scout: true, scout_days: 7 })
+    const feed = [{ speciesCode: species[0], comName: 'Likely Bird 0', locName: 'Zu Spring', obsDt: `${dayFrom(-1)} 07:00`, subId: 'SL1', obsValid: true }]
+    const pushes = []
+    const mails = []
+    const run = () => runScouting({
+      push: async (userId, payload) => { pushes.push({ userId, ...payload }); return { sent: 1 } },
+      send: async (m) => { mails.push(m) },
+      fetchFeed: async () => feed
+    })
+    await run()
+    const push = pushes.find((p) => p.userId === id)
+    assert.ok(push, 'a report goes out though no targets were picked')
+    assert.match(push.body, /^No targets picked yet, so here are likely lifers for your dates: Likely Bird 0 · Zu Spring/)
+    const mail = mails.find((m) => m.to === 'likely@example.com')
+    assert.match(mail.text, /You haven’t picked target birds yet, so here are likely lifers for your dates\./)
+    assert.match(mail.text, /Pick your targets: .*settings\?tab=places#places/)
+    assert.match(mail.text, /Likely lifers reported there in the last 3 days:/)
+
+    // A group event with no targets: each member's own likely lifers.
+    await db('trips').where({ place_id: place.id }).del()
+    const [{ id: eventId }] = await db('events').insert({ owner_id: id, name: 'Zu Big Day', state: 'ZU', location: area, range_mi: 0, starts_on: tripDay, ends_on: tripDay, kind: 'bigday', scout: true, scout_days: 7, invite_token: 'likelyinvitetoken01', view_token: 'likelyviewtoken0001' }).returning('id')
+    await db('event_members').insert([{ event_id: eventId, user_id: id, display_name: 'Matt', role: 'organizer' }, { event_id: eventId, user_id: friend, display_name: 'Jo', role: 'member' }])
+    pushes.length = 0
+    mails.length = 0
+    await run()
+    const mine = mails.find((m) => m.to === 'likely@example.com')
+    const theirs = mails.find((m) => m.to === 'likely-friend@example.com')
+    assert.match(mine.text, /Likely Bird 0 · Zu Spring/, 'not seen by me: a likely lifer')
+    assert.doesNotMatch(theirs.text, /Likely Bird 0 · Zu Spring/, 'already on Jo\'s life list: not one of hers')
+    assert.match(theirs.text, /Pick your targets: .*\/events/)
+  } finally {
+    await db('events').where({ name: 'Zu Big Day' }).del()
+    await db('seen_birds').where({ user_id: friend }).del()
+    await db('region_species_days').where({ region: area }).del()
+    await db('region_days').where({ region: area }).del()
+    await db('users').whereIn('id', [id, friend]).del()
   }
 })
 
