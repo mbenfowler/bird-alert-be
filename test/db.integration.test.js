@@ -998,8 +998,15 @@ test('an HQ rarity alert: a Code 4-5 bird goes to the owner at once with a post 
     assert.match(code4.body, /Rancho Corral de Tierra – Moss Beach area, San Mateo Co\. · Oct 22, 12:50 PM · 1 checklist, awaiting review/)
     assert.match(code4.data.url, /\/share\/s\/[A-Za-z0-9]{10}$/)
     assert.match(mails[0].subject, /^HQ alert: ABA Code 4 Yellow-browed Warbler in California$/)
-    assert.match(mails[0].html, /🚨 Yellow-browed Warbler in California · ABA Code 4/)
+    // A Code 4 gets the mega drafts: the X post and one to copy for Facebook.
+    assert.match(mails[0].html, /🚨 ABA CODE 4 · YELLOW-BROWED WARBLER in California!/)
     assert.match(mails[0].html, /Post on X/)
+    assert.match(mails[0].html, /Copy for Facebook/)
+    assert.match(mails[0].html, /🚨 A Code 4 mega in California: YELLOW-BROWED WARBLER/)
+    assert.match(mails[0].html, /facebook\.com\/sharer\/sharer\.php\?u=/)
+    // Its share keeps the mega card's details.
+    const megaShare = await db('shares').whereRaw("payload->>'speciesCode' = 'yebwar3'").first('payload')
+    assert.equal(megaShare?.payload?.card?.aba, 4)
     assert.equal(code6.title, '⚠️ Unconfirmed: Ivory-billed Woodpecker reported in Arkansas')
     assert.match(code6.body, /Almost certainly a misidentification/)
     assert.equal(code6.data.url, 'https://ebird.org/checklist/S903', 'no share page for a Code 6')

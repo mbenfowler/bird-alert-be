@@ -1,6 +1,6 @@
 const { route, HttpError } = require('../lib/http')
 const { renderMap } = require('../lib/staticMap')
-const { renderCard } = require('../lib/shareCard')
+const { renderShareCard } = require('../lib/shareCard')
 const db = require('../lib/db')
 
 const num = (value, min, max, label) => {
@@ -33,7 +33,7 @@ module.exports = route(['GET'], async (req, res) => {
     if (!/^[A-Za-z0-9]{6,12}$/.test(id)) throw new HttpError(404, 'Not found')
     const share = await db('shares').where({ id, kind: 'sighting' }).first('payload')
     if (!share?.payload?.birdImg) throw new HttpError(404, 'Not found')
-    jpeg = await renderCard(share.payload.birdImg)
+    jpeg = await renderShareCard(share.payload)
   } else if (req.query.pins !== undefined) {
     jpeg = await renderMap({ pins: parsePins(req.query.pins) })
   } else {
