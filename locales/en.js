@@ -13,6 +13,13 @@ module.exports = {
     municipality: 'municipality',
     area: 'area'
   },
+  // The preview card under a shared ABA Code 4 or 5 sighting (lib/shareCard.js). Bitmap fonts: plain ASCII only.
+  card: {
+    abaCode: 'ABA CODE {code}',
+    confirmed: 'CONFIRMED BY EBIRD REVIEWERS',
+    where: '{state} · {county} · {date}',
+    whereNoCounty: '{state} · {date}'
+  },
   distance: {
     mi: '{n} mi',
     km: '{n} km',

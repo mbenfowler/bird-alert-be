@@ -20,7 +20,7 @@
   "functions": {
     "api/**/*.js": {
       "maxDuration": 60,
-      "includeFiles": "node_modules/@jimp/plugin-print/dist/fonts/open-sans/{open-sans-10-black,open-sans-16-white}/**"
+      "includeFiles": "node_modules/@jimp/plugin-print/dist/fonts/open-sans/{open-sans-10-black,open-sans-16-white,open-sans-32-white,open-sans-64-white}/**"
     }
   }
 }
