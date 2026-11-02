@@ -2245,3 +2245,106 @@ test('the eBird data endpoints answer only the app once the lockdown is on, cach
   await db('nearby_cache').where('key', 'like', 'api:%').del()
 })
 
+
+test('Big Day trips scout by default, and scouting sends one report a day in the window before a trip', async () => {
+  const places = require('../lib/places')
+  const { runScouting, scoutReport, feedFor } = require('../lib/scouting')
+  const { scoutingMessage } = require('../lib/mailer')
+  const birds = [['eletro', 'Elegant Trogon'], ['mexchi', 'Mexican Chickadee'], ['monqua', 'Montezuma Quail'], ['flaowl', 'Flammulated Owl']]
+  await db('birds').insert(birds.map(([speciesCode, comName]) => ({ speciesCode, comName, sciName: comName }))).onConflict('speciesCode').ignore()
+  const [{ id }] = await db('users').insert({ email: 'scout@example.com', password_hash: 'x', location: 'US-GA-139', state: 'GA', email_confirmed: true }).returning('id')
+  const [{ id: other }] = await db('users').insert({ email: 'scout-friend@example.com', password_hash: 'x', location: 'US-GA-139', state: 'GA', email_confirmed: true }).returning('id')
+  const placeRow = async (userId, name) => (await db('places').insert({ user_id: userId, name, state: 'AZ', location: 'US-AZ-003', range_mi: 0 }).returning('*'))[0]
+  try {
+    const user = await db('users').where({ id }).first()
+    const place = await placeRow(id, 'Chiricahuas')
+    await db('place_targets').insert(birds.map(([code]) => ({ place_id: place.id, species_code: code })))
+
+    // A Big Day scouts by default, three weeks out; a plain trip doesn't; the choices are checked.
+    const { trip } = await places.createTrip(user, { place_id: place.id, starts_on: dayFrom(5), ends_on: dayFrom(5), kind: 'bigday' })
+    assert.deepEqual([trip.kind, trip.scout, trip.scout_days, trip.scout_from], ['bigday', true, 21, dayFrom(-16)])
+    const { trip: plain } = await places.createTrip(user, { place_id: place.id, starts_on: dayFrom(40), ends_on: dayFrom(41) })
+    assert.deepEqual([plain.kind, plain.scout], ['trip', false])
+    assert.equal((await places.updateTrip(user, plain.id, { scout: true, scout_days: 14 })).trip.scout_from, dayFrom(26))
+    await assert.rejects(places.createTrip(user, { place_id: place.id, starts_on: dayFrom(5), ends_on: dayFrom(5), kind: 'party' }), (e) => e.status === 400)
+    await assert.rejects(places.updateTrip(user, trip.id, { scout_days: 10 }), (e) => e.status === 400)
+
+    // The report: targets seen in the last three days, newest first; the ones quiet for two weeks.
+    const feed = [
+      { speciesCode: 'eletro', comName: 'Elegant Trogon', locName: 'South Fork, Cave Creek Canyon', obsDt: `${dayFrom(-1)} 07:10`, subId: 'S1', obsValid: true, obsReviewed: false },
+      { speciesCode: 'mexchi', comName: 'Mexican Chickadee', locName: 'Rustler Park', obsDt: `${dayFrom(-6)} 09:00`, subId: 'S2', obsValid: true, obsReviewed: false },
+      { speciesCode: 'acowoo', comName: 'Acorn Woodpecker', locName: 'Portal', obsDt: `${dayFrom(0)} 08:00`, subId: 'S3', obsValid: true }
+    ]
+    const report = scoutReport(birds.map(([c]) => c), feed, dayFrom(0))
+    assert.deepEqual(report.seen.map((o) => o.speciesCode), ['eletro'])
+    assert.deepEqual([...report.unreported].sort(), ['flaowl', 'monqua'])
+    assert.ok(!report.unreported.includes('mexchi'), 'seen within two weeks is not unreported')
+
+    // The run: one push and one email, once a day; the friend's trip to the same county shares the call.
+    const friendPlace = await placeRow(other, 'Arizona trip')
+    await db('place_targets').insert({ place_id: friendPlace.id, species_code: 'eletro' })
+    await db('trips').insert({ place_id: friendPlace.id, starts_on: dayFrom(10), ends_on: dayFrom(11), kind: 'trip', scout: true, scout_days: 14 })
+    const pushes = []
+    const mails = []
+    const calls = []
+    const run = () => runScouting({
+      push: async (userId, payload) => { pushes.push({ userId, ...payload }); return { sent: 1 } },
+      send: async (m) => { mails.push(m) },
+      fetchFeed: async (key) => { calls.push(key); return feed }
+    })
+    const first = await run()
+    assert.deepEqual(calls, ['county:US-AZ-003'], 'one call for both trips')
+    const mine = pushes.filter((p) => p.userId === id)
+    assert.equal(mine.length, 1)
+    assert.equal(mine[0].title, '🔭 Scouting Chiricahuas · 5 days to go')
+    assert.match(mine[0].body, /Elegant Trogon · South Fork, Cave Creek Canyon/)
+    const mail = mails.find((m) => m.to === 'scout@example.com')
+    assert.equal(mail.subject, 'Scouting Chiricahuas: 5 days to go')
+    assert.match(mail.text, /Elegant Trogon · South Fork, Cave Creek Canyon/)
+    assert.match(mail.text, /Still unreported \(nothing in the last 2 weeks\): .*Flammulated Owl/)
+    assert.match(mail.text, /settings\?tab=places#places/)
+    assert.match(mail.text, /\/unsubscribe\//)
+    assert.equal(first.reports, 2)
+    await run()
+    assert.equal(pushes.filter((p) => p.userId === id).length, 1, 'once a day')
+
+    // The day before the trip: the final report. Not on the trip day itself, and not before the window.
+    pushes.length = 0
+    await db('trips').where({ id: trip.id }).update({ starts_on: dayFrom(1), ends_on: dayFrom(1), last_scout_sent_on: null })
+    await run()
+    assert.equal(pushes.find((p) => p.userId === id)?.title, '🔭 Final scouting report: Chiricahuas tomorrow')
+    pushes.length = 0
+    await db('trips').where({ id: trip.id }).update({ starts_on: dayFrom(0), ends_on: dayFrom(0), last_scout_sent_on: null })
+    await run()
+    assert.equal(pushes.filter((p) => p.userId === id).length, 0, 'not on the day')
+    await db('trips').where({ id: trip.id }).update({ starts_on: dayFrom(25), ends_on: dayFrom(25), last_scout_sent_on: null })
+    await run()
+    assert.equal(pushes.filter((p) => p.userId === id).length, 0, 'not before scout_from')
+
+    // Trip emails off: the push still comes, no email. No targets: nothing at all.
+    await db('trips').where({ id: trip.id }).update({ starts_on: dayFrom(3), ends_on: dayFrom(3), last_scout_sent_on: null })
+    await db('users').where({ id }).update({ trip_emails_enabled: false })
+    mails.length = 0
+    await run()
+    assert.equal(pushes.filter((p) => p.userId === id).length, 1)
+    assert.equal(mails.filter((m) => m.to === 'scout@example.com').length, 0)
+    await db('place_targets').where({ place_id: place.id }).del()
+    await db('trips').where({ id: trip.id }).update({ last_scout_sent_on: null })
+    pushes.length = 0
+    await run()
+    assert.equal(pushes.filter((p) => p.userId === id).length, 0, 'no targets, no report')
+
+    // Which feed: the whole state, a circle round the place's spot, or the county.
+    assert.equal((await feedFor({ location: 'US-AZ-003', range_mi: -1 })).key, 'state:US-AZ')
+    assert.equal((await feedFor({ location: 'US-AZ-003', range_mi: 30, home_lat: 31.88, home_lng: -109.21 })).key, 'geo:31.88,-109.21,48')
+    assert.equal((await feedFor({ location: 'US-AZ-003', range_mi: 0 })).key, 'county:US-AZ-003')
+
+    // The email's wording when nothing turned up.
+    const quiet = scoutingMessage({ ...user, email: 'scout@example.com' }, { place: 'Chiricahuas', daysToGo: 1, final: true, seen: [], unreported: ['Montezuma Quail'] })
+    assert.equal(quiet.subject, 'Final scouting report: Chiricahuas tomorrow')
+    assert.match(quiet.text, /None of your target birds were reported there in the last 3 days\./)
+  } finally {
+    await db('places').whereIn('user_id', [id, other]).del()
+    await db('users').whereIn('id', [id, other]).del()
+  }
+})

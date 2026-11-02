@@ -40,8 +40,8 @@ const savedBirdsFor = (userId) =>
 // GET    /api/saved?kind=place-seen&id=          -> [code] the place's own seen list ("Seen it" while there adds to it)
 // PUT    /api/saved?kind=place-seen&id= { codes: [] } -> [code] (manual edits, up to 2000)
 // GET    /api/saved?kind=place-suggestions&id=&from=&to=&scope=life|place -> { from, to, sampled, scope, suggestions: [{ speciesCode, comName, days, sampled }] }
-// POST   /api/saved?kind=trip { place_id, starts_on, ends_on } -> 201 the trip
-// PATCH  /api/saved?kind=trip&id= { place_id?, starts_on?, ends_on? } -> the trip
+// POST   /api/saved?kind=trip { place_id, starts_on, ends_on, kind?: trip|bigday, scout?, scout_days?: 7|14|21|28 } -> 201 the trip (a Big Day scouts by default)
+// PATCH  /api/saved?kind=trip&id= { place_id?, starts_on?, ends_on?, kind?, scout?, scout_days? } -> the trip
 // DELETE /api/saved?kind=trip&id=                -> 204
 module.exports = route(['GET', 'POST', 'PUT', 'PATCH', 'DELETE'], async (req, res) => {
   const user = await requireUser(req)
