@@ -1002,7 +1002,7 @@ test('an HQ rarity alert: a Code 4-5 bird goes to the owner at once with a post 
     assert.match(mails[0].html, /🚨 ABA CODE 4 · YELLOW-BROWED WARBLER in California!/)
     assert.match(mails[0].html, /Post on X/)
     assert.match(mails[0].html, /Copy for Facebook/)
-    assert.match(mails[0].html, /🚨 A Code 4 mega in California: YELLOW-BROWED WARBLER/)
+    assert.match(mails[0].html, /🚨 An ABA Code 4 rarity in California: YELLOW-BROWED WARBLER/)
     assert.match(mails[0].html, /facebook\.com\/sharer\/sharer\.php\?u=/)
     // Its share keeps the mega card's details.
     const megaShare = await db('shares').whereRaw("payload->>'speciesCode' = 'yebwar3'").first('payload')
