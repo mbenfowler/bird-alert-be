@@ -1,6 +1,6 @@
 const { test } = require('node:test')
 const assert = require('node:assert/strict')
-const { planRoute, parseFrom, buildPlaces, coverPlaces, creditInOrder, insertionCost, pathCost, bruteForce, twoOpt, MINUTES_PER_BIRD } = require('../lib/eventRoute')
+const { planRoute, parseFrom, parseIds, applyPicks, routeKey, buildPlaces, coverPlaces, creditInOrder, insertionCost, pathCost, bruteForce, twoOpt, MINUTES_PER_BIRD } = require('../lib/eventRoute')
 const routing = require('../lib/routing')
 
 // A report at a place on a line of latitude 31: lng says where. Private unless told.
@@ -163,4 +163,95 @@ test('the route has exactly the scouting\'s access rules: whatever event-scoutin
     await assert.rejects(eventRoute({ id: 7 }, '12', { from: 'nope' }), (e) => e.status === 400)
     assert.equal(seen.length, 2, 'a bad from is refused before anything is read')
   } finally { events.scoutingFor = real }
+})
+
+// Picking: a table where latitude and longitude both cost (100 minutes, 80 miles a degree).
+const gridTable = async (points) => {
+  const f = (k) => points.map((a) => points.map((b) => (Math.abs(a.lat - b.lat) + Math.abs(a.lng - b.lng)) * k))
+  return { minutes: f(100), miles: f(80) }
+}
+const gridDrive = async (points) => {
+  const legs = points.slice(1).map((p, i) => { const d = Math.abs(p.lat - points[i].lat) + Math.abs(p.lng - points[i].lng); return { minutes: d * 100, miles: d * 80 } })
+  return { legs, minutes: legs.reduce((s, l) => s + l.minutes, 0), miles: legs.reduce((s, l) => s + l.miles, 0), geometry: points.map((p) => [p.lat, p.lng]) }
+}
+// From the start: A (3 birds) 10 min east, B (3) 20 min further. X, off to the north, has one of A's birds and one of its own:
+// 40 min of detour for 1 bird, so an extra unless added.
+const pickPlaces = () => buildPlaces([
+  rep('a1', 'A', -109.9), rep('a2', 'A', -109.9), rep('a3', 'A', -109.9),
+  rep('b1', 'B', -109.7), rep('b2', 'B', -109.7), rep('b3', 'B', -109.7),
+  rep('a1', 'X', -110, { lat: 31.2 }), rep('x1', 'X', -110, { lat: 31.2 })
+])
+const start = { lat: 31, lng: -110 }
+const tools = { table: gridTable, drive: gridDrive }
+
+test('an added extra joins the core at its cheapest place and takes the credit for birds it is visited first for', async () => {
+  const plain = await planRoute({ places: pickPlaces(), reported: 6, from: start }, tools)
+  assert.deepEqual(plain.stops.map((s) => [s.locId, s.picked]), [['A', false], ['B', false]])
+  assert.deepEqual(plain.extras.map((e) => [e.locId, e.new_birds.map((b) => b.code), e.add_min, e.dropped]), [['X', ['x1'], 40, false]])
+  assert.deepEqual([plain.add, plain.drop], [[], []])
+
+  const picked = await planRoute({ places: pickPlaces(), reported: 6, from: start, add: ['X'] }, tools)
+  // X is visited first (start, X, A, B is the quickest order), so a1 is X's now.
+  assert.deepEqual(picked.stops.map((s) => [s.n, s.locId, s.new_birds.map((b) => b.code), s.picked]),
+    [[1, 'X', ['a1', 'x1'], true], [2, 'A', ['a2', 'a3'], false], [3, 'B', ['b1', 'b2', 'b3'], false]])
+  assert.deepEqual(picked.stops.map((s) => s.leg_min), [20, 30, 20])
+  assert.deepEqual([picked.extras, picked.covered, picked.covered_with_extras, picked.total_min, picked.add, picked.drop], [[], 7, 7, 70, ['X'], []])
+})
+
+test('a dropped place is never in the core but still shows as an extra, marked dropped', async () => {
+  const plan = await planRoute({ places: pickPlaces(), reported: 6, from: start, drop: ['B'] }, tools)
+  assert.deepEqual(plan.stops.map((s) => s.locId), ['A'])
+  assert.deepEqual(plan.extras.map((e) => [e.locId, e.new_birds.map((b) => b.code), e.dropped]).sort(), [['B', ['b1', 'b2', 'b3'], true], ['X', ['x1'], false]])
+  assert.deepEqual(plan.drop, ['B'])
+  // The best first place can be dropped too: the next best leads.
+  const noA = await planRoute({ places: pickPlaces(), reported: 6, from: null, drop: ['A'] }, tools)
+  assert.ok(!noA.stops.some((s) => s.locId === 'A'))
+  assert.equal(noA.extras.find((e) => e.locId === 'A')?.dropped, true)
+})
+
+test('a personal location named in add or drop means the hotspot it folded into; unknown ids are ignored', () => {
+  const places = buildPlaces([rep('a', 'L1', -110.0), rep('b', 'L2', -110.003, { priv: true }), rep('c', 'L3', -111)])
+  assert.deepEqual(applyPicks(places, ['L2', 'L404'], ['L3', 'L405']).add, ['L1'])
+  assert.deepEqual(applyPicks(places, ['L2', 'L1'], []).add, ['L1'], 'the same place once')
+  assert.deepEqual(applyPicks(places, [], ['L3']).drop, ['L3'])
+  assert.throws(() => applyPicks(places, ['L2'], ['L1']), (e) => e.status === 400 && /both added and dropped/.test(e.message))
+})
+
+test('more added places than stops is a 400; exactly the cap is fine', async () => {
+  const many = buildPlaces(Array.from({ length: 9 }, (_, i) => rep(`s${i}`, `P${i}`, -110 + i / 10)))
+  const ids = many.map((p) => p.locId)
+  await assert.rejects(planRoute({ places: many, reported: 9, from: start, add: ids }, tools), (e) => e.status === 400 && /up to 8 stops/.test(e.message))
+  const eight = await planRoute({ places: many, reported: 9, from: start, add: ids.slice(0, 8) }, tools)
+  assert.equal(eight.stops.length, 8)
+  assert.ok(eight.stops.every((s) => s.picked))
+  assert.deepEqual(eight.extras.map((e) => e.locId), ['P8'])
+})
+
+test('add and drop are eBird location ids, up to 20 each; anything else is a 400 before anything is read', async () => {
+  assert.deepEqual(parseIds(undefined, 'add'), [])
+  assert.deepEqual(parseIds('', 'add'), [])
+  assert.deepEqual(parseIds(' L1, L22 ,L1,', 'add'), ['L1', 'L22'])
+  assert.deepEqual(parseIds(Array.from({ length: 20 }, (_, i) => `L${i}`).join(','), 'drop').length, 20)
+  for (const bad of ['X1', 'L1,hotspot', 'L1;L2', 'l12', Array.from({ length: 21 }, (_, i) => `L${i}`).join(',')]) {
+    assert.throws(() => parseIds(bad, 'add'), (e) => e.status === 400, bad)
+  }
+  const events = require('../lib/events')
+  const { eventRoute } = require('../lib/eventRoute')
+  const real = events.scoutingFor
+  let reads = 0
+  events.scoutingFor = async () => { reads += 1; throw new Error('not reached') }
+  try {
+    await assert.rejects(eventRoute({ id: 7 }, '12', { add: 'L1,nope' }), (e) => e.status === 400 && /add/.test(e.message))
+    await assert.rejects(eventRoute({ id: 7 }, '12', { drop: 'S123' }), (e) => e.status === 400 && /drop/.test(e.message))
+    assert.equal(reads, 0)
+  } finally { events.scoutingFor = real }
+})
+
+test('the cache key holds the sorted add and drop lists', () => {
+  const reports = [rep('a', 'L1', -110), rep('b', 'L2', -109)]
+  const base = routeKey(reports, start)
+  assert.equal(base, routeKey(reports, start, { add: [], drop: [] }))
+  assert.equal(routeKey(reports, start, { add: ['L2', 'L1'], drop: ['L9'] }), routeKey(reports, start, { add: ['L1', 'L2'], drop: ['L9'] }))
+  assert.notEqual(routeKey(reports, start, { add: ['L1'] }), base)
+  assert.notEqual(routeKey(reports, start, { drop: ['L1'] }), routeKey(reports, start, { add: ['L1'] }))
 })
