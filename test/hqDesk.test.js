@@ -156,3 +156,14 @@ test('the desk reads every covered country, and one that fails is left out rathe
     assert.deepEqual(all.map((r) => r.subnational1Code), ['US-XX', 'MX-XX', 'ZA-XX'])
   } finally { ebird.countryNotable = original }
 })
+
+test('a regular draft credits the finder on the place line, and drops it before shortening the place', () => {
+  const { draftPost } = require('../lib/hqDesk')
+  const pick = { speciesCode: 'verfly', comName: 'Vermilion Flycatcher', state: 'US-IL', stateName: 'Illinois', aba: 2, checklists: 6, confirmed: 2, latest: '2026-11-01 08:00', place: { locId: 'L5', locName: 'Kettle Grove Forest Preserve', county: 'Lake' }, credit: { name: 'Jane Finder', others: 5, observers: 6, firstDay: '2026-10-28', verified: true } }
+  const text = draftPost(pick, 'https://bird-alert.vercel.app/share/s/abcdefghij', '2026-11-02')
+  assert.match(text, /📍 Kettle Grove Forest Preserve, Lake Co\. · found by Jane Finder\n/)
+  const long = draftPost({ ...pick, place: { ...pick.place, locName: 'A '.repeat(110) } }, 'https://bird-alert.vercel.app/share/s/abcdefghij', '2026-11-02')
+  assert.ok(long.length <= 280)
+  assert.doesNotMatch(long, /found by/)
+})
+
