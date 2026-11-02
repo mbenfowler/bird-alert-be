@@ -1,7 +1,7 @@
 const test = require('node:test')
 const assert = require('node:assert/strict')
-const { withCredits, firstReport } = require('../lib/finderCredit')
-const { xDraft, facebookDraft, xLength, creditText } = require('../lib/megaPost')
+const { withCredits, firstReport, isFresh } = require('../lib/finderCredit')
+const { xDraft, facebookDraft, stillDrafts, xLength, creditText } = require('../lib/megaPost')
 
 const URL_ = 'https://bird-alert.vercel.app/share/s/abcdefghij'
 const ASOF = '2026-11-02'
@@ -26,7 +26,7 @@ test('the first report at the place wins, ties go to the earlier checklist, othe
     report({ speciesCode: 'other', obsDt: '2026-10-01 07:00', subId: 'S2', userDisplayName: 'Wrong Bird' })
   ]
   const c = firstReport(records, warbler, ASOF)
-  assert.deepEqual(c, { name: 'Jane Finder', others: 3, observers: 4, firstDay: '2026-10-22', verified: true })
+  assert.deepEqual(c, { name: 'Jane Finder', others: 3, observers: 4, firstDay: '2026-10-22', lastDay: '2026-10-23', checklists: 5, verified: true, fresh: false })
   assert.equal(firstReport([], warbler, ASOF), null)
 })
 
@@ -93,3 +93,28 @@ test('one call per state; a state that fails leaves its picks as they were', asy
   assert.equal(out[1].credit, undefined, 'no report of that bird there')
   assert.equal(out[2].credit, undefined, 'the failed state: no credit, nothing thrown')
 })
+
+test('a bird first reported at its place within 3 days is a fresh find; earlier, a continuing one; no history, fresh', () => {
+  const at = (day) => firstReport([report({ obsDt: `${day} 07:00` }), report({ obsDt: '2026-11-02 06:00', subId: 'S99', userDisplayName: 'Late' })], warbler, ASOF)
+  assert.equal(at('2026-10-31').fresh, true, 'two days back')
+  assert.equal(at('2026-10-30').fresh, false, 'three days back')
+  assert.equal(at('2026-10-30').lastDay, '2026-11-02')
+  assert.equal(isFresh({ ...warbler, credit: at('2026-10-30') }), false)
+  assert.equal(isFresh(warbler), true, 'a failed lookup leaves it fresh')
+})
+
+test('a continuing bird gets still-there drafts: since when, last seen, how many checklists; no names at a private place', () => {
+  const credit = { name: 'Zachary Johnson', others: 17, observers: 18, firstDay: '2026-10-05', lastDay: '2026-10-31', checklists: 25, verified: true, fresh: false }
+  const { draft, fbDraft } = stillDrafts({ ...owl, credit }, URL_)
+  assert.ok(xLength(draft, URL_) <= 280)
+  assert.equal(draft.split('\n')[0], '👀 Still being seen: MOTTLED OWL in Texas · ABA Code 5')
+  assert.match(draft, /📍 Santa Margarita Ranch \(LTC 079\), Starr Co\. \(private, by arrangement only 🙏\) · since Oct 5, last seen Oct 31, 25 checklists · reported by 18 observers/)
+  assert.doesNotMatch(draft + fbDraft, /Zachary/, 'never a name at a private place')
+  assert.match(fbDraft, /^👀 Still being seen in Texas: MOTTLED OWL \(ABA Code 5\)/)
+  assert.match(fbDraft, /reported at Santa Margarita Ranch \(LTC 079\) in Starr County since Oct 5, most recently on Oct 31, on 25 checklists, confirmed by eBird's reviewers\. Reported by 18 observers\./)
+  assert.match(fbDraft, /visits by arrangement only/)
+  // A public place names the finder, as a new find would.
+  const pub = stillDrafts({ ...warbler, credit: { ...credit, name: 'Jane Finder', others: 4 } }, URL_)
+  assert.match(pub.draft, /found by Jane Finder \(and 4 others\)/)
+})
+

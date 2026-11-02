@@ -2126,3 +2126,69 @@ test('an explored area with little on file is filled once, and only a few new ar
   await db('job_runs').where('kind', 'like', 'explore-fill:%').del()
 })
 
+test('the HQ desk leads with new finds and puts birds that have been around a while under "Still around", once a week', async () => {
+  const { runHqDesk } = require('../lib/hqDesk')
+  const noCheck = async () => null
+  await db('hq_picks').where('day', '>=', '2026-11-02').del()
+  await db('birds').insert([
+    { speciesCode: 'motowl', comName: 'Mottled Owl', sciName: 'Strix virgata', birdImg: 'https://img.example/owl.jpg' },
+    { speciesCode: 'rucwar', comName: 'Rufous-capped Warbler', sciName: 'Basileuterus rufifrons', birdImg: 'https://img.example/rcw.jpg' }
+  ]).onConflict('speciesCode').ignore()
+  const rec = (over) => ({ subnational1Code: 'US-TX', subnational1Name: 'Texas', subnational2Name: 'Starr', lat: 26.47, lng: -98.88, obsDt: '2026-11-01 18:25', obsValid: true, obsReviewed: true, locationPrivate: false, ...over })
+  const records = [
+    ...[1, 2, 3, 4].map((i) => rec({ speciesCode: 'motowl', comName: 'Mottled Owl', sciName: 'Strix virgata', locId: 'L9', locName: 'Santa Margarita Ranch (restricted access)', subId: `SO${i}`, userDisplayName: `O${i}` })),
+    ...[1, 2].map((i) => rec({ speciesCode: 'rucwar', comName: 'Rufous-capped Warbler', sciName: 'Basileuterus rufifrons', subnational2Name: 'Brewster', locId: 'L5', locName: 'Big Bend NP--Santa Elena Canyon', lat: 29.17, lng: -103.6, subId: `SW${i}`, userDisplayName: `W${i}` }))
+  ]
+  // The owl has been there since Oct 5; the warbler turned up yesterday.
+  const credit = async (picks) => picks.map((p) => ({ ...p, credit: p.speciesCode === 'motowl'
+    ? { name: 'Zachary Johnson', others: 17, observers: 18, firstDay: '2026-10-05', lastDay: '2026-11-01', checklists: 25, verified: true, fresh: false }
+    : { name: 'Wes Finder', others: 1, observers: 2, firstDay: '2026-11-01', lastDay: '2026-11-01', checklists: 2, verified: true, fresh: true } }))
+  const mails = []
+  const send = async (m) => { mails.push(m); return {} }
+  process.env.FEEDBACK_TO = 'hq@example.com'
+  try {
+    const first = await runHqDesk({ asOf: '2026-11-02', records, check: noCheck, credit, send })
+    assert.deepEqual([first.picks, first.still], [1, 1])
+    const html = mails[0].html
+    assert.ok(html.indexOf('Rufous-capped Warbler') < html.indexOf('Still around'), 'the new find leads')
+    assert.match(html, /Mottled Owl · Texas · present since Oct 5, last seen Nov 1 \(25 checklists\)/)
+    assert.match(html, /👀 Still being seen: MOTTLED OWL in Texas/)
+    assert.doesNotMatch(html, /Zachary Johnson/, 'no names at a private place')
+    assert.match(mails[0].text, /Still around:/)
+    const rows = await db('hq_picks').where({ day: '2026-11-02' }).select('species_code', db.raw("coalesce(detail->>'kind', 'new') as kind"))
+    assert.deepEqual(Object.fromEntries(rows.map((r) => [r.species_code, r.kind])), { rucwar: 'new', motowl: 'still' })
+    // The next day: the owl isn't back in Still around for a week, and the warbler isn't re-pitched for 5 days.
+    const next = await runHqDesk({ asOf: '2026-11-03', records, check: noCheck, credit, send })
+    assert.deepEqual([next.picks, next.still], [0, 0])
+    // A week on, the owl is back under Still around (never as a new find).
+    const later = await runHqDesk({ asOf: '2026-11-09', records, check: noCheck, credit, send })
+    assert.equal(later.still, 1)
+  } finally {
+    delete process.env.FEEDBACK_TO
+    await db('hq_picks').where('day', '>=', '2026-11-02').del()
+  }
+})
+
+test('an instant HQ alert goes out for a fresh Code 4-5 find, never for one that has been around a while', async () => {
+  const { runHqAlerts } = require('../lib/hqAlerts')
+  await db('hq_alerts').del()
+  const codes = { bySci: new Map([['Strix virgata', 5], ['Phylloscopus inornatus', 4]]), byName: new Map() }
+  const base = { subnational1Code: 'US-TX', subnational1Name: 'Texas', subnational2Name: 'Starr', lat: 26.47, lng: -98.88, obsDt: '2026-11-01 18:25', userDisplayName: 'A', locationPrivate: false, obsValid: true, obsReviewed: true }
+  const records = [
+    { ...base, speciesCode: 'motowl', comName: 'Mottled Owl', sciName: 'Strix virgata', locId: 'L9', locName: 'Santa Margarita Ranch', subId: 'S1' },
+    { ...base, speciesCode: 'yebwar3', comName: 'Yellow-browed Warbler', sciName: 'Phylloscopus inornatus', subnational1Code: 'US-CA', subnational1Name: 'California', locId: 'L77', locName: 'Moss Beach', subId: 'S2' }
+  ]
+  const credit = async (picks) => picks.map((p) => ({ ...p, credit: { name: 'A', others: 0, observers: 1, firstDay: p.speciesCode === 'motowl' ? '2026-10-05' : '2026-11-01', lastDay: '2026-11-01', checklists: 1, verified: true, fresh: p.speciesCode !== 'motowl' } }))
+  const mails = []
+  process.env.FEEDBACK_TO = 'owner@example.com'
+  try {
+    const ran = await runHqAlerts({ records, codes, credit, now: new Date('2026-11-01T23:00:00Z'), push: async () => ({ sent: 1 }), send: async (m) => { mails.push(m); return {} } })
+    assert.deepEqual([ran.post, ran.continuing], [1, 1])
+    assert.deepEqual(mails.map((m) => m.subject), ['HQ alert: ABA Code 4 Yellow-browed Warbler in California'])
+    assert.equal(await db('hq_alerts').where({ species_code: 'motowl' }).first(), undefined, 'not recorded: a fresh find there later still alerts')
+  } finally {
+    delete process.env.FEEDBACK_TO
+    await db('hq_alerts').del()
+  }
+})
+
