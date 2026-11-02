@@ -5,6 +5,7 @@ const { DIGESTS } = require('../../lib/digests')
 const { runHqDesk, approvePost } = require('../../lib/hqDesk')
 const { runHqAlerts } = require('../../lib/hqAlerts')
 const { runConfirmReminders } = require('../../lib/confirmReminder')
+const { runTripNotices } = require('../../lib/places')
 
 // One function for every email the app sends on a schedule, plus the preview; Vercel's Hobby plan
 // allows twelve functions per deployment, so routes that share a shape share a file.
@@ -13,7 +14,16 @@ const cron = (kind) => ({
   handler: async (req, res) => {
     assertCronCaller(req)
     // Each call gets 45 seconds; the caller repeats while `more` is true.
-    res.status(200).json(await runDigest({ kind, ...DIGESTS[kind], deadline: Date.now() + 45_000 }))
+    const deadline = Date.now() + 45_000
+    const result = await runDigest({ kind, ...DIGESTS[kind], deadline })
+    // The morning watch-list run also sends the trip notes (lib/places), once each, once its own work is done.
+    if (kind === 'watchlist' && !result.more) {
+      try {
+        result.tripNotices = await runTripNotices({ deadline })
+        if (result.tripNotices.more) result.more = true
+      } catch (error) { console.error('Trip notes failed:', error.message) }
+    }
+    res.status(200).json(result)
   }
 })
 

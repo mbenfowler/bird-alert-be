@@ -3,6 +3,7 @@ const { route, body, HttpError } = require('../lib/http')
 const db = require('../lib/db')
 const { requireUser, clearSession } = require('../lib/auth')
 const { normalizeEmail, assertValidEmail, findUserByEmail, sanitizeUser } = require('../lib/users')
+const { activePlaceOf, lastTripOf, ownPlace, markReturnSeen } = require('../lib/places')
 const { sendConfirmationEmail } = require('../lib/mailer')
 const { isValidTimezone } = require('../lib/quietHours')
 const { RANGE_CHOICES } = require('../lib/range')
@@ -10,7 +11,7 @@ const { syncNewRegionSoon } = require('../lib/checklists')
 const { assertArea } = require('../lib/areas')
 
 const STRING_FIELDS = ['state', 'location']
-const BOOLEAN_FIELDS = ['alert_digest_email_enabled', 'rare_sightings_email_enabled', 'push_watchlist_enabled', 'push_notable_enabled', 'push_notable_batched', 'push_first_of_season', 'push_lifer_enabled', 'migration_email_enabled', 'watchlist_email_fallback', 'rare_alerts_need_proof']
+const BOOLEAN_FIELDS = ['alert_digest_email_enabled', 'rare_sightings_email_enabled', 'push_watchlist_enabled', 'push_notable_enabled', 'push_notable_batched', 'push_first_of_season', 'push_lifer_enabled', 'migration_email_enabled', 'watchlist_email_fallback', 'rare_alerts_need_proof', 'keep_home_alerts', 'trip_emails_enabled']
 
 // DELETE /api/user { confirm: 'delete' } -> 204: the account and everything kept for it (watch list, life
 // list, alerts, passkeys, routes) are gone for good, and the session ends. Shared links stay up,
@@ -27,7 +28,7 @@ const deleteAccount = async (req, res) => {
   res.status(204).end()
 }
 
-// PATCH /api/user { onboarded?: true (setup finished or skipped; it never shows again), email?, state?, location?, alert_digest_email_enabled?, rare_sightings_email_enabled?, push_watchlist_enabled?, push_notable_enabled?, push_notable_batched?, push_first_of_season?, push_lifer_enabled?, migration_email_enabled? }
+// PATCH /api/user { onboarded?: true (setup finished or skipped; it never shows again), email?, state?, location?, alert_digest_email_enabled?, rare_sightings_email_enabled?, push_watchlist_enabled?, push_notable_enabled?, push_notable_batched?, push_first_of_season?, push_lifer_enabled?, migration_email_enabled?, active_place_id? (own place or null), keep_home_alerts? }
 module.exports = route(['PATCH', 'DELETE'], async (req, res) => {
   if (req.method === 'DELETE') return deleteAccount(req, res)
   const user = await requireUser(req)
@@ -59,6 +60,17 @@ module.exports = route(['PATCH', 'DELETE'], async (req, res) => {
   }
   // The alert range: one of the offered distances (0 keeps alerts to the county), and a home spot
   // to measure it from (both null: the county's center).
+  // The app showed "welcome back" for a trip that just ended: not again.
+  if ('trip_return_seen' in input) {
+    if (input.trip_return_seen !== true) throw new HttpError(400, 'trip_return_seen can only be set to true')
+    await markReturnSeen(user)
+  }
+  // "I'm here now": one of the person's own places, or null for home. A trip covering today still wins.
+  let nowAt = null
+  if ('active_place_id' in input) {
+    if (input.active_place_id === null) changes.active_place_id = null
+    else { nowAt = await ownPlace(user, input.active_place_id); changes.active_place_id = nowAt.id }
+  }
   if ('range_mi' in input) {
     if (!RANGE_CHOICES.includes(input.range_mi)) throw new HttpError(400, `range_mi must be one of ${RANGE_CHOICES.join(', ')}`)
     changes.range_mi = input.range_mi
@@ -102,7 +114,9 @@ module.exports = route(['PATCH', 'DELETE'], async (req, res) => {
 
   const [updated] = await db('users').where({ id: user.id }).update(changes).returning('*')
   if (updated.location && updated.location !== user.location) syncNewRegionSoon(updated.location)
+  // A place someone is at now has its area's checklists fetched, so Where to go is ready there.
+  if (nowAt && nowAt.id !== user.active_place_id) syncNewRegionSoon(nowAt.location)
   if (emailChanged) sendConfirmationEmail(updated).catch((error) => console.error('Confirmation email failed:', error))
 
-  res.status(200).json(sanitizeUser(updated))
+  res.status(200).json({ ...sanitizeUser(updated), activePlace: await activePlaceOf(updated), lastTrip: await lastTripOf(updated) })
 })
