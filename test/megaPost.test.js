@@ -29,7 +29,7 @@ test('a long X post drops the rarity line, then the hashtags, and never goes ove
 
 test('the Facebook post tells it in sentences and asks people not to go without permission', () => {
   const text = facebookDraft(owl, URL_)
-  assert.equal(text.split('\n')[0], '🚨 A Code 5 mega in Texas: MOTTLED OWL')
+  assert.equal(text.split('\n')[0], '🚨 An ABA Code 5 rarity in Texas: MOTTLED OWL')
   assert.match(text, /The Mottled Owl has only a handful of records ever in the ABA Area, and one has been reported at Santa Margarita Ranch \(LTC 079\) in Starr County on Oct 24 and Oct 31, by 4 observers, and confirmed by eBird's reviewers\./)
   assert.match(text, /Please don't go without permission\./)
   assert.ok(text.endsWith(`Details and map: ${URL_}`))
