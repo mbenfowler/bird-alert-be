@@ -1990,13 +1990,17 @@ test('lifers at a place count against the life list, or the place\'s own list wh
   try {
     const user = await db('users').where({ id }).first()
     const place = await places.createPlace(user, { name: 'Colorado (work)', state: 'ZR', location: 'US-ZR-009', range_mi: 0 })
-    await places.setPlaceSeen(user, place.id, ten)
     await db('users').where({ id }).update({ active_place_id: place.id })
     // Against the life list: seen before, so no lifer.
     await runPushAlerts({ send })
     assert.equal(sent.length, 0)
-    // Against the place's own list: new there.
+    // The place's own list, but under ten birds: the life list still decides, so still none.
     await places.updatePlace(user, place.id, { lifers_scope: 'place' })
+    await places.setPlaceSeen(user, place.id, ten.slice(0, 3))
+    await runPushAlerts({ send })
+    assert.equal(sent.length, 0, 'a short place list falls back to the life list')
+    // Ten birds on it: the place's own list decides, and the jay is new there.
+    await places.setPlaceSeen(user, place.id, ten)
     await runPushAlerts({ send })
     assert.equal(sent.length, 1)
     assert.match(`${sent[0].title} ${sent[0].body}`, /Steller's Jay/)
@@ -2009,6 +2013,8 @@ test('lifers at a place count against the life list, or the place\'s own list wh
     await db('region_species_days').insert(days.map((day) => ({ region: area, day, speciesCode: 'stejay' }))).onConflict(['region', 'day', 'speciesCode']).ignore()
     assert.deepEqual((await places.suggestTargets(user, place.id, { from, to: from, scope: 'place' })).suggestions.map((s) => s.speciesCode), ['stejay'])
     assert.deepEqual((await places.suggestTargets(user, place.id, { from, to: from })).suggestions.map((s) => s.speciesCode), [], 'already on the life list')
+    await places.setPlaceSeen(user, place.id, ten.slice(0, 3))
+    assert.deepEqual((await places.suggestTargets(user, place.id, { from, to: from, scope: 'place' })).suggestions.map((s) => s.speciesCode), [], 'under ten on the place list: the life list')
     await db('region_species_days').where({ region: area }).del()
     await db('region_days').where({ region: area }).del()
   } finally {
