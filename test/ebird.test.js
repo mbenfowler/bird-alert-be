@@ -95,3 +95,26 @@ test('a throttled eBird call is retried once after a breath', async () => {
   await assert.rejects(withFetch(() => { calls += 1; return new Response('slow down', { status: 429 }) }, () => ebird.recentObservations('US-GA-139')), (error) => error.status === 503 && error.upstream === 429 && /eBird is busy/.test(error.message))
   assert.equal(calls, 2)
 })
+
+test('a full national notable answer is asked again state by state, so the oldest reports aren\'t cut', async () => {
+  process.env.EBIRD_API_KEY = 'k123'
+  const urls = []
+  const capped = Array.from({ length: 10_000 }, (_, i) => ({ speciesCode: 'x', subId: `S${i}` }))
+  await withFetch((url) => {
+    urls.push(url)
+    if (url.includes('/data/obs/US/recent/notable')) return jsonResponse(capped)
+    if (url.includes('/ref/region/list/subnational1/US')) return jsonResponse([{ code: 'US-TX', name: 'Texas' }, { code: 'US-GA', name: 'Georgia' }])
+    if (url.includes('/data/obs/US-TX/recent/notable')) return jsonResponse([{ speciesCode: 'motowl', subId: 'S407364127' }])
+    if (url.includes('/data/obs/US-GA/recent/notable')) return jsonResponse([{ speciesCode: 'paibun', subId: 'S1' }])
+    return jsonResponse([])
+  }, async () => {
+    const all = await ebird.countryNotable('US', 2)
+    assert.deepEqual(all.map((o) => o.speciesCode).sort(), ['motowl', 'paibun'], 'the state answers replace the capped one')
+  })
+  assert.ok(urls.some((u) => u.includes('/data/obs/US-TX/recent/notable?back=2&detail=full')))
+  // An answer under the cap is used as it is: one call.
+  urls.length = 0
+  await withFetch((url) => { urls.push(url); return jsonResponse([{ speciesCode: 'y' }]) }, () => ebird.countryNotable('CA', 1))
+  assert.equal(urls.length, 1)
+})
+
