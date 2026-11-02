@@ -816,6 +816,12 @@ test('a life list starts from an import, grows by taps, and an import never remo
     assert.equal(list[1].firstSeen, '2026-10-13')
     await unmarkSeen(userId, 'norcar')
     assert.equal((await seenList(userId)).length, 1)
+    // Marked seen here, then logged on eBird: the next import counts it as eBird's.
+    await unmarkSeen(userId, 'tenwar')
+    await markSeen(userId, 'tenwar')
+    assert.equal((await seenList(userId))[0].source, 'tap')
+    await importLifeList(userId, csv)
+    assert.equal((await seenList(userId))[0].source, 'import')
   } finally { ebird.fullTaxonomy = original }
 })
 
