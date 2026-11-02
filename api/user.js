@@ -3,7 +3,8 @@ const { route, body, HttpError } = require('../lib/http')
 const db = require('../lib/db')
 const { requireUser, clearSession } = require('../lib/auth')
 const { normalizeEmail, assertValidEmail, findUserByEmail, sanitizeUser } = require('../lib/users')
-const { activePlaceOf, activeEventOf, lastTripOf, ownPlace, markReturnSeen } = require('../lib/places')
+const { activePlaceOf, activeEventOf, ownPlace } = require('../lib/places')
+const { upcomingEventOf, lastEventOf, markEventReturnSeen } = require('../lib/events')
 const { sendConfirmationEmail } = require('../lib/mailer')
 const { isValidTimezone } = require('../lib/quietHours')
 const { RANGE_CHOICES } = require('../lib/range')
@@ -60,12 +61,14 @@ module.exports = route(['PATCH', 'DELETE'], async (req, res) => {
   }
   // The alert range: one of the offered distances (0 keeps alerts to the county), and a home spot
   // to measure it from (both null: the county's center).
-  // The app showed "welcome back" for a trip that just ended: not again.
-  if ('trip_return_seen' in input) {
-    if (input.trip_return_seen !== true) throw new HttpError(400, 'trip_return_seen can only be set to true')
-    await markReturnSeen(user)
+  // The app showed "welcome back" for an event that just ended: not again. (trip_return_seen, the
+  // old name, is still taken.)
+  for (const key of ['event_return_seen', 'trip_return_seen']) {
+    if (!(key in input)) continue
+    if (input[key] !== true) throw new HttpError(400, `${key} can only be set to true`)
+    await markEventReturnSeen(user)
   }
-  // "I'm here now": one of the person's own places, or null for home. A trip covering today still wins.
+  // "I'm here now": one of the person's own places, or null for home. An event covering today still wins.
   let nowAt = null
   if ('active_place_id' in input) {
     if (input.active_place_id === null) changes.active_place_id = null
@@ -118,5 +121,5 @@ module.exports = route(['PATCH', 'DELETE'], async (req, res) => {
   if (nowAt && nowAt.id !== user.active_place_id) syncNewRegionSoon(nowAt.location)
   if (emailChanged) sendConfirmationEmail(updated).catch((error) => console.error('Confirmation email failed:', error))
 
-  res.status(200).json({ ...sanitizeUser(updated), activePlace: await activePlaceOf(updated), activeEvent: await activeEventOf(updated), lastTrip: await lastTripOf(updated) })
+  res.status(200).json({ ...sanitizeUser(updated), activePlace: await activePlaceOf(updated), activeEvent: await activeEventOf(updated), upcomingEvent: await upcomingEventOf(updated), lastEvent: await lastEventOf(updated) })
 })

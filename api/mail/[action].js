@@ -5,7 +5,7 @@ const { DIGESTS } = require('../../lib/digests')
 const { runHqDesk, approvePost } = require('../../lib/hqDesk')
 const { runHqAlerts } = require('../../lib/hqAlerts')
 const { runConfirmReminders } = require('../../lib/confirmReminder')
-const { runTripNotices } = require('../../lib/places')
+const { runEventNotices } = require('../../lib/events')
 const { runScouting } = require('../../lib/scouting')
 
 // One function for every email the app sends on a schedule, plus the preview; Vercel's Hobby plan
@@ -17,13 +17,13 @@ const cron = (kind) => ({
     // Each call gets 45 seconds; the caller repeats while `more` is true.
     const deadline = Date.now() + 45_000
     const result = await runDigest({ kind, ...DIGESTS[kind], deadline })
-    // The morning watch-list run also sends the trip notes (lib/places), once each, once its own work is done.
+    // The morning watch-list run also sends the event notes (lib/events), to each member once, once its own work is done.
     if (kind === 'watchlist' && !result.more) {
       try {
-        result.tripNotices = await runTripNotices({ deadline })
-        if (result.tripNotices.more) result.more = true
-      } catch (error) { console.error('Trip notes failed:', error.message) }
-      // Then the scouting reports for trips coming up (lib/scouting), each trip once a day.
+        result.eventNotices = await runEventNotices({ deadline })
+        if (result.eventNotices.more) result.more = true
+      } catch (error) { console.error('Event notes failed:', error.message) }
+      // Then the scouting reports for events coming up (lib/scouting), each member once a day.
       if (!result.more) {
         try {
           result.scouting = await runScouting({ deadline })

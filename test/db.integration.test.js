@@ -1668,13 +1668,30 @@ test('languages: bird names come from eBird in the reader\'s language, the words
   }
 })
 
-// --- places, targets and trips (lib/places) ------------------------------------------------------
+// --- places and targets (lib/places), events (lib/events) -------------------------------------------
 
 /** 'YYYY-MM-DD' n days from today, UTC (test users have no time zone, so UTC is their day). */
 const dayFrom = (n) => new Date(Date.now() + n * 86_400_000).toISOString().slice(0, 10)
 
-test('places are saved with their area, range, spot and targets; trips with dates; all within limits, and gone with the account', async () => {
+/**
+ * A solo event as lib/events makes one from a place, straight into the tables so any dates go: the
+ * place's area and targets, the person its organizer with no name chosen yet. `place.id` may be null.
+ */
+const eventAt = async (userId, place, fields = {}) => {
+  const token = () => require('crypto').randomBytes(16).toString('base64url')
+  const [event] = await db('events').insert({
+    owner_id: userId, place_id: place.id ?? null, name: place.name, state: place.state, location: place.location, range_mi: place.range_mi ?? 30,
+    home_lat: place.home_lat ?? null, home_lng: place.home_lng ?? null, kind: 'trip', scout: false, scout_days: 21, invite_token: token(), view_token: token(), ...fields
+  }).returning('*')
+  await db('event_members').insert({ event_id: event.id, user_id: userId, display_name: null, role: 'organizer' })
+  const targets = place.id ? await db('place_targets').where({ place_id: place.id }).pluck('species_code') : []
+  if (targets.length) await db('event_targets').insert(targets.map((code) => ({ event_id: event.id, species_code: code, added_by: userId })))
+  return event
+}
+
+test('places are saved with their area, range, spot and targets; events planned from them, with dates; all within limits, and gone with the account', async () => {
   const places = require('../lib/places')
+  const events = require('../lib/events')
   const [{ id }] = await db('users').insert({ email: 'places@example.com', password_hash: 'x', location: 'US-ZX-002', state: 'ZX' }).returning('id')
   const user = await db('users').where({ id }).first()
   const status = async (fn) => { try { await fn(); return 200 } catch (error) { return error.status } }
@@ -1693,44 +1710,62 @@ test('places are saved with their area, range, spot and targets; trips with date
     assert.equal(await status(() => places.setTargets(user, place.id, Array.from({ length: 51 }, (_, i) => `sp${i}x`))), 400, 'up to 50')
     assert.equal(await status(() => places.setTargets(user, place.id, ['NOT A CODE'])), 400)
 
-    const { trip } = await places.createTrip(user, { place_id: place.id, starts_on: dayFrom(2), ends_on: dayFrom(5) })
-    assert.deepEqual([trip.starts_on, trip.ends_on, trip.active], [dayFrom(2), dayFrom(5), false])
-    assert.equal(await status(() => places.createTrip(user, { place_id: place.id, starts_on: dayFrom(5), ends_on: dayFrom(2) })), 400, 'ends before it starts')
-    assert.equal(await status(() => places.createTrip(user, { place_id: place.id, starts_on: dayFrom(1), ends_on: dayFrom(61) })), 400, 'over 60 days')
-    assert.equal(await status(() => places.createTrip(user, { place_id: place.id, starts_on: dayFrom(-9), ends_on: dayFrom(-2) })), 400, 'already over')
-    assert.equal(await status(() => places.createTrip(user, { place_id: place.id, starts_on: dayFrom(400), ends_on: dayFrom(401) })), 400, 'over a year ahead')
-    assert.equal((await places.updateTrip(user, trip.id, { ends_on: dayFrom(6) })).trip.ends_on, dayFrom(6))
-    assert.deepEqual((await places.listPlaces(user))[0].trips.map((t) => t.id), [trip.id])
+    // An event planned from the place: its name, area, range and targets, solo, with no links until a name is chosen.
+    const trip = await events.createEvent(user, { place_id: place.id, starts_on: dayFrom(2), ends_on: dayFrom(5) })
+    assert.deepEqual([trip.name, trip.location, trip.range_mi, trip.place_id, trip.starts_on, trip.ends_on, trip.kind, trip.scout, trip.active, trip.past, trip.archived, trip.role, trip.display_name, trip.invite_url],
+      ['Colorado (work)', 'US-CO-005', -1, place.id, dayFrom(2), dayFrom(5), 'trip', false, false, false, false, 'organizer', null, null])
+    assert.deepEqual(trip.targets.map((t) => [t.code, t.lifer_for, t.lifer_for_you]), [['lazbun', [], true], ['paibun', [], true]])
+    assert.deepEqual(trip.members, [{ display_name: null, role: 'organizer', you: true }])
+    // Fields given win over the place's.
+    const elsewhere = await events.createEvent(user, { place_id: place.id, name: 'Denver weekend', state: 'CO', location: 'US-CO-031', range_mi: 15, starts_on: dayFrom(9), ends_on: dayFrom(10) })
+    assert.deepEqual([elsewhere.name, elsewhere.location, elsewhere.range_mi, elsewhere.home_lat], ['Denver weekend', 'US-CO-031', 15, null])
+    // With no place: the area given, nothing else; a Big Day is one day and scouts.
+    const solo = await events.createEvent(user, { name: 'Big Sit', state: 'CO', location: 'US-CO-031', starts_on: dayFrom(3), ends_on: dayFrom(8), kind: 'bigday' })
+    assert.deepEqual([solo.place_id, solo.range_mi, solo.starts_on, solo.ends_on, solo.scout, solo.scout_days, solo.targets], [null, 30, dayFrom(3), dayFrom(3), true, 21, []])
+    assert.equal(await status(() => events.createEvent(user, { name: 'Nowhere', starts_on: dayFrom(3), ends_on: dayFrom(3) })), 400, 'somewhere')
+    assert.equal(await status(() => events.createEvent(user, { name: 'x', state: 'CO', location: 'US-GA-139', starts_on: dayFrom(3), ends_on: dayFrom(3) })), 400, 'the area must be in its state')
+    assert.equal(await status(() => events.createEvent(user, { place_id: place.id, starts_on: dayFrom(5), ends_on: dayFrom(2) })), 400, 'ends before it starts')
+    assert.equal(await status(() => events.createEvent(user, { place_id: place.id, starts_on: dayFrom(1), ends_on: dayFrom(61) })), 400, 'over 60 days')
+    assert.equal(await status(() => events.createEvent(user, { place_id: place.id, starts_on: dayFrom(-9), ends_on: dayFrom(-2) })), 400, 'already over')
+    assert.equal(await status(() => events.createEvent(user, { place_id: place.id, starts_on: dayFrom(400), ends_on: dayFrom(401) })), 400, 'over a year ahead')
+    assert.equal(await status(() => events.createEvent(user, { place_id: place.id, starts_on: dayFrom(2), ends_on: dayFrom(2), scout_days: 10 })), 400, 'a lead time on offer')
+    assert.equal((await events.updateEvent(user, trip.id, { ends_on: dayFrom(6) })).ends_on, dayFrom(6))
+    assert.deepEqual((await places.listPlaces(user))[0].trips, [], 'places carry no dates')
 
-    // Someone else's place or trip doesn't exist, as far as they're concerned.
+    // Someone else's place or event doesn't exist, as far as they're concerned.
     const [{ id: other }] = await db('users').insert({ email: 'places-other@example.com', password_hash: 'x' }).returning('id')
     const stranger = await db('users').where({ id: other }).first()
     assert.equal(await status(() => places.updatePlace(stranger, place.id, { name: 'mine' })), 404)
-    assert.equal(await status(() => places.deleteTrip(stranger, trip.id)), 404)
+    assert.equal(await status(() => events.endEvent(stranger, trip.id)), 404)
+    assert.equal(await status(() => events.createEvent(stranger, { place_id: place.id, starts_on: dayFrom(2), ends_on: dayFrom(2) })), 404)
     await db('users').where({ id: other }).del()
 
     // Up to ten places.
     for (let i = 1; i < places.MAX_PLACES; i += 1) await places.createPlace(user, { name: `Place ${i}`, state: 'CO', location: 'US-CO-031' })
     assert.equal(await status(() => places.createPlace(user, { name: 'One too many', state: 'CO', location: 'US-CO-031' })), 400)
 
-    // "I'm here now" falls back to home when its place goes; a place takes its targets and trips with it.
+    // "I'm here now" falls back to home when its place goes; a place takes its targets with it, and
+    // the events planned from it stay, with their own.
     await db('users').where({ id }).update({ active_place_id: place.id })
     await places.deletePlace(user, place.id)
     assert.equal((await db('users').where({ id }).first()).active_place_id, null)
-    assert.equal(await db('trips').where({ id: trip.id }).first(), undefined)
     assert.equal(Number((await db('place_targets').where({ place_id: place.id }).count('* as n').first()).n), 0)
+    const kept = (await events.listEvents(user)).find((e) => e.id === trip.id)
+    assert.deepEqual([kept.place_id, kept.targets.length], [null, 2])
 
-    // Ended trips over a month old are dropped by the daily housekeeping.
-    const keep = (await places.listPlaces(user))[0]
-    await db('trips').insert([{ place_id: keep.id, starts_on: dayFrom(-50), ends_on: dayFrom(-40) }, { place_id: keep.id, starts_on: dayFrom(-10), ends_on: dayFrom(-5) }])
-    assert.equal(await places.pruneTrips(), 1)
+    // Up to 50 upcoming and current events at a time; past ones don't count.
+    await eventAt(id, { name: 'Long ago', state: 'CO', location: 'US-CO-031' }, { starts_on: dayFrom(-60), ends_on: dayFrom(-58) })
+    const open = (await events.listEvents(user)).filter((e) => !e.past).length
+    for (let i = open; i < events.MAX_OPEN; i++) await eventAt(id, { name: `Outing ${i}`, state: 'CO', location: 'US-CO-031' }, { starts_on: dayFrom(20), ends_on: dayFrom(20) })
+    assert.equal(await status(() => events.createEvent(user, { name: 'One too many', state: 'CO', location: 'US-CO-031', starts_on: dayFrom(20), ends_on: dayFrom(20) })), 400)
   } finally {
+    await db('events').where({ owner_id: id }).del()
     await db('users').where({ id }).del()
   }
   assert.equal(Number((await db('places').where({ user_id: id }).count('* as n').first()).n), 0, 'gone with the account')
 })
 
-test('the active place: a trip covering today, else "I\'m here now", else home; dates in the person\'s own time zone', async () => {
+test('the active place: an event covering today, else "I\'m here now", else home; dates in the person\'s own time zone', async () => {
   const places = require('../lib/places')
   const [{ id }] = await db('users').insert({ email: 'active-place@example.com', password_hash: 'x', location: 'US-ZX-002', state: 'ZX' }).returning('id')
   try {
@@ -1743,20 +1778,22 @@ test('the active place: a trip covering today, else "I\'m here now", else home; 
     let me = await db('users').where({ id }).first()
     assert.deepEqual(await places.activePlaceOf(me), { id: cabin.id, name: 'Cabin', state: 'CO', location: 'US-CO-005', via: 'manual' })
 
-    // A trip covering today wins over "I'm here now"; its last day still counts, tomorrow's start doesn't.
-    await db('trips').insert({ place_id: work.id, starts_on: dayFrom(-3), ends_on: dayFrom(0) })
-    const now = await places.activePlaceOf(me)
-    assert.deepEqual([now.id, now.via, now.trip], [work.id, 'trip', { starts_on: dayFrom(-3), ends_on: dayFrom(0) }])
-    await db('trips').where({ place_id: work.id }).update({ starts_on: dayFrom(1), ends_on: dayFrom(3) })
+    // An event covering today wins over "I'm here now" (and is reported as the event, not a place);
+    // its last day still counts, tomorrow's start doesn't.
+    const trip = await eventAt(id, work, { starts_on: dayFrom(-3), ends_on: dayFrom(0) })
+    assert.equal(await places.activePlaceOf(me), null)
+    assert.deepEqual(await places.activeEventOf(me), { id: trip.id, name: 'Colorado (work)', state: 'CO', location: 'US-CO-031', kind: 'trip', starts_on: dayFrom(-3), ends_on: dayFrom(0) })
+    await db('events').where({ id: trip.id }).update({ starts_on: dayFrom(1), ends_on: dayFrom(3) })
     assert.equal((await places.activePlaceOf(me)).via, 'manual', 'starts tomorrow: not yet')
 
-    // Far east of UTC it's already tomorrow, so the trip has begun there.
+    // Far east of UTC it's already tomorrow, so the event has begun there.
     await db('users').where({ id }).update({ timezone: 'Pacific/Kiritimati', active_place_id: null })
     me = await db('users').where({ id }).first()
     const kiri = places.localDay('Pacific/Kiritimati')
-    const expected = kiri >= dayFrom(1) ? work.id : null
-    assert.equal((await places.activePlaceOf(me))?.id ?? null, expected)
+    const expected = kiri >= dayFrom(1) ? trip.id : null
+    assert.equal((await places.activeEventOf(me))?.id ?? null, expected)
   } finally {
+    await db('events').where({ owner_id: id }).del()
     await db('users').where({ id }).del()
   }
 })
@@ -1764,6 +1801,7 @@ test('the active place: a trip covering today, else "I\'m here now", else home; 
 test('at a place its alerts come too (its targets only there), home keeps alerting unless turned off, and nothing is said twice', async () => {
   const ebird = require('../lib/ebird')
   const places = require('../lib/places')
+  const events = require('../lib/events')
   const { runPushAlerts } = require('../lib/pushAlerts')
   const originals = { recent: ebird.recentObservations, notable: ebird.notableObservations, subregions: ebird.subregions, info: ebird.regionInfo }
   ebird.subregions = async () => [{ code: 'US-ZW-009', name: 'Denver' }, { code: 'US-ZW-002', name: 'Home' }]
@@ -1790,15 +1828,15 @@ test('at a place its alerts come too (its targets only there), home keeps alerti
     const user = await db('users').where({ id }).first()
     const work = await places.createPlace(user, { name: 'Colorado (work)', state: 'ZW', location: 'US-ZW-009', range_mi: 0 })
     await places.setTargets(user, work.id, ['lazbun'])
-    // A trip that hasn't started: home only, and the place's target means nothing at home.
-    await db('trips').insert({ place_id: work.id, starts_on: dayFrom(2), ends_on: dayFrom(4) })
+    // An event there that hasn't started: home only, and the place's target means nothing at home.
+    const trip = await eventAt(id, work, { starts_on: dayFrom(2), ends_on: dayFrom(4) })
     await runPushAlerts({ send })
     assert.match(text(), /Snowy Owl/)
     assert.doesNotMatch(text(), /Lazuli|City Park/, text())
 
-    // The trip has begun: the place's owl and its target, saying where and which place; home's owl is old news.
+    // The event has begun: the owl there and its target, saying where and which event; home's owl is old news.
     sent.length = 0
-    await db('trips').where({ place_id: work.id }).update({ starts_on: dayFrom(0), ends_on: dayFrom(2) })
+    await db('events').where({ id: trip.id }).update({ starts_on: dayFrom(0), ends_on: dayFrom(2) })
     await runPushAlerts({ send })
     assert.match(text(), /Lazuli Bunting/)
     assert.match(text(), /City Park · in Denver \(Colorado \(work\)\)/, text())
@@ -1814,11 +1852,11 @@ test('at a place its alerts come too (its targets only there), home keeps alerti
     assert.match(text(), /City Park/)
     assert.doesNotMatch(text(), /Home Pond/)
 
-    // A place in the home county: one alert for one bird, never two.
+    // An event in the home county: one alert for one bird, never two.
     sent.length = 0
     await db('push_log').where({ user_id: id }).del()
     await db('users').where({ id }).update({ keep_home_alerts: true })
-    await places.updatePlace(user, work.id, { state: 'ZW', location: 'US-ZW-002' })
+    await events.updateEvent(user, trip.id, { state: 'ZW', location: 'US-ZW-002' })
     feeds['US-ZW-002'] = [sighting('snoowl1', 'Snowy Owl', 'H4', 'Home Pond')]
     await runPushAlerts({ send })
     assert.equal(sent.length, 1, text())
@@ -1827,6 +1865,7 @@ test('at a place its alerts come too (its targets only there), home keeps alerti
     Object.assign(ebird, { recentObservations: originals.recent, notableObservations: originals.notable, subregions: originals.subregions, regionInfo: originals.info })
     await db('nearby_cache').where('key', 'like', 'areas:%').del()
     await db('push_log').where({ user_id: id }).del()
+    await db('events').where({ owner_id: id }).del()
     await db('users').where({ id }).del()
   }
 })
@@ -1897,7 +1936,7 @@ test('suggested targets for a trip: what was reported there on those dates last 
   }
 })
 
-test('the API: places, targets and trips by kind; "I\'m here now" and home alerts on the account; the active place with /me', async () => {
+test('the API: places, targets and events by kind; trips are gone; "I\'m here now" and home alerts on the account; the active place and event with /me', async () => {
   const savedApi = require('../api/saved')
   const userApi = require('../api/user')
   const auth = require('../api/auth/[action]')
@@ -1912,19 +1951,41 @@ test('the API: places, targets and trips by kind; "I\'m here now" and home alert
     assert.equal(made.statusCode, 201)
     const pid = made.body.id
     assert.deepEqual((await call(savedApi, 'PUT', { kind: 'place-targets', id: String(pid) }, { codes: ['lazbun'] })).body.targets, ['lazbun'])
-    const trip = await call(savedApi, 'POST', { kind: 'trip' }, { place_id: pid, starts_on: dayFrom(0), ends_on: dayFrom(2) })
-    assert.deepEqual([trip.statusCode, trip.body.active], [201, true])
+    const trip = await call(savedApi, 'POST', { kind: 'event' }, { place_id: pid, starts_on: dayFrom(0), ends_on: dayFrom(2) })
+    assert.deepEqual([trip.statusCode, trip.body.active, trip.body.name, trip.body.targets.map((t) => t.code), trip.body.invite_url], [201, true, 'Colorado (work)', ['lazbun'], null])
     const list = await call(savedApi, 'GET', { kind: 'places' })
-    assert.deepEqual([list.body.length, list.body[0].targets, list.body[0].trips.length], [1, ['lazbun'], 1])
-    assert.equal((await call(savedApi, 'PATCH', { kind: 'trip', id: String(trip.body.id) }, { ends_on: dayFrom(-1) })).statusCode, 400)
+    assert.deepEqual([list.body.length, list.body[0].targets, list.body[0].trips], [1, ['lazbun'], []])
+    assert.equal((await call(savedApi, 'PATCH', { kind: 'event', id: String(trip.body.id) }, { ends_on: dayFrom(-1) })).statusCode, 400)
+    // Trips are events now.
+    for (const method of ['POST', 'PATCH', 'DELETE']) assert.equal((await call(savedApi, method, { kind: 'trip', id: '1' }, { place_id: pid, starts_on: dayFrom(1), ends_on: dayFrom(1) })).statusCode, 410)
+    assert.equal((await call(savedApi, 'POST', { kind: 'event-from-trip' }, { trip_id: 1, display_name: 'Me' })).statusCode, 410)
+
+    // Inviting asks for the name the group will see, then gives the links.
+    const eid = String(trip.body.id)
+    assert.equal((await call(savedApi, 'POST', { kind: 'event-invite-start', id: eid }, {})).statusCode, 400)
+    const invite = await call(savedApi, 'POST', { kind: 'event-invite-start', id: eid }, { display_name: ' Matt ' })
+    assert.equal(invite.body.display_name, 'Matt')
+    assert.match(invite.body.invite_url, /\/events\/join\//)
+    assert.match(invite.body.view_url, /\/events\/view\//)
+    // Archiving is the person's own; suggestions are the event's likely lifers.
+    assert.equal((await call(savedApi, 'PATCH', { kind: 'event-member', id: eid }, { archived: true })).body.archived, true)
+    assert.equal((await call(savedApi, 'PATCH', { kind: 'event-member', id: eid }, { archived: 'yes' })).statusCode, 400)
+    assert.equal((await call(savedApi, 'PATCH', { kind: 'event-member', id: eid }, { archived: false })).body.archived, false)
+    const suggestions = await call(savedApi, 'GET', { kind: 'event-suggestions', id: eid, scope: 'place', limit: '5' })
+    assert.deepEqual([suggestions.statusCode, suggestions.body.scope, suggestions.body.suggestions], [200, 'place', []])
+    const listed = await call(savedApi, 'GET', { kind: 'events' })
+    assert.deepEqual(listed.body.map((e) => [e.id, e.display_name, e.recap]), [[trip.body.id, 'Matt', { species: 0, targets_got: 0, targets_total: 1 }]])
 
     const me = await call(auth, 'GET', { action: 'me' })
-    assert.deepEqual([me.body.activePlace.name, me.body.activePlace.via, me.body.keep_home_alerts], ['Colorado (work)', 'trip', true])
+    assert.deepEqual([me.body.activePlace, me.body.activeEvent.id, me.body.keep_home_alerts], [null, trip.body.id, true])
+    assert.equal('lastTrip' in me.body, false)
 
     assert.equal((await call(userApi, 'PATCH', {}, { active_place_id: 999999 })).statusCode, 404, 'only one of their own places')
     const here = await call(userApi, 'PATCH', {}, { active_place_id: pid, keep_home_alerts: false })
-    assert.deepEqual([here.statusCode, here.body.active_place_id, here.body.keep_home_alerts], [200, pid, false])
+    assert.deepEqual([here.statusCode, here.body.active_place_id, here.body.keep_home_alerts, here.body.activePlace], [200, pid, false, null], 'the event still wins')
     assert.equal((await call(userApi, 'PATCH', {}, { keep_home_alerts: 'no' })).statusCode, 400)
+    assert.equal((await call(savedApi, 'DELETE', { kind: 'event', id: eid })).statusCode, 204)
+    assert.equal((await call(auth, 'GET', { action: 'me' })).body.activePlace.via, 'manual')
 
     assert.equal((await call(savedApi, 'DELETE', { kind: 'place', id: String(pid) })).statusCode, 204)
     const after = await call(auth, 'GET', { action: 'me' })
@@ -1963,7 +2024,17 @@ test('a place keeps its own seen list: edited by hand, added to by "Seen it" whi
     // A hand edit keeps the day a bird was first seen there.
     await places.setPlaceSeen(await db('users').where({ id }).first(), place.id, ['stejay'])
     assert.notEqual((await db('place_seen').where({ place_id: place.id, species_code: 'stejay' }).first()).seen_on, null)
+
+    // During an event planned from the place, "Seen it" goes on the place's list too; at one planned
+    // from nowhere, the life list only.
+    await db('users').where({ id }).update({ active_place_id: null })
+    const there = await eventAt(id, place, { starts_on: dayFrom(0), ends_on: dayFrom(0) })
+    assert.equal((await call('POST', { kind: 'seen' }, { speciesCode: 'moublu' })).body.placeId, place.id)
+    assert.deepEqual(await places.placeSeen(user, place.id), ['moublu', 'stejay'])
+    await db('events').where({ id: there.id }).update({ place_id: null })
+    assert.equal((await call('POST', { kind: 'seen' }, { speciesCode: 'clanut' })).body.placeId, undefined)
   } finally {
+    await db('events').where({ owner_id: id }).del()
     await db('seen_birds').where({ user_id: id }).del()
     await db('users').where({ id }).del()
   }
@@ -2026,42 +2097,50 @@ test('lifers at a place count against the life list, or the place\'s own list wh
   }
 })
 
-test('trip notes: one when a trip starts and one the day before it ends, each once, only when wanted', async () => {
+test('event notes: to each member, one when an event starts and one the day before it ends, each once, only when wanted', async () => {
   const places = require('../lib/places')
+  const events = require('../lib/events')
   const { tripNoticeMessage } = require('../lib/mailer')
   const ebird = require('../lib/ebird')
   const original = ebird.subregions
   ebird.subregions = async () => [{ code: 'US-GA-139', name: 'Hall' }]
   await db('nearby_cache').where('key', 'like', 'areas:%').del()
   const [{ id }] = await db('users').insert({ email: 'trip-notes@example.com', password_hash: 'x', location: 'US-GA-139', state: 'GA', email_confirmed: true }).returning('id')
+  const [{ id: friend }] = await db('users').insert({ email: 'trip-notes-friend@example.com', password_hash: 'x', location: 'US-GA-139', state: 'GA', email_confirmed: true }).returning('id')
   const notes = []
-  const send = async (user, kind, vars) => { if (user.id === id) notes.push({ kind, ...vars }) }
+  const send = async (user, kind, vars) => { if (user.id === id || user.id === friend) notes.push({ who: user.id, kind, ...vars }) }
   try {
     const user = await db('users').where({ id }).first()
     const place = await places.createPlace(user, { name: 'Colorado (work)', state: 'CO', location: 'US-CO-031' })
-    const { trip } = await places.createTrip(user, { place_id: place.id, starts_on: dayFrom(0), ends_on: dayFrom(3) })
-    await places.runTripNotices({ send })
-    assert.deepEqual(notes.map((n) => [n.kind, n.place, n.ends, n.home]), [['started', 'Colorado (work)', dayFrom(3), 'Hall County']], 'home said the way the app says it')
-    await places.runTripNotices({ send })
+    const trip = await events.createEvent(user, { place_id: place.id, starts_on: dayFrom(0), ends_on: dayFrom(3) })
+    await events.runEventNotices({ send })
+    assert.deepEqual(notes.map((n) => [n.kind, n.place, n.ends, n.home, n.eventId]), [['started', 'Colorado (work)', dayFrom(3), 'Hall County', trip.id]], 'home said the way the app says it')
+    await events.runEventNotices({ send })
     assert.equal(notes.length, 1, 'once')
 
     // The day before it ends: the reminder, once.
     notes.length = 0
-    await db('trips').where({ id: trip.id }).update({ ends_on: dayFrom(1) })
-    await places.runTripNotices({ send })
-    await places.runTripNotices({ send })
-    assert.deepEqual(notes.map((n) => [n.kind, n.tripId]), [['ending', trip.id]])
+    await db('events').where({ id: trip.id }).update({ ends_on: dayFrom(1) })
+    await events.runEventNotices({ send })
+    await events.runEventNotices({ send })
+    assert.deepEqual(notes.map((n) => [n.kind, n.eventId]), [['ending', trip.id]])
 
     // Turned off, or an unconfirmed address: none.
     notes.length = 0
-    const { trip: later } = await places.createTrip(user, { place_id: place.id, starts_on: dayFrom(0), ends_on: dayFrom(5) })
+    const later = await events.createEvent(user, { place_id: place.id, starts_on: dayFrom(0), ends_on: dayFrom(5) })
     await db('users').where({ id }).update({ trip_emails_enabled: false })
-    await places.runTripNotices({ send })
+    await events.runEventNotices({ send })
     assert.equal(notes.length, 0)
     await db('users').where({ id }).update({ trip_emails_enabled: true, email_confirmed: false })
-    await places.runTripNotices({ send })
+    await events.runEventNotices({ send })
     assert.equal(notes.length, 0)
-    assert.equal((await db('trips').where({ id: later.id }).first()).started_notice_at, null, 'still owed if they confirm')
+    assert.equal((await db('event_members').where({ event_id: later.id, user_id: id }).first()).started_notice_at, null, 'still owed if they confirm')
+
+    // In a group, each member gets their own.
+    await db('users').where({ id }).update({ email_confirmed: true })
+    await db('event_members').insert({ event_id: later.id, user_id: friend, display_name: 'Jo', role: 'member' })
+    await events.runEventNotices({ send })
+    assert.deepEqual(notes.map((n) => [n.who, n.kind, n.eventId]).sort(), [[id, 'started', later.id], [friend, 'started', later.id]].sort())
 
     // Areas named the way the app says them, never doubled.
     assert.equal(places.areaLabel('en', 'GA', 'Hall'), 'Hall County')
@@ -2072,22 +2151,23 @@ test('trip notes: one when a trip starts and one the day before it ends, each on
     assert.equal(places.areaLabel('en', 'GB-ENG', 'Kent'), 'Kent')
 
     // The words.
-    const start = tripNoticeMessage(user, 'started', { tripId: trip.id, place: 'Colorado (work)', ends: '2026-11-15', home: 'Hall County' })
+    const start = tripNoticeMessage(user, 'started', { eventId: trip.id, place: 'Colorado (work)', ends: '2026-11-15', home: 'Hall County' })
     assert.equal(start.subject, 'Your trip to Colorado (work) has started')
     assert.match(start.text, /You’re set for Colorado \(work\) until November 15\. Your account will switch back to Hall County when your trip ends\./)
     assert.match(start.text, /\/unsubscribe\//)
-    const ending = tripNoticeMessage(user, 'ending', { tripId: trip.id, place: 'Colorado (work)', ends: '2026-11-15', home: 'Hall County' })
+    const ending = tripNoticeMessage(user, 'ending', { eventId: trip.id, place: 'Colorado (work)', ends: '2026-11-15', home: 'Hall County' })
     assert.equal(ending.subject, 'Your trip to Colorado (work) ends tomorrow')
     assert.match(ending.text, /A reminder: your account switches back to Hall County at the end of your trip on November 15\./)
-    assert.match(ending.text, new RegExp(`Extend my trip: .*/settings#places\\?trip=${trip.id}`))
+    assert.match(ending.text, new RegExp(`Extend my trip: .*/events/${trip.id}\\b`))
   } finally {
     ebird.subregions = original
     await db('nearby_cache').where('key', 'like', 'areas:%').del()
-    await db('users').where({ id }).del()
+    await db('events').where({ owner_id: id }).del()
+    await db('users').whereIn('id', [id, friend]).del()
   }
 })
 
-test('back home: /me says a trip just ended, once, until the app says it was seen', async () => {
+test('back home: /me says an event just ended, once, until the app says it was seen; and one coming up within the week', async () => {
   const auth = require('../api/auth/[action]')
   const userApi = require('../api/user')
   const { fakeReq, fakeRes } = require('./helpers')
@@ -2097,17 +2177,30 @@ test('back home: /me says a trip just ended, once, until the app says it was see
   const cookie = String(session.headers['set-cookie']).split(';')[0]
   const me = async () => { const res = fakeRes(); await auth(fakeReq({ method: 'GET', headers: { cookie }, query: { action: 'me' } }), res); return res.body }
   try {
-    const [{ id: pid }] = await db('places').insert({ user_id: id, name: 'Colorado (work)', state: 'CO', location: 'US-CO-031' }).returning('id')
-    const [{ id: tid }] = await db('trips').insert({ place_id: pid, starts_on: dayFrom(-4), ends_on: dayFrom(-1) }).returning('id')
-    assert.deepEqual((await me()).lastTrip, { id: tid, place_name: 'Colorado (work)', ended_on: dayFrom(-1) })
+    const [place] = await db('places').insert({ user_id: id, name: 'Colorado (work)', state: 'CO', location: 'US-CO-031' }).returning('*')
+    const ended = await eventAt(id, place, { starts_on: dayFrom(-4), ends_on: dayFrom(-1) })
+    assert.deepEqual((await me()).lastEvent, { id: ended.id, name: 'Colorado (work)', ended_on: dayFrom(-1) })
     const res = fakeRes()
-    await userApi(fakeReq({ method: 'PATCH', headers: { cookie }, body: { trip_return_seen: true } }), res)
-    assert.equal(res.body.lastTrip, null)
-    assert.equal((await me()).lastTrip, null, 'once')
-    // A trip ending today hasn't ended yet.
-    await db('trips').insert({ place_id: pid, starts_on: dayFrom(-1), ends_on: dayFrom(0) })
-    assert.equal((await me()).lastTrip, null)
+    await userApi(fakeReq({ method: 'PATCH', headers: { cookie }, body: { event_return_seen: true } }), res)
+    assert.equal(res.body.lastEvent, null)
+    assert.equal((await me()).lastEvent, null, 'once')
+    // The old name is still taken, harmlessly; anything but true isn't.
+    const old = fakeRes()
+    await userApi(fakeReq({ method: 'PATCH', headers: { cookie }, body: { trip_return_seen: true } }), old)
+    assert.equal(old.statusCode, 200)
+    const wrong = fakeRes()
+    await userApi(fakeReq({ method: 'PATCH', headers: { cookie }, body: { event_return_seen: false } }), wrong)
+    assert.equal(wrong.statusCode, 400)
+    // An event ending today hasn't ended yet.
+    await eventAt(id, place, { starts_on: dayFrom(-1), ends_on: dayFrom(0) })
+    assert.equal((await me()).lastEvent, null)
+    // Coming up: the soonest event starting within the week, not one already on, not one weeks off.
+    assert.equal((await me()).upcomingEvent, null)
+    await eventAt(id, place, { name: 'Far off', starts_on: dayFrom(20), ends_on: dayFrom(20) })
+    const soon = await eventAt(id, place, { name: 'Cabin weekend', starts_on: dayFrom(3), ends_on: dayFrom(4) })
+    assert.deepEqual((await me()).upcomingEvent, { id: soon.id, name: 'Cabin weekend', starts_on: dayFrom(3) })
   } finally {
+    await db('events').where({ owner_id: id }).del()
     await db('users').where({ id }).del()
   }
 })
@@ -2246,8 +2339,8 @@ test('the eBird data endpoints answer only the app once the lockdown is on, cach
 })
 
 
-test('Big Day trips scout by default, and scouting sends one report a day in the window before a trip', async () => {
-  const places = require('../lib/places')
+test('Big Days scout by default, and scouting sends one report a day in the window before an event', async () => {
+  const events = require('../lib/events')
   const { runScouting, scoutReport, feedFor } = require('../lib/scouting')
   const { scoutingMessage } = require('../lib/mailer')
   const birds = [['eletro', 'Elegant Trogon'], ['mexchi', 'Mexican Chickadee'], ['monqua', 'Montezuma Quail'], ['flaowl', 'Flammulated Owl']]
@@ -2260,14 +2353,18 @@ test('Big Day trips scout by default, and scouting sends one report a day in the
     const place = await placeRow(id, 'Chiricahuas')
     await db('place_targets').insert(birds.map(([code]) => ({ place_id: place.id, species_code: code })))
 
-    // A Big Day scouts by default, three weeks out; a plain trip doesn't; the choices are checked.
-    const { trip } = await places.createTrip(user, { place_id: place.id, starts_on: dayFrom(5), ends_on: dayFrom(5), kind: 'bigday' })
-    assert.deepEqual([trip.kind, trip.scout, trip.scout_days, trip.scout_from], ['bigday', true, 21, dayFrom(-16)])
-    const { trip: plain } = await places.createTrip(user, { place_id: place.id, starts_on: dayFrom(40), ends_on: dayFrom(41) })
+    // A Big Day is one day and scouts by default, three weeks out; a plain trip doesn't; the choices are checked.
+    const trip = await events.createEvent(user, { place_id: place.id, starts_on: dayFrom(5), ends_on: dayFrom(7), kind: 'bigday' })
+    assert.deepEqual([trip.kind, trip.ends_on, trip.scout, trip.scout_days, trip.scout_from], ['bigday', dayFrom(5), true, 21, dayFrom(-16)])
+    const plain = await events.createEvent(user, { place_id: place.id, starts_on: dayFrom(40), ends_on: dayFrom(41) })
     assert.deepEqual([plain.kind, plain.scout], ['trip', false])
-    assert.equal((await places.updateTrip(user, plain.id, { scout: true, scout_days: 14 })).trip.scout_from, dayFrom(26))
-    await assert.rejects(places.createTrip(user, { place_id: place.id, starts_on: dayFrom(5), ends_on: dayFrom(5), kind: 'party' }), (e) => e.status === 400)
-    await assert.rejects(places.updateTrip(user, trip.id, { scout_days: 10 }), (e) => e.status === 400)
+    assert.equal((await events.updateEvent(user, plain.id, { scout: true, scout_days: 14 })).scout_from, dayFrom(26))
+    await assert.rejects(events.createEvent(user, { place_id: place.id, starts_on: dayFrom(5), ends_on: dayFrom(5), kind: 'party' }), (e) => e.status === 400)
+    await assert.rejects(events.updateEvent(user, trip.id, { scout_days: 10 }), (e) => e.status === 400)
+    const move = async (day) => {
+      await db('events').where({ id: trip.id }).update({ starts_on: day, ends_on: day })
+      await db('event_members').where({ event_id: trip.id }).update({ last_scout_sent_on: null })
+    }
 
     // The report: targets seen in the last three days, newest first; the ones quiet for two weeks.
     const feed = [
@@ -2280,10 +2377,10 @@ test('Big Day trips scout by default, and scouting sends one report a day in the
     assert.deepEqual([...report.unreported].sort(), ['flaowl', 'monqua'])
     assert.ok(!report.unreported.includes('mexchi'), 'seen within two weeks is not unreported')
 
-    // The run: one push and one email, once a day; the friend's trip to the same county shares the call.
+    // The run: one push and one email, once a day; the friend's event in the same county shares the call.
     const friendPlace = await placeRow(other, 'Arizona trip')
     await db('place_targets').insert({ place_id: friendPlace.id, species_code: 'eletro' })
-    await db('trips').insert({ place_id: friendPlace.id, starts_on: dayFrom(10), ends_on: dayFrom(11), kind: 'trip', scout: true, scout_days: 14 })
+    await eventAt(other, friendPlace, { starts_on: dayFrom(10), ends_on: dayFrom(11), kind: 'trip', scout: true, scout_days: 14 })
     const pushes = []
     const mails = []
     const calls = []
@@ -2293,43 +2390,44 @@ test('Big Day trips scout by default, and scouting sends one report a day in the
       fetchFeed: async (key) => { calls.push(key); return feed }
     })
     const first = await run()
-    assert.deepEqual(calls, ['county:US-AZ-003'], 'one call for both trips')
+    assert.deepEqual(calls, ['county:US-AZ-003'], 'one call for both events')
     const mine = pushes.filter((p) => p.userId === id)
     assert.equal(mine.length, 1)
-    assert.equal(mine[0].title, '🔭 Scouting Chiricahuas · 5 days to go')
+    assert.equal(mine[0].title, '🔭 Scouting Chiricahuas · 5 days to go', 'solo: no group')
+    assert.match(mine[0].data.url, new RegExp(`/events/${trip.id}$`))
     assert.match(mine[0].body, /Elegant Trogon · South Fork, Cave Creek Canyon/)
     const mail = mails.find((m) => m.to === 'scout@example.com')
     assert.equal(mail.subject, 'Scouting Chiricahuas: 5 days to go')
     assert.match(mail.text, /Elegant Trogon · South Fork, Cave Creek Canyon/)
     assert.match(mail.text, /Still unreported \(nothing in the last 2 weeks\): .*Flammulated Owl/)
-    assert.match(mail.text, /settings\?tab=places#places/)
+    assert.match(mail.text, new RegExp(`/events/${trip.id}\\b`))
     assert.match(mail.text, /\/unsubscribe\//)
     assert.equal(first.reports, 2)
     await run()
     assert.equal(pushes.filter((p) => p.userId === id).length, 1, 'once a day')
 
-    // The day before the trip: the final report. Not on the trip day itself, and not before the window.
+    // The day before the event: the final report. Not on the day itself, and not before the window.
     pushes.length = 0
-    await db('trips').where({ id: trip.id }).update({ starts_on: dayFrom(1), ends_on: dayFrom(1), last_scout_sent_on: null })
+    await move(dayFrom(1))
     await run()
     assert.equal(pushes.find((p) => p.userId === id)?.title, '🔭 Final scouting report: Chiricahuas tomorrow')
     pushes.length = 0
-    await db('trips').where({ id: trip.id }).update({ starts_on: dayFrom(0), ends_on: dayFrom(0), last_scout_sent_on: null })
+    await move(dayFrom(0))
     await run()
     assert.equal(pushes.filter((p) => p.userId === id).length, 0, 'not on the day')
-    await db('trips').where({ id: trip.id }).update({ starts_on: dayFrom(25), ends_on: dayFrom(25), last_scout_sent_on: null })
+    await move(dayFrom(25))
     await run()
     assert.equal(pushes.filter((p) => p.userId === id).length, 0, 'not before scout_from')
 
     // Trip emails off: the push still comes, no email. No targets: nothing at all.
-    await db('trips').where({ id: trip.id }).update({ starts_on: dayFrom(3), ends_on: dayFrom(3), last_scout_sent_on: null })
+    await move(dayFrom(3))
     await db('users').where({ id }).update({ trip_emails_enabled: false })
     mails.length = 0
     await run()
     assert.equal(pushes.filter((p) => p.userId === id).length, 1)
     assert.equal(mails.filter((m) => m.to === 'scout@example.com').length, 0)
-    await db('place_targets').where({ place_id: place.id }).del()
-    await db('trips').where({ id: trip.id }).update({ last_scout_sent_on: null })
+    await db('event_targets').where({ event_id: trip.id }).del()
+    await move(dayFrom(3))
     pushes.length = 0
     await run()
     assert.equal(pushes.filter((p) => p.userId === id).length, 0, 'no targets and no likely lifers on file: no report')
@@ -2344,13 +2442,13 @@ test('Big Day trips scout by default, and scouting sends one report a day in the
     assert.equal(quiet.subject, 'Final scouting report: Chiricahuas tomorrow')
     assert.match(quiet.text, /None of your target birds were reported there in the last 3 days\./)
   } finally {
+    await db('events').whereIn('owner_id', [id, other]).del()
     await db('places').whereIn('user_id', [id, other]).del()
     await db('users').whereIn('id', [id, other]).del()
   }
 })
 
-test('group events: a trip shared with the group, joined by link, run by anyone in it, seen by anyone with the view link', async () => {
-  const places = require('../lib/places')
+test('group events: a solo event opened to a group, joined by link, run by anyone in it, seen by anyone with the view link', async () => {
   const events = require('../lib/events')
   const saved = require('../api/saved')
   const { fakeReq, fakeRes } = require('./helpers')
@@ -2363,15 +2461,15 @@ test('group events: a trip shared with the group, joined by link, run by anyone 
   try {
     const [place] = await db('places').insert({ user_id: matt.id, name: 'Chiricahuas', state: 'AZ', location: 'US-AZ-003', range_mi: 30 }).returning('*')
     await db('place_targets').insert(birds.map(([code]) => ({ place_id: place.id, species_code: code })))
-    const { trip } = await places.createTrip(matt, { place_id: place.id, starts_on: dayFrom(5), ends_on: dayFrom(5), kind: 'bigday' })
+    const solo = await events.createEvent(matt, { place_id: place.id, starts_on: dayFrom(5), ends_on: dayFrom(5), kind: 'bigday' })
+    assert.deepEqual([solo.name, solo.location, solo.range_mi, solo.starts_on, solo.kind, solo.scout, solo.scout_days, solo.role, solo.display_name, solo.invite_url, solo.view_url],
+      ['Chiricahuas', 'US-AZ-003', 30, dayFrom(5), 'bigday', true, 21, 'organizer', null, null, null])
+    assert.deepEqual(solo.targets.map((t) => t.code), ['eletro', 'mexchi', 'monqua'])
 
-    // The trip becomes the group's event: same place, dates, kind, scouting and targets; the trip itself goes.
-    await assert.rejects(events.createFromTrip(matt, { trip_id: trip.id, display_name: '  ' }), (e) => e.status === 400)
-    const made = await events.createFromTrip(matt, { trip_id: trip.id, display_name: 'Matt' })
-    assert.deepEqual([made.name, made.location, made.range_mi, made.starts_on, made.kind, made.scout, made.scout_days, made.role],
-      ['Chiricahuas', 'US-AZ-003', 30, dayFrom(5), 'bigday', true, 21, 'organizer'])
-    assert.deepEqual(made.targets.map((t) => t.code), ['eletro', 'mexchi', 'monqua'])
-    assert.equal(await db('trips').where({ id: trip.id }).first(), undefined, 'the trip became the event')
+    // Inviting: Matt chooses the name the group will see, and gets the links.
+    await assert.rejects(events.startInvite(matt, solo.id, { display_name: '  ' }), (e) => e.status === 400)
+    const made = await events.startInvite(matt, solo.id, { display_name: 'Matt' })
+    assert.equal(made.display_name, 'Matt')
     assert.match(made.invite_url, /\/events\/join\/[\w-]{16,}$/)
     assert.match(made.view_url, /\/events\/view\/[\w-]{16,}$/)
     const event = await db('events').where({ id: made.id }).first()
@@ -2389,6 +2487,7 @@ test('group events: a trip shared with the group, joined by link, run by anyone 
     const listed = (await events.listEvents(matt)).find((e) => e.id === made.id)
     assert.deepEqual(listed.targets.find((t) => t.code === 'eletro').lifer_for, ['Matt'])
     assert.deepEqual(listed.targets.find((t) => t.code === 'mexchi').lifer_for, ['Matt', 'Sam'])
+    assert.equal((await events.listEvents(sam)).find((e) => e.id === made.id).targets.find((t) => t.code === 'eletro').lifer_for_you, false)
 
     // Anyone in the group runs it: name, targets (who added each is kept), the tally (once per bird).
     const renamed = await events.updateEvent(sam, made.id, { name: 'Chiricahua Big Day', scout_days: 14 })
@@ -2399,7 +2498,7 @@ test('group events: a trip shared with the group, joined by link, run by anyone 
     await assert.rejects(events.setEventTargets(sam, made.id, Array.from({ length: 51 }, (_, i) => `bird${i}`)), (e) => e.status === 400)
     await events.addTally(sam, made.id, 'eletro')
     const tallied = await events.addTally(matt, made.id, 'eletro')
-    assert.deepEqual(tallied.tally.map((t) => [t.code, t.added_by_name]), [['eletro', 'Sam']])
+    assert.deepEqual(tallied.tally.map((t) => [t.code, t.added_by_name, t.added_by_you]), [['eletro', 'Sam', false]])
     assert.equal((await events.removeTally(matt, made.id, 'eletro')).tally.length, 0)
     await events.addTally(matt, made.id, 'mexchi')
 
@@ -2495,8 +2594,9 @@ test('on the day a group event is an active place for every member (its targets 
   }
 })
 
-test('likely lifers: up to 50 when asked; and they stand in for scouting when no targets were picked, for a trip and for each member of an event', async () => {
+test('likely lifers: up to 50 when asked, for a place or an event; and they stand in for scouting when no targets were picked, for each member', async () => {
   const places = require('../lib/places')
+  const events = require('../lib/events')
   const seasonality = require('../lib/seasonality')
   const { runScouting } = require('../lib/scouting')
   const area = 'US-ZU-009'
@@ -2518,8 +2618,8 @@ test('likely lifers: up to 50 when asked; and they stand in for scouting when no
     await assert.rejects(places.suggestTargets(user, place.id, { from: tripDay, to: tripDay, limit: 51 }), (e) => e.status === 400)
     await assert.rejects(places.suggestTargets(user, place.id, { from: tripDay, to: tripDay, limit: 0 }), (e) => e.status === 400)
 
-    // A scouting trip with no targets: likely lifers stand in, and the report says so.
-    await db('trips').insert({ place_id: place.id, starts_on: tripDay, ends_on: tripDay, kind: 'bigday', scout: true, scout_days: 7 })
+    // A scouting event on your own with no targets: likely lifers stand in, and the report says so.
+    const solo = await eventAt(id, place, { starts_on: tripDay, ends_on: tripDay, kind: 'bigday', scout: true, scout_days: 7 })
     const feed = [{ speciesCode: species[0], comName: 'Likely Bird 0', locName: 'Zu Spring', obsDt: `${dayFrom(-1)} 07:00`, subId: 'SL1', obsValid: true }]
     const pushes = []
     const mails = []
@@ -2534,11 +2634,11 @@ test('likely lifers: up to 50 when asked; and they stand in for scouting when no
     assert.match(push.body, /^No targets picked yet, so here are likely lifers for your dates: Likely Bird 0 · Zu Spring/)
     const mail = mails.find((m) => m.to === 'likely@example.com')
     assert.match(mail.text, /You haven’t picked target birds yet, so here are likely lifers for your dates\./)
-    assert.match(mail.text, /Pick your targets: .*settings\?tab=places#places/)
+    assert.match(mail.text, new RegExp(`Pick your targets: .*/events/${solo.id}\\b`))
     assert.match(mail.text, /Likely lifers reported there in the last 3 days:/)
 
     // A group event with no targets: each member's own likely lifers.
-    await db('trips').where({ place_id: place.id }).del()
+    await db('events').where({ id: solo.id }).del()
     const [{ id: eventId }] = await db('events').insert({ owner_id: id, name: 'Zu Big Day', state: 'ZU', location: area, range_mi: 0, starts_on: tripDay, ends_on: tripDay, kind: 'bigday', scout: true, scout_days: 7, invite_token: 'likelyinvitetoken01', view_token: 'likelyviewtoken0001' }).returning('id')
     await db('event_members').insert([{ event_id: eventId, user_id: id, display_name: 'Matt', role: 'organizer' }, { event_id: eventId, user_id: friend, display_name: 'Jo', role: 'member' }])
     pushes.length = 0
@@ -2548,9 +2648,14 @@ test('likely lifers: up to 50 when asked; and they stand in for scouting when no
     const theirs = mails.find((m) => m.to === 'likely-friend@example.com')
     assert.match(mine.text, /Likely Bird 0 · Zu Spring/, 'not seen by me: a likely lifer')
     assert.doesNotMatch(theirs.text, /Likely Bird 0 · Zu Spring/, 'already on Jo\'s life list: not one of hers')
-    assert.match(theirs.text, /Pick your targets: .*\/events/)
+    assert.match(theirs.text, new RegExp(`Pick your targets: .*/events/${eventId}\\b`))
+    // The event's own suggestions: each member's likely lifers for its dates.
+    assert.equal((await events.suggestForEvent(user, eventId, { limit: '50' })).suggestions.length, 20)
+    const jo = await db('users').where({ id: friend }).first()
+    assert.equal((await events.suggestForEvent(jo, eventId, { limit: '50', scope: 'place' })).suggestions.length, 19, 'Jo\'s own; no place, so the life list')
+    await assert.rejects(events.suggestForEvent(jo, eventId, { limit: 51 }), (e) => e.status === 400)
   } finally {
-    await db('events').where({ name: 'Zu Big Day' }).del()
+    await db('events').where({ owner_id: id }).del()
     await db('seen_birds').where({ user_id: friend }).del()
     await db('region_species_days').where({ region: area }).del()
     await db('region_days').where({ region: area }).del()
@@ -2558,3 +2663,75 @@ test('likely lifers: up to 50 when asked; and they stand in for scouting when no
   }
 })
 
+test('events are kept: each member archives their own, a past one says how it went, only the organizer deletes it', async () => {
+  const events = require('../lib/events')
+  const fs = require('fs')
+  const person = async (email) => (await db('users').insert({ email, password_hash: 'x', location: 'US-GA-139', state: 'GA' }).returning('*'))[0]
+  const a = await person('kept-a@example.com')
+  const b = await person('kept-b@example.com')
+  try {
+    // Fifty days gone and still listed: nothing prunes ended events any more.
+    const old = await eventAt(a.id, { name: 'Old Big Day', state: 'GA', location: 'US-GA-139', range_mi: 0 }, { starts_on: dayFrom(-50), ends_on: dayFrom(-50), kind: 'bigday' })
+    await db('event_members').where({ event_id: old.id }).update({ display_name: 'A' })
+    await db('event_members').insert({ event_id: old.id, user_id: b.id, display_name: 'B', role: 'member' })
+    await db('event_targets').insert([{ event_id: old.id, species_code: 'eletro', added_by: a.id }, { event_id: old.id, species_code: 'mexchi', added_by: a.id }])
+    await db('event_tally').insert([{ event_id: old.id, species_code: 'eletro', added_by: b.id }, { event_id: old.id, species_code: 'acowoo', added_by: a.id }])
+    const [listed] = await events.listEvents(a)
+    assert.deepEqual([listed.id, listed.past, listed.active, listed.archived, listed.recap], [old.id, true, false, false, { species: 2, targets_got: 1, targets_total: 2 }])
+    assert.doesNotMatch(fs.readFileSync(require.resolve('../lib/retention'), 'utf8'), /prune(Events|Trips)/)
+
+    // Archiving is each member's own; a name can change along with it.
+    assert.equal((await events.updateMembership(a, old.id, { archived: true })).archived, true)
+    assert.equal((await events.listEvents(a))[0].archived, true, 'still listed, marked')
+    assert.equal((await events.listEvents(b))[0].archived, false)
+    await assert.rejects(events.updateMembership(a, old.id, { archived: 'yes' }), (e) => e.status === 400)
+    await assert.rejects(events.updateMembership(a, old.id, { display_name: '' }), (e) => e.status === 400)
+    const back = await events.updateMembership(a, old.id, { archived: false, display_name: 'Ann' })
+    assert.deepEqual([back.archived, back.display_name, back.members.map((m) => m.display_name)], [false, 'Ann', ['Ann', 'B']])
+
+    // A member leaves; only the organizer deletes it, for everyone.
+    await assert.rejects(events.endEvent(b, old.id), (e) => e.status === 403)
+    await events.leaveEvent(b, old.id)
+    assert.deepEqual(await events.listEvents(b), [])
+    await events.endEvent(a, old.id)
+    assert.equal(await db('events').where({ id: old.id }).first(), undefined)
+  } finally {
+    await db('events').whereIn('owner_id', [a.id, b.id]).del()
+    await db('users').whereIn('id', [a.id, b.id]).del()
+  }
+})
+
+test('the migration: every trip becomes a solo event at its place, with its dates, scouting, notes sent and target birds; the trips go', async () => {
+  const migration = require('../db/migrations/20261119090000_events_standalone')
+  const { dayOf } = require('../lib/places')
+  const [user] = await db('users').insert({ email: 'migrate-trips@example.com', password_hash: 'x', location: 'US-GA-139', state: 'GA' }).returning('*')
+  try {
+    await migration.down(db)
+    const [place] = await db('places').insert({ user_id: user.id, name: 'Chiricahuas', state: 'AZ', location: 'US-AZ-003', range_mi: 15, home_lat: 31.9, home_lng: -109.2 }).returning('*')
+    await db('place_targets').insert([{ place_id: place.id, species_code: 'eletro' }, { place_id: place.id, species_code: 'mexchi' }])
+    const sent = new Date('2026-11-01T12:00:00Z')
+    await db('trips').insert({ place_id: place.id, starts_on: dayFrom(5), ends_on: dayFrom(5), kind: 'bigday', scout: true, scout_days: 14, last_scout_sent_on: dayFrom(0), started_notice_at: sent })
+    await db('trips').insert({ place_id: place.id, starts_on: dayFrom(30), ends_on: dayFrom(32) })
+    await migration.up(db)
+
+    assert.equal(Number((await db('trips').count('* as n').first()).n), 0, 'the trips go')
+    const made = await db('events').where({ owner_id: user.id }).orderBy('starts_on')
+    assert.deepEqual(made.map((e) => [e.place_id, e.name, e.state, e.location, e.range_mi, Number(e.home_lat), dayOf(e.starts_on), dayOf(e.ends_on), e.kind, e.scout, e.scout_days]), [
+      [place.id, 'Chiricahuas', 'AZ', 'US-AZ-003', 15, 31.9, dayFrom(5), dayFrom(5), 'bigday', true, 14],
+      [place.id, 'Chiricahuas', 'AZ', 'US-AZ-003', 15, 31.9, dayFrom(30), dayFrom(32), 'trip', false, 21]
+    ])
+    assert.notEqual(made[0].invite_token, made[1].invite_token)
+    const members = await db('event_members').whereIn('event_id', made.map((e) => e.id)).orderBy('event_id')
+    assert.deepEqual(members.map((m) => [m.user_id, m.role, m.display_name, m.last_scout_sent_on && dayOf(m.last_scout_sent_on), m.started_notice_at?.toISOString() ?? null, m.archived_at]), [
+      [user.id, 'organizer', null, dayFrom(0), sent.toISOString(), null],
+      [user.id, 'organizer', null, null, null, null]
+    ])
+    const targets = await db('event_targets').where({ event_id: made[0].id }).orderBy('species_code')
+    assert.deepEqual(targets.map((t) => [t.species_code, t.added_by]), [['eletro', user.id], ['mexchi', user.id]])
+  } finally {
+    // Never leave the schema rolled back for the tests after this one.
+    if (!(await db.schema.hasColumn('events', 'place_id'))) await migration.up(db)
+    await db('events').where({ owner_id: user.id }).del()
+    await db('users').where({ id: user.id }).del()
+  }
+})

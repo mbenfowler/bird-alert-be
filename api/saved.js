@@ -33,24 +33,28 @@ const savedBirdsFor = (userId) =>
 // POST   /api/saved?kind=seen&import=1 { csv }   -> { added, already, skipped: [{ name, reason, choices?, where? }], total } from eBird's life list export
 // POST   /api/saved?kind=seen&evidence=1 { choices: [{ speciesCode, comName }], locId?, region?, day }
 //   -> { area, sampled, lean, strength: clear|mixed|thin, ranked: [{ speciesCode, comName, days }] } which of a slash it likely was, from local reports
-// Places besides home, their target birds and trips (lib/places):
-// GET    /api/saved?kind=places                  -> [{ id, name, state, location, range_mi, home_lat, home_lng, lifers_scope, seenCount, targets: [code], trips: [{ id, place_id, starts_on, ends_on, active }] }]
+// Places besides home and their target birds (lib/places). Dated outings are events, below.
+// GET    /api/saved?kind=places                  -> [{ id, name, state, location, range_mi, home_lat, home_lng, lifers_scope, seenCount, targets: [code], trips: [] }] (trips always empty)
 // POST   /api/saved?kind=place { name, state, location, range_mi?, lifers_scope? } -> 201 the place
 // PATCH  /api/saved?kind=place&id= { name?, state?, location?, range_mi?, home_lat?, home_lng?, lifers_scope? } -> the place
-// DELETE /api/saved?kind=place&id=               -> 204 (its targets, seen list and trips go with it)
+// DELETE /api/saved?kind=place&id=               -> 204 (its targets and seen list go with it; events planned from it stay)
 // PUT    /api/saved?kind=place-targets&id= { codes: [] } -> the place
 // GET    /api/saved?kind=place-seen&id=          -> [code] the place's own seen list ("Seen it" while there adds to it)
 // PUT    /api/saved?kind=place-seen&id= { codes: [] } -> [code] (manual edits, up to 2000)
 // GET    /api/saved?kind=place-suggestions&id=&from=&to=&scope=life|place&limit=1..50 (default 15) -> { from, to, sampled, scope, suggestions: [{ speciesCode, comName, days, sampled }] }
-// POST   /api/saved?kind=trip { place_id, starts_on, ends_on, kind?: trip|bigday, scout?, scout_days?: 7|14|21|28 } -> 201 the trip (a Big Day scouts by default)
-// PATCH  /api/saved?kind=trip&id= { place_id?, starts_on?, ends_on?, kind?, scout?, scout_days? } -> the trip
-// DELETE /api/saved?kind=trip&id=                -> 204
-// Group events (lib/events): a trip shared with a small group. Anyone in it can change it.
-// POST   /api/saved?kind=event-from-trip { trip_id, display_name } -> 201 the event (the trip becomes it)
-// GET    /api/saved?kind=events                   -> [{ id, name, state, location, range_mi, starts_on, ends_on, kind, scout, scout_days, scout_from, active, role,
-//                                                     members: [{ display_name, role, you }], targets: [{ code, lifer_for: [name] }], tally: [{ code, added_by_name, added_at }], invite_url, view_url }]
+// kind=trip and kind=event-from-trip -> 410: trips are events now.
+// Events (lib/events): dated outings, solo or with a small group. Anyone in one can change it.
+// POST   /api/saved?kind=event { name?, state?, location?, range_mi?, home_lat?, home_lng?, starts_on, ends_on, kind?: trip|bigday, scout?, scout_days?: 7|14|21|28, place_id? }
+//                                                 -> 201 the event, solo, you the organizer (from a place: its area, range, spot and targets, unless given)
+// GET    /api/saved?kind=events                   -> [{ id, name, state, location, range_mi, home_lat, home_lng, place_id, starts_on, ends_on, kind, scout, scout_days, scout_from,
+//                                                     active, past, archived, role, display_name, members: [{ display_name|null, role, you }],
+//                                                     targets: [{ code, lifer_for: [name], lifer_for_you }], tally: [{ code, added_by_name, added_by_you, added_at }],
+//                                                     recap: { species, targets_got, targets_total }, invite_url|null, view_url|null }] (links once you've a display_name)
+// POST   /api/saved?kind=event-invite-start&id= { display_name } -> the event, with its links
+// PATCH  /api/saved?kind=event-member&id= { archived?, display_name? } -> the event
+// GET    /api/saved?kind=event-suggestions&id=&scope=life|place&limit=1..50 -> { from, to, sampled, scope, suggestions: [{ speciesCode, comName, days, sampled }] }
 // PATCH  /api/saved?kind=event&id= { name?, starts_on?, ends_on?, state?, location?, range_mi?, kind?, scout?, scout_days? } -> the event
-// DELETE /api/saved?kind=event&id=                -> 204 (organizer: ends it for everyone)
+// DELETE /api/saved?kind=event&id=                -> 204 (organizer: deletes it for everyone; others leave)
 // POST   /api/saved?kind=event-leave&id=          -> 204
 // POST   /api/saved?kind=event-invite-rotate&id=  -> the event with a new invite link (organizer)
 // PUT    /api/saved?kind=event-targets&id= { codes } -> the event
@@ -89,7 +93,7 @@ module.exports = route(['GET', 'POST', 'PUT', 'PATCH', 'DELETE'], async (req, re
     if (req.method !== 'POST') throw new HttpError(405, 'Method not allowed')
     return res.status(201).json(await createShare(user.id, body(req)))
   }
-  // Places, their targets and trips. A place becoming active soon has its area's checklists fetched now.
+  // Places and their targets. A place becoming active soon has its area's checklists fetched now.
   const ready = (location) => syncNewRegionSoon(location)
   if (req.query.kind === 'places') {
     res.setHeader('Cache-Control', 'no-store')
@@ -123,28 +127,29 @@ module.exports = route(['GET', 'POST', 'PUT', 'PATCH', 'DELETE'], async (req, re
     if (req.method === 'PUT') return res.status(200).json(await places.setPlaceSeen(user, req.query.id, body(req).codes))
     throw new HttpError(405, 'Method not allowed')
   }
-  if (req.query.kind === 'trip') {
-    res.setHeader('Cache-Control', 'no-store')
-    if (req.method === 'POST' || req.method === 'PATCH') {
-      const { trip, place } = req.method === 'POST' ? await places.createTrip(user, body(req)) : await places.updateTrip(user, req.query.id, body(req))
-      if (places.startsSoon(trip, user.timezone)) ready(place.location)
-      return res.status(req.method === 'POST' ? 201 : 200).json(trip)
-    }
-    if (req.method === 'DELETE') { await places.deleteTrip(user, req.query.id); return res.status(204).end() }
-    throw new HttpError(405, 'Method not allowed')
-  }
+  if (req.query.kind === 'trip' || req.query.kind === 'event-from-trip') throw new HttpError(410, 'Trips are events now')
   if (String(req.query.kind || '').startsWith('event')) {
     res.setHeader('Cache-Control', 'no-store')
     const kind = req.query.kind
     const id = req.query.id
     if (kind === 'events' && req.method === 'GET') return res.status(200).json(await events.listEvents(user))
-    if (kind === 'event-from-trip' && req.method === 'POST') return res.status(201).json(await events.createFromTrip(user, body(req)))
+    if (kind === 'event-invite-start' && req.method === 'POST') return res.status(200).json(await events.startInvite(user, id, body(req)))
+    if (kind === 'event-member' && req.method === 'PATCH') return res.status(200).json(await events.updateMembership(user, id, body(req)))
+    if (kind === 'event-suggestions' && req.method === 'GET') {
+      const found = await events.suggestForEvent(user, id, { scope: req.query.scope === 'place' ? 'place' : 'life', limit: req.query.limit })
+      return res.status(200).json({ ...found, suggestions: await named(found.suggestions) })
+    }
     if (kind === 'event-join' && req.method === 'POST') {
       const event = await events.joinEvent(user, body(req))
       if (places.startsSoon(event, user.timezone)) ready(event.location)
       return res.status(200).json(event)
     }
     if (kind === 'event') {
+      if (req.method === 'POST') {
+        const event = await events.createEvent(user, body(req))
+        if (places.startsSoon(event, user.timezone)) ready(event.location)
+        return res.status(201).json(event)
+      }
       if (req.method === 'PATCH') {
         const event = await events.updateEvent(user, id, body(req))
         if (places.startsSoon(event, user.timezone)) ready(event.location)
