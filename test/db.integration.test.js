@@ -2192,3 +2192,56 @@ test('an instant HQ alert goes out for a fresh Code 4-5 find, never for one that
   }
 })
 
+test('the eBird data endpoints answer only the app once the lockdown is on, cached here and never at the edge', async () => {
+  const api = require('../api/ebird/[resource]')
+  const birdsApi = require('../api/birds')
+  const ebird = require('../lib/ebird')
+  const { fakeReq, fakeRes } = require('./helpers')
+  const { PER_MINUTE } = require('../lib/apiGuard')
+  const [notable, recent] = [ebird.notableObservations, ebird.recentObservations]
+  let calls = 0
+  ebird.notableObservations = async () => { calls += 1; return [{ speciesCode: 'paibun', comName: 'Painted Bunting', subId: 'S1', locId: 'L1', lat: 34.2, lng: -83.9, obsDt: '2026-11-01 08:00', obsValid: true, obsReviewed: true, userDisplayName: 'Ann' }] }
+  ebird.recentObservations = async () => []
+  const ask = async (resource, headers = {}, query = {}) => {
+    const res = fakeRes()
+    await api(fakeReq({ query: { resource, region: 'US-GA-139', back: '7', ...query }, headers }), res)
+    return res
+  }
+  const app = { 'x-bird-alert': '1', 'x-real-ip': '203.0.113.9' }
+  await db('auth_throttle').where('key', 'like', 'api:%').del()
+  await db('nearby_cache').where('key', 'like', 'api:%').del()
+  process.env.API_LOCKDOWN = 'on'
+  try {
+    assert.equal((await ask('notable')).statusCode, 403, 'no app header: turned away')
+    assert.equal((await ask('notable', { ...app, origin: 'https://elsewhere.example' })).statusCode, 403, 'another site: turned away')
+    const ok = await ask('notable', { ...app, origin: 'https://bird-alert.vercel.app' })
+    assert.equal(ok.statusCode, 200)
+    assert.equal(ok.body[0].speciesCode, 'paibun')
+    assert.equal(ok.body[0].userDisplayName, undefined, 'observer names still stay on the server')
+    assert.match(ok.headers['cache-control'], /^private, max-age=\d+$/, 'the browser may keep it; the edge may not')
+    assert.doesNotMatch(ok.headers['cache-control'], /s-maxage|public/)
+    // A second ask within the lifetime comes from the shared cache: eBird isn't asked again.
+    assert.equal((await ask('notable', app)).statusCode, 200)
+    assert.equal(calls, 1)
+    // Previews and local development count as the app.
+    assert.equal((await ask('notable', { ...app, origin: 'https://bird-alert-git-feat-x-mben.vercel.app' })).statusCode, 200)
+    // Open on purpose: a share link answers anyone (404 here only because there is no such share).
+    assert.equal((await ask('share', {}, { id: 'NoSuchOne1' })).statusCode, 404)
+    // The birds endpoint is the app's too.
+    const birds = fakeRes()
+    await birdsApi(fakeReq({ query: { q: 'bunting' } }), birds)
+    assert.equal(birds.statusCode, 403)
+    // One address asking too often is slowed down.
+    await db('auth_throttle').insert({ key: 'api:198.51.100.7', attempts: PER_MINUTE, window_start: db.fn.now() })
+    assert.equal((await ask('notable', { 'x-bird-alert': '1', 'x-real-ip': '198.51.100.7' })).statusCode, 429)
+  } finally {
+    delete process.env.API_LOCKDOWN
+    ebird.notableObservations = notable
+    ebird.recentObservations = recent
+  }
+  // Until the switch is flipped, nothing is refused (the app ships its header first).
+  assert.equal((await ask('notable')).statusCode, 200)
+  await db('auth_throttle').where('key', 'like', 'api:%').del()
+  await db('nearby_cache').where('key', 'like', 'api:%').del()
+})
+
