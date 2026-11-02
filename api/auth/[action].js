@@ -1,7 +1,7 @@
 const { normalizeLocale } = require('../../lib/i18n')
 const { route, body, HttpError } = require('../../lib/http')
 const db = require('../../lib/db')
-const { activePlaceOf, lastTripOf } = require('../../lib/places')
+const { activePlaceOf, activeEventOf, lastTripOf } = require('../../lib/places')
 const {
   normalizeEmail, assertValidEmail, assertValidPassword, findUserByEmail, findUserById, sanitizeUser, touchLastSeen, platformOf
 } = require('../../lib/users')
@@ -41,6 +41,7 @@ const withPasskeys = async (user) => ({
   ...sanitizeUser(user),
   hasPasskey: Boolean(await db('passkeys').where({ user_id: user.id }).first('id')),
   activePlace: await activePlaceOf(user),
+  activeEvent: await activeEventOf(user),
   lastTrip: await lastTripOf(user)
 })
 
