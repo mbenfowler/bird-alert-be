@@ -88,6 +88,10 @@ test('the core takes a place only while it costs at most MINUTES_PER_BIRD a new 
     [[1, 'A', ['a1', 'a2', 'a3'], 10, 8, false, []], [2, 'B', ['b1', 'b2'], 20, 16, false, []]])
   assert.deepEqual(plan.extras.map((e) => [e.locId, e.new_birds.map((b) => b.code), e.add_min, e.add_mi, e.private]), [['D', ['d1', 'd2'], 50, 40, false], ['C', ['c1'], 40, 32, false]])
   assert.deepEqual([plan.total_min, plan.total_mi, plan.covered, plan.covered_with_extras, plan.reported, plan.skipped, plan.routed], [30, 24, 5, 8, 8, 1, true])
+  // Every target reported at each place, not just what it is credited with; and a name for each.
+  assert.deepEqual(plan.stops.map((s) => s.species), [['a1', 'a2', 'a3'], ['b1', 'b2']])
+  assert.deepEqual(plan.extras.map((e) => e.species), [['d1', 'd2'], ['c1']])
+  assert.deepEqual(plan.names, { a1: 'A1', a2: 'A2', a3: 'A3', b1: 'B1', b2: 'B2', c1: 'C1', d1: 'D1', d2: 'D2' })
   assert.deepEqual(plan.from, from)
 })
 
@@ -195,6 +199,9 @@ test('an added extra joins the core at its cheapest place and takes the credit f
   assert.deepEqual(picked.stops.map((s) => [s.n, s.locId, s.new_birds.map((b) => b.code), s.picked]),
     [[1, 'X', ['a1', 'x1'], true], [2, 'A', ['a2', 'a3'], false], [3, 'B', ['b1', 'b2', 'b3'], false]])
   assert.deepEqual(picked.stops.map((s) => s.leg_min), [20, 30, 20])
+  // A keeps a1 in its species though X is credited with it.
+  assert.deepEqual(picked.stops.map((s) => s.species), [['a1', 'x1'], ['a1', 'a2', 'a3'], ['b1', 'b2', 'b3']])
+  assert.deepEqual(plain.extras[0].species, ['a1', 'x1'], 'an extra lists birds the core has too')
   assert.deepEqual([picked.extras, picked.covered, picked.covered_with_extras, picked.total_min, picked.add, picked.drop], [[], 7, 7, 70, ['X'], []])
 })
 
@@ -254,4 +261,18 @@ test('the cache key holds the sorted add and drop lists', () => {
   assert.equal(routeKey(reports, start, { add: ['L2', 'L1'], drop: ['L9'] }), routeKey(reports, start, { add: ['L1', 'L2'], drop: ['L9'] }))
   assert.notEqual(routeKey(reports, start, { add: ['L1'] }), base)
   assert.notEqual(routeKey(reports, start, { drop: ['L1'] }), routeKey(reports, start, { add: ['L1'] }))
+})
+
+test('a stop\'s species include those of personal spots folded into it; names cover stops and extras only', async () => {
+  const places = buildPlaces([
+    rep('a', 'L1', -110.0), rep('b', 'L2', -110.003, { priv: true }), rep('a', 'L3', -109.99),
+    rep('c', 'L4', -105)
+  ])
+  const plan = await planRoute({ places, reported: 3, from: null }, { table: lineTable(), drive: lineDrive() })
+  assert.deepEqual(plan.stops.map((s) => [s.locId, s.species, s.merged.map((m) => m.locId)]), [['L1', ['a', 'b'], ['L2']]])
+  assert.deepEqual(plan.extras.map((e) => [e.locId, e.species]), [['L4', ['c']]])
+  assert.deepEqual(plan.names, { a: 'A', b: 'B', c: 'C' })
+  assert.equal(plan.skipped, 1, 'L3 adds nothing: skipped, so not named for')
+  const none = await planRoute({ places: [], reported: 0, from: null }, { table: lineTable(), drive: lineDrive() })
+  assert.deepEqual(none.names, {})
 })
