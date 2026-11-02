@@ -2707,6 +2707,53 @@ test('events are kept: each member archives their own, a past one says how it we
   }
 })
 
+test('the event route: the same members-only rule as scouting, from rounded to 2 decimals, a routed plan kept an hour and a failed one not', async () => {
+  const { eventRoute } = require('../lib/eventRoute')
+  await db('birds').insert([['eletro', 'Elegant Trogon'], ['whewoo', 'White-eared Hummingbird']].map(([speciesCode, comName]) => ({ speciesCode, comName, sciName: comName }))).onConflict('speciesCode').ignore()
+  const [{ id }] = await db('users').insert({ email: 'route@example.com', password_hash: 'x', location: 'US-GA-139', state: 'GA', email_confirmed: true }).returning('id')
+  const [{ id: stranger }] = await db('users').insert({ email: 'route-stranger@example.com', password_hash: 'x', location: 'US-GA-139', state: 'GA', email_confirmed: true }).returning('id')
+  try {
+    const user = await db('users').where({ id }).first()
+    const [place] = await db('places').insert({ user_id: id, name: 'Chiricahuas', state: 'AZ', location: 'US-AZ-099', range_mi: 0 }).returning('*')
+    await db('place_targets').insert(['eletro', 'whewoo'].map((code) => ({ place_id: place.id, species_code: code })))
+    const event = await eventAt(id, place, { starts_on: dayFrom(10), ends_on: dayFrom(10), kind: 'bigday', scout: true, scout_days: 21 })
+    const feed = [
+      { speciesCode: 'eletro', comName: 'Elegant Trogon', locName: 'Ramsey Canyon', locId: 'L1', lat: 31.45, lng: -110.3, obsDt: `${dayFrom(-1)} 07:10`, subId: 'S1', obsValid: true },
+      { speciesCode: 'whewoo', comName: 'White-eared Hummingbird', locName: 'Beatty\'s', locId: 'L3', lat: 31.4, lng: -110.25, obsDt: `${dayFrom(-3)} 09:00`, subId: 'S3', obsValid: true }
+    ]
+    const fetchFeed = async () => feed
+    let trips = 0
+    const trip = async (points) => { trips += 1; return { order: points.map((_, i) => i), legs: points.slice(1).map(() => ({ minutes: 12.4, miles: 6.6 })), minutes: 24.8, miles: 13.2, geometry: points.map((p) => [p.lat, p.lng]) } }
+    const failing = async () => { throw new Error('OSRM down') }
+
+    // Exactly as scouting: not a member, or no such event, is a 404.
+    for (const [who, eventId] of [[{ id: stranger }, event.id], [user, 'nope']]) {
+      const events = require('../lib/events')
+      await assert.rejects(events.eventScouting(who, eventId, { fetchFeed }), (e) => e.status === 404)
+      await assert.rejects(eventRoute(who, eventId, { fetchFeed, trip }), (e) => e.status === 404)
+    }
+    assert.equal(trips, 0)
+
+    const plan = await eventRoute(user, event.id, { from: '31.5049,-110.3449', fetchFeed, trip })
+    assert.deepEqual(plan.from, { lat: 31.5, lng: -110.34 })
+    assert.deepEqual(plan.stops.map((s) => [s.n, s.locId, s.new_birds.map((b) => b.code), s.leg_min, s.leg_mi]), [[1, 'L1', ['eletro'], 12, 7], [2, 'L3', ['whewoo'], 12, 7]])
+    assert.deepEqual([plan.total_min, plan.total_mi, plan.covered, plan.reported, plan.skipped, plan.routed], [25, 13, 2, 2, 0, true])
+    // The same reports from the same rounded start: kept, not routed again.
+    await eventRoute(user, event.id, { from: '31.4951,-110.3351', fetchFeed, trip })
+    assert.equal(trips, 1)
+    // A start that fails to route: the straight-line plan, not kept.
+    const down = await eventRoute(user, event.id, { from: '31.6,-110.4', fetchFeed, trip: failing })
+    assert.equal(down.routed, false)
+    const back = await eventRoute(user, event.id, { from: '31.6,-110.4', fetchFeed, trip })
+    assert.equal(back.routed, true)
+    assert.equal(trips, 2)
+  } finally {
+    await db('events').where({ owner_id: id }).del()
+    await db('places').where({ user_id: id }).del()
+    await db('users').whereIn('id', [id, stranger]).del()
+  }
+})
+
 test('the migration: every trip becomes a solo event at its place, with its dates, scouting, notes sent and target birds; the trips go', async () => {
   const migration = require('../db/migrations/20261119090000_events_standalone')
   const { dayOf } = require('../lib/places')

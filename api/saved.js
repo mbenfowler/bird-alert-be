@@ -11,6 +11,7 @@ const { createShare } = require('../lib/shares')
 const { sendFeedback } = require('../lib/feedback')
 const places = require('../lib/places')
 const events = require('../lib/events')
+const { eventRoute } = require('../lib/eventRoute')
 const { requestLocale } = require('../lib/i18n')
 const { syncNewRegionSoon } = require('../lib/checklists')
 
@@ -56,6 +57,9 @@ const savedBirdsFor = (userId) =>
 // GET    /api/saved?kind=event-scouting&id=&locale= -> { checked_at, days_to_go|null, window: { from, to }, using: 'targets'|'likely_lifers',
 //                                                     reported: [{ code, comName, locName, locId, lat, lng, obsDt, birders, confirmed|null, media, subId }],
 //                                                     unreported: [{ code, comName }] } (last 7 days / none in 14; the area's feed kept an hour)
+// GET    /api/saved?kind=event-route&id=&from=lat,lng&locale= -> { from|null, stops: [{ n, locId, locName, lat, lng, new_birds: [{ code, speciesCode, comName }], leg_min, leg_mi }],
+//                                                     total_min, total_mi, covered, reported, skipped, geometry: [[lat, lng]], routed } (lib/eventRoute: the scouting's
+//                                                     places, fewest covering most targets, up to 8, in OSRM's driving order; from rounded to 2 decimals; kept an hour)
 // PATCH  /api/saved?kind=event&id= { name?, starts_on?, ends_on?, state?, location?, range_mi?, kind?, scout?, scout_days? } -> the event
 // DELETE /api/saved?kind=event&id=                -> 204 (organizer: deletes it for everyone; others leave)
 // POST   /api/saved?kind=event-leave&id=          -> 204
@@ -144,6 +148,9 @@ module.exports = route(['GET', 'POST', 'PUT', 'PATCH', 'DELETE'], async (req, re
     }
     if (kind === 'event-scouting' && req.method === 'GET') {
       return res.status(200).json(await localize(await events.eventScouting(user, id), req.query.locale || user.locale))
+    }
+    if (kind === 'event-route' && req.method === 'GET') {
+      return res.status(200).json(await localize(await eventRoute(user, id, { from: req.query.from }), req.query.locale || user.locale))
     }
     if (kind === 'event-join' && req.method === 'POST') {
       const event = await events.joinEvent(user, body(req))
