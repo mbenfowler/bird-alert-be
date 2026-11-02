@@ -57,9 +57,9 @@ const savedBirdsFor = (userId) =>
 // GET    /api/saved?kind=event-scouting&id=&locale= -> { checked_at, days_to_go|null, window: { from, to }, using: 'targets'|'likely_lifers',
 //                                                     reported: [{ code, comName, locName, locId, lat, lng, obsDt, birders, confirmed|null, media, subId }],
 //                                                     unreported: [{ code, comName }] } (last 7 days / none in 14; the area's feed kept an hour)
-// GET    /api/saved?kind=event-route&id=&from=lat,lng&add=L1,L2&drop=L3&locale= -> { from|null, stops: [{ n, locId, locName, lat, lng, new_birds: [{ code, speciesCode, comName }], leg_min, leg_mi, private, merged: [{ locId, locName }], picked }],
-//                                                     extras: [{ locId, locName, lat, lng, new_birds, add_min, add_mi, private, merged, dropped }], total_min, total_mi, covered, covered_with_extras,
-//                                                     reported, skipped, geometry: [[lat, lng]], routed, add: [locId], drop: [locId] } (add: forced into the core, drop: kept out; lib/eventRoute: every report of the targets this week, personal spots folded
+// GET    /api/saved?kind=event-route&id=&from=lat,lng&add=L1,L2&drop=L3&locale= -> { from|null, stops: [{ n, locId, locName, lat, lng, new_birds: [{ code, speciesCode, comName }], leg_min, leg_mi, private, merged: [{ locId, locName }], picked, species: [code] }],
+//                                                     extras: [{ locId, locName, lat, lng, new_birds, add_min, add_mi, private, merged, dropped, species: [code] }], total_min, total_mi, covered, covered_with_extras,
+//                                                     reported, skipped, geometry: [[lat, lng]], routed, names: { code: comName }, add: [locId], drop: [locId] } (add: forced into the core, drop: kept out; lib/eventRoute: every report of the targets this week, personal spots folded
 //                                                     into hotspots, a core worth <= 15 min a bird plus extras; start: from, else the event's spot, both rounded to 2 decimals; kept an hour)
 // PATCH  /api/saved?kind=event&id= { name?, starts_on?, ends_on?, state?, location?, range_mi?, kind?, scout?, scout_days? } -> the event
 // DELETE /api/saved?kind=event&id=                -> 204 (organizer: deletes it for everyone; others leave)
@@ -151,7 +151,11 @@ module.exports = route(['GET', 'POST', 'PUT', 'PATCH', 'DELETE'], async (req, re
       return res.status(200).json(await localize(await events.eventScouting(user, id), req.query.locale || user.locale))
     }
     if (kind === 'event-route' && req.method === 'GET') {
-      return res.status(200).json(await localize(await eventRoute(user, id, { from: req.query.from, add: req.query.add, drop: req.query.drop }), req.query.locale || user.locale))
+      const locale = req.query.locale || user.locale
+      const plan = await eventRoute(user, id, { from: req.query.from, add: req.query.add, drop: req.query.drop })
+      // `names` is a map, which localize can't see into: named as a list, then put back.
+      const names = await localize(Object.entries(plan.names || {}).map(([speciesCode, comName]) => ({ speciesCode, comName })), locale)
+      return res.status(200).json({ ...(await localize(plan, locale)), names: Object.fromEntries(names.map((b) => [b.speciesCode, b.comName])) })
     }
     if (kind === 'event-join' && req.method === 'POST') {
       const event = await events.joinEvent(user, body(req))
