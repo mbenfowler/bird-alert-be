@@ -57,9 +57,10 @@ const savedBirdsFor = (userId) =>
 // GET    /api/saved?kind=event-scouting&id=&locale= -> { checked_at, days_to_go|null, window: { from, to }, using: 'targets'|'likely_lifers',
 //                                                     reported: [{ code, comName, locName, locId, lat, lng, obsDt, birders, confirmed|null, media, subId }],
 //                                                     unreported: [{ code, comName }] } (last 7 days / none in 14; the area's feed kept an hour)
-// GET    /api/saved?kind=event-route&id=&from=lat,lng&locale= -> { from|null, stops: [{ n, locId, locName, lat, lng, new_birds: [{ code, speciesCode, comName }], leg_min, leg_mi }],
-//                                                     total_min, total_mi, covered, reported, skipped, geometry: [[lat, lng]], routed } (lib/eventRoute: the scouting's
-//                                                     places, fewest covering most targets, up to 8, in OSRM's driving order; from rounded to 2 decimals; kept an hour)
+// GET    /api/saved?kind=event-route&id=&from=lat,lng&locale= -> { from|null, stops: [{ n, locId, locName, lat, lng, new_birds: [{ code, speciesCode, comName }], leg_min, leg_mi, private, merged: [{ locId, locName }] }],
+//                                                     extras: [{ locId, locName, lat, lng, new_birds, add_min, add_mi, private, merged }], total_min, total_mi, covered, covered_with_extras,
+//                                                     reported, skipped, geometry: [[lat, lng]], routed } (lib/eventRoute: every report of the targets this week, personal spots folded
+//                                                     into hotspots, a core worth <= 15 min a bird plus extras; start: from, else the event's spot, both rounded to 2 decimals; kept an hour)
 // PATCH  /api/saved?kind=event&id= { name?, starts_on?, ends_on?, state?, location?, range_mi?, kind?, scout?, scout_days? } -> the event
 // DELETE /api/saved?kind=event&id=                -> 204 (organizer: deletes it for everyone; others leave)
 // POST   /api/saved?kind=event-leave&id=          -> 204

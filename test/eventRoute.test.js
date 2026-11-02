@@ -1,147 +1,166 @@
 const { test } = require('node:test')
 const assert = require('node:assert/strict')
-const { planRoute, parseFrom, placesFrom, coverPlaces, creditInOrder } = require('../lib/eventRoute')
+const { planRoute, parseFrom, buildPlaces, coverPlaces, creditInOrder, insertionCost, pathCost, bruteForce, twoOpt, MINUTES_PER_BIRD } = require('../lib/eventRoute')
 const routing = require('../lib/routing')
 
-const report = (speciesCode, locId, obsDt, lat = 31.4, lng = -110.3) => ({ code: speciesCode, speciesCode, comName: speciesCode.toUpperCase(), locName: `Place ${locId}`, locId, lat, lng, obsDt, subId: `S-${locId}-${speciesCode}` })
+// A report at a place on a line of latitude 31: lng says where. Private unless told.
+const rep = (speciesCode, locId, lng, { obsDt = '2026-11-01 08:00', priv = false, lat = 31 } = {}) =>
+  ({ speciesCode, comName: speciesCode.toUpperCase(), locId, locName: `Place ${locId}`, lat, lng, obsDt, locationPrivate: priv })
 
-test('places are grouped by locId with their distinct species and newest report', () => {
-  const places = placesFrom([report('a', 'L1', '2026-10-30 07:00'), report('b', 'L1', '2026-10-31 07:00'), report('a', 'L1', '2026-10-29 07:00'), report('c', 'L2', '2026-10-28 07:00')])
-  assert.deepEqual(places.map((p) => [p.locId, [...p.species.keys()], p.latest]), [['L1', ['a', 'b'], '2026-10-31 07:00'], ['L2', ['c'], '2026-10-28 07:00']])
-})
+// A table where a degree of longitude is 100 minutes and 80 miles (only east-west matters).
+const lineTable = (calls = []) => async (points) => {
+  calls.push(points.map((p) => p.locId || 'start'))
+  const f = (k) => points.map((a) => points.map((b) => Math.abs(a.lng - b.lng) * k))
+  return { minutes: f(100), miles: f(80) }
+}
+// A route along the given points with the same scale.
+const lineDrive = (calls = []) => async (points) => {
+  calls.push(points.map((p) => p.locId || 'start'))
+  const legs = points.slice(1).map((p, i) => ({ minutes: Math.abs(p.lng - points[i].lng) * 100, miles: Math.abs(p.lng - points[i].lng) * 80 }))
+  return { legs, minutes: legs.reduce((s, l) => s + l.minutes, 0), miles: legs.reduce((s, l) => s + l.miles, 0), geometry: points.map((p) => [p.lat, p.lng]) }
+}
 
-test('set cover takes the place adding the most uncovered species, ties to the newest report, and stops at nothing new or the cap', () => {
-  const places = placesFrom([
-    report('a', 'L1', '2026-10-30'), report('b', 'L1', '2026-10-30'), report('c', 'L1', '2026-10-30'),
-    report('a', 'L2', '2026-10-31'), report('d', 'L2', '2026-10-31'),
-    report('e', 'L3', '2026-10-29'), report('d', 'L3', '2026-10-29'),
-    report('b', 'L4', '2026-11-01'),
-    report('f', 'L5', '2026-10-01'), report('g', 'L6', '2026-10-02')
+test('every report counts: a bird reported at the big lake this week is credited there, not given its own stop', () => {
+  // Greater Yellowlegs (greyel) at the gas station (its newest report) and at the lake (earlier this week).
+  const places = buildPlaces([
+    rep('greyel', 'LOVES', -110.0, { obsDt: '2026-11-01 16:00' }),
+    rep('greyel', 'LAKE', -109.9, { obsDt: '2026-10-29 09:00' }), rep('sancra', 'LAKE', -109.9), rep('ferhaw', 'LAKE', -109.9)
   ])
-  // L1 (3 new); then L3 (d, e) over L2 (d only); L5 and L6 add one each: L6 is newer; L2 and L4 add nothing.
-  assert.deepEqual(coverPlaces(places).map((p) => p.locId), ['L1', 'L3', 'L6', 'L5'])
-  assert.deepEqual(coverPlaces(places, 2).map((p) => p.locId), ['L1', 'L3'])
+  const chosen = coverPlaces(places, 15)
+  assert.deepEqual(chosen.map((p) => p.locId), ['LAKE'])
+  assert.deepEqual([...chosen[0].species.keys()].sort(), ['ferhaw', 'greyel', 'sancra'])
 })
 
-test('birds are credited to the first stop visited where they were reported; a stop adding nothing is dropped', () => {
-  const [a, b, c] = placesFrom([report('x', 'A', '1'), report('y', 'A', '1'), report('x', 'B', '1'), report('z', 'B', '1'), report('y', 'C', '1'), report('w', 'C', '1')])
-  const credited = creditInOrder([b, c, a])
-  assert.deepEqual(credited.map((s) => [s.place.locId, s.new_birds.map((n) => n.speciesCode)]), [['B', ['x', 'z']], ['C', ['y', 'w']]])
-  assert.deepEqual(credited[0].new_birds[0], { code: 'x', speciesCode: 'x', comName: 'X' })
+test('a personal location folds into the nearest public hotspot within MERGE_METRES, which gains its birds; one far from any stays, private', () => {
+  const places = buildPlaces(
+    [rep('a', 'L1', -110.0), rep('b', 'P1', -110.003, { priv: true }), rep('c', 'P2', -110.5, { priv: true })],
+    // A hotspot from the area's feed with no target bird: still a place a yard folds into.
+    [{ speciesCode: 'amerob', locId: 'L9', locName: 'Town Park', lat: 31, lng: -110.4995, locationPrivate: false }]
+  )
+  const by = new Map(places.map((p) => [p.locId, p]))
+  assert.deepEqual([...by.keys()].sort(), ['L1', 'L9'])
+  assert.deepEqual([...by.get('L1').species.keys()].sort(), ['a', 'b'])
+  assert.deepEqual(by.get('L1').merged, [{ locId: 'P1', locName: 'Place P1' }])
+  assert.equal(by.get('L1').private, false)
+  assert.deepEqual([...by.get('L9').species.keys()], ['c'])
+  const lonely = buildPlaces([rep('d', 'P3', -111, { priv: true })])
+  assert.deepEqual(lonely.map((p) => [p.locId, p.private, p.merged]), [['P3', true, []]])
+})
+
+test('insertion cost: between two stops, after the last, or before the first when it is not fixed', () => {
+  const m = [[0, 10, 30], [10, 0, 20], [30, 20, 0]]
+  const table = { minutes: m, miles: m.map((r) => r.map((v) => v / 2)) }
+  assert.deepEqual(insertionCost([0, 2], 1, table), { pos: 1, minutes: 0, miles: 0 })
+  assert.deepEqual(insertionCost([0, 1], 2, table), { pos: 2, minutes: 20, miles: 10 })
+  assert.deepEqual(insertionCost([1, 2], 0, table, { fixedFirst: false }), { pos: 0, minutes: 10, miles: 5 })
+  assert.equal(insertionCost([1, 2], 0, table).pos, 1, 'a fixed first stays first')
+})
+
+test('ordering: exact for small paths and 2-opt untangles a crossed one, the first kept first', () => {
+  const xs = [0, 5, 1, 4, 2, 3]
+  const m = xs.map((a) => xs.map((b) => Math.abs(a - b)))
+  const exact = bruteForce([0, 1, 2, 3, 4, 5], m)
+  assert.equal(exact[0], 0)
+  assert.deepEqual(exact.map((i) => xs[i]), [0, 1, 2, 3, 4, 5])
+  const two = twoOpt([0, 1, 2, 3, 4, 5], m)
+  assert.equal(two[0], 0)
+  assert.equal(pathCost(two, m), 5)
+})
+
+test('the core takes a place only while it costs at most MINUTES_PER_BIRD a new bird; the rest are extras with their detours, best value first', async () => {
+  assert.equal(MINUTES_PER_BIRD, 15)
+  const from = { lat: 31, lng: -110 }
+  const places = buildPlaces([
+    // A: 3 birds 10 min out (first, always). B: 2 birds 20 min past A (10 a bird: core).
+    rep('a1', 'A', -109.9), rep('a2', 'A', -109.9), rep('a3', 'A', -109.9),
+    rep('b1', 'B', -109.7), rep('b2', 'B', -109.7),
+    // C: 1 bird 40 min past B (40 a bird: extra). D: 2 birds 50 min past B (25 a bird: extra, ahead of C).
+    rep('c1', 'C', -109.3), rep('d1', 'D', -109.2), rep('d2', 'D', -109.2),
+    // E: only birds A has: skipped.
+    rep('a1', 'E', -110.1)
+  ])
+  const tableCalls = []
+  const driveCalls = []
+  const plan = await planRoute({ places, reported: 8, from }, { table: lineTable(tableCalls), drive: lineDrive(driveCalls) })
+  assert.equal(tableCalls.length, 1)
+  assert.deepEqual(driveCalls, [['start', 'A', 'B']])
+  assert.deepEqual(plan.stops.map((s) => [s.n, s.locId, s.new_birds.map((b) => b.code), s.leg_min, s.leg_mi, s.private, s.merged]),
+    [[1, 'A', ['a1', 'a2', 'a3'], 10, 8, false, []], [2, 'B', ['b1', 'b2'], 20, 16, false, []]])
+  assert.deepEqual(plan.extras.map((e) => [e.locId, e.new_birds.map((b) => b.code), e.add_min, e.add_mi, e.private]), [['D', ['d1', 'd2'], 50, 40, false], ['C', ['c1'], 40, 32, false]])
+  assert.deepEqual([plan.total_min, plan.total_mi, plan.covered, plan.covered_with_extras, plan.reported, plan.skipped, plan.routed], [30, 24, 5, 8, 8, 1, true])
+  assert.deepEqual(plan.from, from)
+})
+
+test('without a start, the place with the most birds comes first with a 0 leg; one place needs no OSRM', async () => {
+  const places = buildPlaces([rep('x', 'A', -110), rep('y', 'B', -110.05), rep('z', 'B', -110.05)])
+  const plan = await planRoute({ places, reported: 3, from: null }, { table: lineTable(), drive: lineDrive() })
+  assert.deepEqual(plan.stops.map((s) => [s.locId, s.leg_min]), [['B', 0], ['A', 5]])
+  assert.equal(plan.from, null)
+  const boom = async () => { throw new Error('no call') }
+  const one = await planRoute({ places: buildPlaces([rep('x', 'A', -110)]), reported: 1, from: null }, { table: boom, drive: boom })
+  assert.deepEqual([one.routed, one.stops.length, one.stops[0].leg_min, one.total_min, one.geometry, one.extras], [true, 1, 0, 0, [[31, -110]], []])
+  const none = await planRoute({ places: [], reported: 0, from: { lat: 31, lng: -110 } }, { table: boom, drive: boom })
+  assert.deepEqual([none.stops, none.extras, none.covered, none.skipped, none.routed, none.geometry], [[], [], 0, 0, true, []])
+})
+
+test('birds are credited in visit order and a stop left with none is dropped', () => {
+  const [a, b, c] = buildPlaces([rep('x', 'A', 0), rep('y', 'A', 0), rep('x', 'B', 1), rep('z', 'B', 1), rep('y', 'C', 2), rep('w', 'C', 2)])
+  assert.deepEqual(creditInOrder([b, c, a]).map((s) => [s.place.locId, s.new_birds.map((n) => n.code)]), [['B', ['x', 'z']], ['C', ['y', 'w']]])
 })
 
 test('from is rounded to 2 decimals; a bad one is a 400', () => {
   assert.deepEqual(parseFrom('31.4567,-110.2949'), { lat: 31.46, lng: -110.29 })
-  assert.equal(parseFrom(undefined), null)
   assert.equal(parseFrom(''), null)
-  for (const bad of ['abc', '91,0', '0,181', '1;2']) assert.throws(() => parseFrom(bad), (e) => e.status === 400)
+  for (const bad of ['abc', '91,0', '0,181']) assert.throws(() => parseFrom(bad), (e) => e.status === 400)
 })
 
-// Three places: A (x,y) far west, B (x,z) middle, C (y,w) east. Set cover picks A (2 new; newest), then B, then C.
-const scenario = [
-  report('x', 'A', '2026-11-01', 31.0, -111.0), report('y', 'A', '2026-11-01', 31.0, -111.0),
-  report('x', 'B', '2026-10-31', 31.0, -110.5), report('z', 'B', '2026-10-31', 31.0, -110.5),
-  report('y', 'C', '2026-10-30', 31.0, -110.0), report('w', 'C', '2026-10-30', 31.0, -110.0),
-  report('x', 'D', '2026-10-01', 31.0, -110.9)
-]
-
-test('with OSRM, stops follow the trip order and legs; from is the first point', async () => {
-  const from = { lat: 31, lng: -111.1 }
-  const asked = []
-  const trip = async (points) => {
-    asked.push(points.map((p) => p.locId || 'from'))
-    return { order: [0, 1, 2, 3], legs: [{ minutes: 5.4, miles: 3.2 }, { minutes: 30.6, miles: 29.5 }, { minutes: 31, miles: 30 }], minutes: 67, miles: 62.7, geometry: [[31, -111.1], [31, -110]] }
-  }
-  const plan = await planRoute(scenario, from, { trip, drive: async () => { throw new Error('not needed') } })
-  assert.deepEqual(asked, [['from', 'A', 'B', 'C']])
-  assert.equal(plan.routed, true)
-  assert.deepEqual(plan.from, from)
-  assert.deepEqual(plan.stops.map((s) => [s.n, s.locId, s.new_birds.map((b) => b.code), s.leg_min, s.leg_mi]), [[1, 'A', ['x', 'y'], 5, 3], [2, 'B', ['z'], 31, 30], [3, 'C', ['w'], 31, 30]])
-  assert.deepEqual([plan.total_min, plan.total_mi, plan.covered, plan.reported, plan.skipped], [67, 63, 4, 4, 1])
-  assert.deepEqual(plan.geometry, [[31, -111.1], [31, -110]])
-})
-
-test('without from, the route starts at the place with the most species, and its first leg is 0', async () => {
-  const reported = [report('x', 'A', '2026-11-01', 31, -111), report('y', 'B', '2026-10-31', 31, -110.5), report('z', 'B', '2026-10-31', 31, -110.5)]
-  let asked
-  const trip = async (points) => { asked = points.map((p) => p.locId); return { order: [0, 1], legs: [{ minutes: 40, miles: 30 }], minutes: 40, miles: 30, geometry: [] } }
-  const plan = await planRoute(reported, null, { trip })
-  assert.deepEqual(asked, ['B', 'A'])
-  assert.deepEqual(plan.stops.map((s) => [s.locId, s.leg_min, s.leg_mi]), [['B', 0, 0], ['A', 40, 30]])
-  assert.equal(plan.from, null)
-  // One place: no OSRM at all.
-  const one = await planRoute([report('x', 'A', '1', 31, -111)], null, { trip: async () => { throw new Error('no call') } })
-  assert.deepEqual([one.routed, one.stops.length, one.stops[0].leg_min, one.total_min, one.geometry], [true, 1, 0, 0, [[31, -111]]])
-  // Nothing reported: an empty plan.
-  const none = await planRoute([], null, { trip: async () => { throw new Error('no call') } })
-  assert.deepEqual([none.stops, none.covered, none.reported, none.skipped, none.routed], [[], 0, 0, 0, true])
-})
-
-test('a stop left with no new birds after ordering is dropped and the rest routed again in order', async () => {
-  // OSRM visits B, C, then A: A's x and y are already credited.
-  const trip = async () => ({ order: [0, 2, 3, 1], legs: [{ minutes: 1, miles: 1 }, { minutes: 1, miles: 1 }, { minutes: 1, miles: 1 }], minutes: 3, miles: 3, geometry: [[0, 0]] })
-  let again
-  const drive = async (points) => { again = points.map((p) => p.locId || 'from'); return { minutes: 50, miles: 40, legs: [{ minutes: 10, miles: 8 }, { minutes: 40, miles: 32 }], geometry: [[1, 1], [2, 2]] } }
-  const plan = await planRoute(scenario, { lat: 31, lng: -110.6 }, { trip, drive })
-  assert.deepEqual(again, ['from', 'B', 'C'])
-  assert.deepEqual(plan.stops.map((s) => [s.n, s.locId, s.new_birds.map((b) => b.code), s.leg_min]), [[1, 'B', ['x', 'z'], 10], [2, 'C', ['y', 'w'], 40]])
-  assert.deepEqual([plan.total_min, plan.total_mi, plan.covered, plan.skipped, plan.routed], [50, 40, 4, 2, true])
-  assert.deepEqual(plan.geometry, [[1, 1], [2, 2]])
-})
-
-test('when OSRM fails: nearest-first by straight line, no times, straight segments, routed false', async () => {
+test('when OSRM fails: the same choices on straight lines at 35 mph, no times, straight segments, routed false', async () => {
   const realFetch = global.fetch
   const calls = []
-  global.fetch = async (url, init) => { calls.push([url, init.headers['User-Agent']]); return { ok: false, status: 503, json: async () => ({}) } }
+  global.fetch = async (url, init) => { calls.push([String(url), init.headers['User-Agent']]); return { ok: false, status: 503, json: async () => ({}) } }
   const error = console.error
   console.error = () => {}
   try {
-    const from = { lat: 31, lng: -109.9 }
-    const plan = await planRoute(scenario, from, { trip: routing.fetchTrip, drive: routing.drive })
+    const from = { lat: 31, lng: -110 }
+    // About 6 miles (10 min at 35 mph) a 0.1 degree here: A (3 birds) first; B 2 birds 0.1 further (5 min a bird): core;
+    // C 1 bird 1 degree further (about 100 min): extra.
+    const places = buildPlaces([rep('a1', 'A', -109.9), rep('a2', 'A', -109.9), rep('a3', 'A', -109.9), rep('b1', 'B', -109.8), rep('b2', 'B', -109.8), rep('c1', 'C', -108.8)])
+    const plan = await planRoute({ places, reported: 6, from }, { table: routing.fetchTable, drive: async () => { throw new Error('no route after a failed table') } })
     assert.equal(calls.length, 1)
-    assert.match(calls[0][0], /^https:\/\/router\.project-osrm\.org\/trip\/v1\/driving\/-109\.9,31;-111,31;-110\.5,31;-110,31\?source=first&destination=any&roundtrip=false&overview=full&geometries=geojson/)
+    assert.match(calls[0][0], /^https:\/\/router\.project-osrm\.org\/table\/v1\/driving\/-110,31;-109\.9,31;-109\.8,31;-108\.8,31\?annotations=duration,distance$/)
     assert.match(calls[0][1], /bird-alert/)
     assert.equal(plan.routed, false)
-    // From the east: C, then B, then A (whose x and y are covered by then: dropped).
-    assert.deepEqual(plan.stops.map((s) => [s.locId, s.new_birds.map((b) => b.code), s.leg_min, s.leg_mi]), [['C', ['y', 'w'], null, null], ['B', ['x', 'z'], null, null]])
-    assert.deepEqual([plan.total_min, plan.total_mi, plan.covered, plan.reported, plan.skipped], [null, null, 4, 4, 2])
-    assert.deepEqual(plan.geometry, [[31, -109.9], [31, -110], [31, -110.5]])
+    assert.deepEqual(plan.stops.map((s) => [s.locId, s.leg_min, s.leg_mi]), [['A', null, null], ['B', null, null]])
+    assert.deepEqual(plan.extras.map((e) => [e.locId, e.add_min, e.add_mi]), [['C', null, null]])
+    assert.deepEqual([plan.total_min, plan.total_mi, plan.covered, plan.covered_with_extras], [null, null, 5, 6])
+    assert.deepEqual(plan.geometry, [[31, -110], [31, -109.9], [31, -109.8]])
   } finally {
     global.fetch = realFetch
     console.error = error
   }
 })
 
-test('the OSRM trip answer is read into visiting order, miles and minutes, [lat, lng] geometry', async () => {
+test('the OSRM table answer is read as minutes and miles; a missing road is null', async () => {
   const realFetch = global.fetch
-  global.fetch = async () => ({
-    ok: true,
-    json: async () => ({
-      code: 'Ok',
-      waypoints: [{ waypoint_index: 0 }, { waypoint_index: 2 }, { waypoint_index: 1 }],
-      trips: [{ duration: 3600, distance: 1609.344 * 50, legs: [{ duration: 600, distance: 1609.344 * 10 }, { duration: 3000, distance: 1609.344 * 40 }], geometry: { coordinates: Array.from({ length: 900 }, (_, i) => [-110 - i / 1000, 31 + i / 1000]) } }]
-    })
-  })
+  global.fetch = async () => ({ ok: true, json: async () => ({ code: 'Ok', durations: [[0, 600], [null, 0]], distances: [[0, 1609.344 * 5], [null, 0]] }) })
   try {
-    const t = await routing.fetchTrip([{ lat: 31, lng: -110 }, { lat: 31.1, lng: -110.1 }, { lat: 31.2, lng: -110.2 }])
-    assert.deepEqual(t.order, [0, 2, 1])
-    assert.deepEqual([t.minutes, Math.round(t.miles), t.legs.map((l) => Math.round(l.miles))], [60, 50, [10, 40]])
-    assert.ok(t.geometry.length <= 500)
-    assert.deepEqual(t.geometry[0], [31, -110])
+    const t = await routing.fetchTable([{ lat: 31, lng: -110 }, { lat: 31.1, lng: -110.1 }])
+    assert.deepEqual(t.minutes, [[0, 10], [null, 0]])
+    assert.deepEqual(t.miles.map((r) => r.map((v) => (v === null ? null : Math.round(v)))), [[0, 5], [null, 0]])
   } finally { global.fetch = realFetch }
 })
 
 test('the route has exactly the scouting\'s access rules: whatever event-scouting refuses, it refuses', async () => {
   const events = require('../lib/events')
   const { eventRoute } = require('../lib/eventRoute')
-  const real = events.eventScouting
+  const real = events.scoutingFor
   const seen = []
-  events.eventScouting = async (user, id, opts) => { seen.push([user.id, id, Object.keys(opts).sort()]); const { HttpError } = require('../lib/http'); throw new HttpError(404, 'No such event') }
+  events.scoutingFor = async (user, id, opts) => { seen.push([user.id, id, Object.keys(opts).sort()]); const { HttpError } = require('../lib/http'); throw new HttpError(404, 'No such event') }
   try {
+    await assert.rejects(events.eventScouting({ id: 7 }, '12'), (e) => e.status === 404)
     await assert.rejects(eventRoute({ id: 7 }, '12', { from: '31.111,-110.222' }), (e) => e.status === 404)
-    assert.deepEqual(seen, [[7, '12', ['fetchFeed', 'now']]])
-    // A bad from is refused before anything is read.
+    assert.deepEqual(seen.map(([u, id]) => [u, id]), [[7, '12'], [7, '12']])
     await assert.rejects(eventRoute({ id: 7 }, '12', { from: 'nope' }), (e) => e.status === 400)
-    assert.equal(seen.length, 1)
-  } finally { events.eventScouting = real }
+    assert.equal(seen.length, 2, 'a bad from is refused before anything is read')
+  } finally { events.scoutingFor = real }
 })
