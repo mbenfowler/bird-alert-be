@@ -175,6 +175,8 @@ The workflows keep their own `schedule:` as a backup. Running a job twice is har
 
 Set these in the Vercel project: `PROD_PG_URL`, `SESSION_SECRET`, `CRON_SECRET`, `APP_BASE_URL`, `EBIRD_API_KEY`, `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY`, `VAPID_SUBJECT` (web push; generate the keys with `npx web-push generate-vapid-keys`), and `APP_EMAIL` plus `APP_PW` (a Gmail app password). Run `NODE_ENV=production npx knex migrate:latest` against the production database before the first deploy of a migration.
 
+Optional: `HQ_PUSH_EMAIL`, the Bird Alert login whose devices get the HQ rarity pushes (the HQ email itself goes to `FEEDBACK_TO`); `API_LOCKDOWN=on`, which makes the eBird data endpoints answer only the Bird Alert app (its `X-Bird-Alert` header, an allowed origin, and a per-visitor rate limit), as eBird's data terms ask; off, requests without the header are only logged.
+
 ## Running at scale
 
 - **Jobs work in 45-second slices.** `/api/push/alerts?after=` and `/api/mail/{watchlist,rare,migration}` stop when their budget runs out and answer `more: true` (push also `next`, the resume point). The GitHub workflows (`push-alerts.yml`, `daily-mail.yml`, `migration-mail.yml`) call again until done; `push_log` and `digest_log` make every re-call safe.
