@@ -11,7 +11,7 @@ const seasonality = require('../lib/seasonality')
 let userId
 before(async () => {
   await db.migrate.latest()
-  for (const table of ['trips', 'place_targets', 'places', 'taxonomy_names', 'hq_alerts', 'hotspot_weeks', 'hq_picks', 'feedback', 'passkeys', 'shares', 'seen_birds', 'taxonomy_ref', 'user_routes', 'hotspot_ref', 'mail_counts', 'error_log', 'drive_cache', 'nearby_cache', 'place_predictions', 'checklist_species', 'checklists', 'bird_sounds', 'digest_log', 'push_handoff', 'push_log', 'push_subscriptions', 'saved_birds', 'auth_throttle', 'season_firsts', 'region_species_days', 'region_days', 'job_runs', 'users', 'birds']) await db(table).del()
+  for (const table of ['event_tally', 'event_targets', 'event_members', 'events', 'trips', 'place_targets', 'places', 'taxonomy_names', 'hq_alerts', 'hotspot_weeks', 'hq_picks', 'feedback', 'passkeys', 'shares', 'seen_birds', 'taxonomy_ref', 'user_routes', 'hotspot_ref', 'mail_counts', 'error_log', 'drive_cache', 'nearby_cache', 'place_predictions', 'checklist_species', 'checklists', 'bird_sounds', 'digest_log', 'push_handoff', 'push_log', 'push_subscriptions', 'saved_birds', 'auth_throttle', 'season_firsts', 'region_species_days', 'region_days', 'job_runs', 'users', 'birds']) await db(table).del()
   // Nothing in here may reach eBird; the hourly job's history fetch is a no-op unless a test says otherwise.
   ebird.historicObservations = async () => []
   ;[{ id: userId }] = await db('users').insert({
@@ -2348,3 +2348,150 @@ test('Big Day trips scout by default, and scouting sends one report a day in the
     await db('users').whereIn('id', [id, other]).del()
   }
 })
+
+test('group events: a trip shared with the group, joined by link, run by anyone in it, seen by anyone with the view link', async () => {
+  const places = require('../lib/places')
+  const events = require('../lib/events')
+  const saved = require('../api/saved')
+  const { fakeReq, fakeRes } = require('./helpers')
+  const birds = [['eletro', 'Elegant Trogon'], ['mexchi', 'Mexican Chickadee'], ['monqua', 'Montezuma Quail']]
+  await db('birds').insert(birds.map(([speciesCode, comName]) => ({ speciesCode, comName, sciName: comName }))).onConflict('speciesCode').ignore()
+  const person = async (email) => (await db('users').insert({ email, password_hash: 'x', location: 'US-GA-139', state: 'GA', email_confirmed: true }).returning('*'))[0]
+  const matt = await person('group-matt@example.com')
+  const sam = await person('group-sam@example.com')
+  const extra = []
+  try {
+    const [place] = await db('places').insert({ user_id: matt.id, name: 'Chiricahuas', state: 'AZ', location: 'US-AZ-003', range_mi: 30 }).returning('*')
+    await db('place_targets').insert(birds.map(([code]) => ({ place_id: place.id, species_code: code })))
+    const { trip } = await places.createTrip(matt, { place_id: place.id, starts_on: dayFrom(5), ends_on: dayFrom(5), kind: 'bigday' })
+
+    // The trip becomes the group's event: same place, dates, kind, scouting and targets; the trip itself goes.
+    await assert.rejects(events.createFromTrip(matt, { trip_id: trip.id, display_name: '  ' }), (e) => e.status === 400)
+    const made = await events.createFromTrip(matt, { trip_id: trip.id, display_name: 'Matt' })
+    assert.deepEqual([made.name, made.location, made.range_mi, made.starts_on, made.kind, made.scout, made.scout_days, made.role],
+      ['Chiricahuas', 'US-AZ-003', 30, dayFrom(5), 'bigday', true, 21, 'organizer'])
+    assert.deepEqual(made.targets.map((t) => t.code), ['eletro', 'mexchi', 'monqua'])
+    assert.equal(await db('trips').where({ id: trip.id }).first(), undefined, 'the trip became the event')
+    assert.match(made.invite_url, /\/events\/join\/[\w-]{16,}$/)
+    assert.match(made.view_url, /\/events\/view\/[\w-]{16,}$/)
+    const event = await db('events').where({ id: made.id }).first()
+
+    // Sam joins by the invite link under a name the group sees; joining again just renames.
+    await assert.rejects(events.joinEvent(sam, { token: 'nope-nope-nope-nope', display_name: 'Sam' }), (e) => e.status === 404)
+    await assert.rejects(events.joinEvent(sam, { token: event.invite_token, display_name: 'x'.repeat(41) }), (e) => e.status === 400)
+    await events.joinEvent(sam, { token: event.invite_token, display_name: 'Sammy' })
+    const joined = await events.joinEvent(sam, { token: event.invite_token, display_name: 'Sam' })
+    assert.deepEqual(joined.members.map((m) => [m.display_name, m.role, m.you]), [['Matt', 'organizer', false], ['Sam', 'member', true]])
+    assert.ok(!JSON.stringify(joined).includes('@example.com'), 'no emails, ever')
+
+    // Lifers are each member's own: Sam has seen the trogon, Matt hasn't.
+    await db('seen_birds').insert({ user_id: sam.id, species_code: 'eletro' })
+    const listed = (await events.listEvents(matt)).find((e) => e.id === made.id)
+    assert.deepEqual(listed.targets.find((t) => t.code === 'eletro').lifer_for, ['Matt'])
+    assert.deepEqual(listed.targets.find((t) => t.code === 'mexchi').lifer_for, ['Matt', 'Sam'])
+
+    // Anyone in the group runs it: name, targets (who added each is kept), the tally (once per bird).
+    const renamed = await events.updateEvent(sam, made.id, { name: 'Chiricahua Big Day', scout_days: 14 })
+    assert.deepEqual([renamed.name, renamed.scout_days], ['Chiricahua Big Day', 14])
+    await events.setEventTargets(sam, made.id, ['eletro', 'mexchi', 'flaowl'])
+    const added = await db('event_targets').where({ event_id: made.id }).orderBy('species_code')
+    assert.deepEqual(added.map((t) => [t.species_code, t.added_by]), [['eletro', matt.id], ['flaowl', sam.id], ['mexchi', matt.id]])
+    await assert.rejects(events.setEventTargets(sam, made.id, Array.from({ length: 51 }, (_, i) => `bird${i}`)), (e) => e.status === 400)
+    await events.addTally(sam, made.id, 'eletro')
+    const tallied = await events.addTally(matt, made.id, 'eletro')
+    assert.deepEqual(tallied.tally.map((t) => [t.code, t.added_by_name]), [['eletro', 'Sam']])
+    assert.equal((await events.removeTally(matt, made.id, 'eletro')).tally.length, 0)
+    await events.addTally(matt, made.id, 'mexchi')
+
+    // Only the organizer ends it or makes a new invite link; the old link stops working.
+    await assert.rejects(events.endEvent(sam, made.id), (e) => e.status === 403)
+    await assert.rejects(events.rotateInvite(sam, made.id), (e) => e.status === 403)
+    await events.rotateInvite(matt, made.id)
+    const outsider = await person('group-outsider@example.com')
+    extra.push(outsider.id)
+    await assert.rejects(events.joinEvent(outsider, { token: event.invite_token, display_name: 'Pat' }), (e) => e.status === 404)
+    await assert.rejects(events.updateEvent(outsider, made.id, { name: 'Mine now' }), (e) => e.status === 404, 'not a member: no such event')
+
+    // A group holds ten.
+    const fresh = await db('events').where({ id: made.id }).first()
+    for (let i = 0; i < 8; i++) {
+      const p = await person(`group-fill-${i}@example.com`)
+      extra.push(p.id)
+      await events.joinEvent(p, { token: fresh.invite_token, display_name: `Birder ${i}` })
+    }
+    await assert.rejects(events.joinEvent(outsider, { token: fresh.invite_token, display_name: 'Pat' }), (e) => e.status === 400)
+
+    // The two open links, through the API with no sign-in: the preview (what, never who) and the view (plan and tally, no names).
+    const ask = async (query) => { const res = fakeRes(); await saved(fakeReq({ query }), res); return res }
+    const preview = await ask({ kind: 'event-preview', token: fresh.invite_token })
+    assert.equal(preview.statusCode, 200)
+    assert.deepEqual([preview.body.name, preview.body.kind, preview.body.members], ['Chiricahua Big Day', 'bigday', 10])
+    const view = await ask({ kind: 'event-view', token: fresh.view_token })
+    assert.equal(view.statusCode, 200)
+    assert.deepEqual(view.body.tally.map((t) => t.comName), ['Mexican Chickadee'])
+    assert.equal(view.body.count, 1)
+    assert.ok(view.body.targets.some((t) => t.comName === 'Elegant Trogon'))
+    assert.ok(!/Matt|Sam|Birder|@/.test(JSON.stringify(view.body)), 'no names on the view link')
+    assert.equal((await ask({ kind: 'event-view', token: 'not-a-real-token-x' })).statusCode, 404)
+    assert.equal((await ask({ kind: 'events' })).statusCode, 401, 'the rest needs signing in')
+
+    // Leaving: the organizer's role passes to the longest-standing member; the last one out ends it.
+    await events.leaveEvent(matt, made.id)
+    assert.equal((await events.organizerOf(made.id)).user_id, sam.id)
+    for (const id of [sam.id, ...extra]) {
+      if (await db('event_members').where({ event_id: made.id, user_id: id }).first()) await events.leaveEvent({ id }, made.id)
+    }
+    assert.equal(await db('events').where({ id: made.id }).first(), undefined, 'the last one out ends it')
+  } finally {
+    await db('users').whereIn('id', [matt.id, sam.id, ...extra]).del()
+  }
+})
+
+test('on the day a group event is an active place for every member (its targets alert there), and each member scouts it beforehand', async () => {
+  const ebird = require('../lib/ebird')
+  const places = require('../lib/places')
+  const { runPushAlerts } = require('../lib/pushAlerts')
+  const { runScouting } = require('../lib/scouting')
+  const originals = { recent: ebird.recentObservations, notable: ebird.notableObservations, subregions: ebird.subregions, info: ebird.regionInfo }
+  ebird.subregions = async () => [{ code: 'US-ZV-009', name: 'Cochise' }, { code: 'US-ZV-002', name: 'Home' }]
+  ebird.notableObservations = async () => []
+  ebird.regionInfo = async () => { throw new Error('no center') }
+  await db('birds').insert({ speciesCode: 'eletro', comName: 'Elegant Trogon', sciName: 'Trogon elegans', category: 'species' }).onConflict('speciesCode').ignore()
+  const sighting = { speciesCode: 'eletro', comName: 'Elegant Trogon', locId: 'LCC1', locName: 'Cave Creek Canyon', obsDt: `${dayFrom(0)} 07:00`, lat: 31.9, lng: -109.2, subId: 'SEV1', obsValid: true }
+  ebird.recentObservations = async (region) => (region === 'US-ZV-009' ? [sighting] : [])
+  const person = async (email) => (await db('users').insert({ email, password_hash: 'x', location: 'US-ZV-002', state: 'ZV', email_confirmed: true, push_watchlist_enabled: true, push_notable_enabled: false, range_mi: 0 }).returning('*'))[0]
+  const a = await person('event-day-a@example.com')
+  const b = await person('event-day-b@example.com')
+  for (const u of [a, b]) await db('push_subscriptions').insert({ user_id: u.id, endpoint: `https://push.example/${u.id}`, p256dh: 'k', auth: 'a' })
+  try {
+    const [event] = await db('events').insert({ owner_id: a.id, name: 'Chiricahua Big Day', state: 'ZV', location: 'US-ZV-009', range_mi: 0, starts_on: dayFrom(0), ends_on: dayFrom(0), kind: 'bigday', scout: true, scout_days: 21, invite_token: 'invite-token-day-0001', view_token: 'view-token-day-00001' }).returning('*')
+    await db('event_members').insert([{ event_id: event.id, user_id: a.id, display_name: 'A', role: 'organizer' }, { event_id: event.id, user_id: b.id, display_name: 'B', role: 'member' }])
+    await db('event_targets').insert({ event_id: event.id, species_code: 'eletro', added_by: a.id })
+
+    // /me says where the group is, and it isn't a saved place.
+    assert.deepEqual([(await places.activeEventOf(a))?.id, await places.activePlaceOf(a)], [event.id, null])
+    // Both members hear about the group's target bird, saying where.
+    const sent = []
+    await runPushAlerts({ send: async (userId, payload) => { sent.push({ userId, ...payload }); return { sent: 1, gone: 0 } } })
+    for (const u of [a, b]) assert.match(sent.filter((s) => s.userId === u.id).map((s) => `${s.title} ${s.body}`).join('\n'), /Elegant Trogon.*Cave Creek Canyon|Cave Creek Canyon.*Elegant Trogon/s)
+
+    // Before the day, each member gets their own scouting report, once a day, from one shared feed.
+    await db('events').where({ id: event.id }).update({ starts_on: dayFrom(4), ends_on: dayFrom(4) })
+    const pushes = []
+    const calls = []
+    const run = () => runScouting({
+      push: async (userId, payload) => { pushes.push({ userId, ...payload }); return { sent: 1 } },
+      send: async () => {},
+      fetchFeed: async (key) => { calls.push(key); return [{ ...sighting, obsDt: `${dayFrom(-1)} 07:00` }] }
+    })
+    await run()
+    assert.deepEqual(calls, ['county:US-ZV-009'])
+    for (const u of [a, b]) assert.equal(pushes.filter((p) => p.userId === u.id)[0]?.title, '🔭 Scouting Chiricahua Big Day with your group · 4 days to go')
+    await run()
+    assert.equal(pushes.length, 2, 'once a day each')
+  } finally {
+    Object.assign(ebird, { recentObservations: originals.recent, notableObservations: originals.notable, subregions: originals.subregions, regionInfo: originals.info })
+    await db('users').whereIn('id', [a.id, b.id]).del()
+  }
+})
+
