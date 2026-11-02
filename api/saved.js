@@ -53,6 +53,9 @@ const savedBirdsFor = (userId) =>
 // POST   /api/saved?kind=event-invite-start&id= { display_name } -> the event, with its links
 // PATCH  /api/saved?kind=event-member&id= { archived?, display_name? } -> the event
 // GET    /api/saved?kind=event-suggestions&id=&scope=life|place&limit=1..50 -> { from, to, sampled, scope, suggestions: [{ speciesCode, comName, days, sampled }] }
+// GET    /api/saved?kind=event-scouting&id=&locale= -> { checked_at, days_to_go|null, window: { from, to }, using: 'targets'|'likely_lifers',
+//                                                     reported: [{ code, comName, locName, locId, lat, lng, obsDt, birders, confirmed|null, media, subId }],
+//                                                     unreported: [{ code, comName }] } (last 7 days / none in 14; the area's feed kept an hour)
 // PATCH  /api/saved?kind=event&id= { name?, starts_on?, ends_on?, state?, location?, range_mi?, kind?, scout?, scout_days? } -> the event
 // DELETE /api/saved?kind=event&id=                -> 204 (organizer: deletes it for everyone; others leave)
 // POST   /api/saved?kind=event-leave&id=          -> 204
@@ -138,6 +141,9 @@ module.exports = route(['GET', 'POST', 'PUT', 'PATCH', 'DELETE'], async (req, re
     if (kind === 'event-suggestions' && req.method === 'GET') {
       const found = await events.suggestForEvent(user, id, { scope: req.query.scope === 'place' ? 'place' : 'life', limit: req.query.limit })
       return res.status(200).json({ ...found, suggestions: await named(found.suggestions) })
+    }
+    if (kind === 'event-scouting' && req.method === 'GET') {
+      return res.status(200).json(await localize(await events.eventScouting(user, id), req.query.locale || user.locale))
     }
     if (kind === 'event-join' && req.method === 'POST') {
       const event = await events.joinEvent(user, body(req))
