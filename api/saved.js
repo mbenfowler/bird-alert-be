@@ -32,12 +32,14 @@ const savedBirdsFor = (userId) =>
 // POST   /api/saved?kind=seen&evidence=1 { choices: [{ speciesCode, comName }], locId?, region?, day }
 //   -> { area, sampled, lean, strength: clear|mixed|thin, ranked: [{ speciesCode, comName, days }] } which of a slash it likely was, from local reports
 // Places besides home, their target birds and trips (lib/places):
-// GET    /api/saved?kind=places                  -> [{ id, name, state, location, range_mi, home_lat, home_lng, targets: [code], trips: [{ id, place_id, starts_on, ends_on, active }] }]
-// POST   /api/saved?kind=place { name, state, location, range_mi? } -> 201 the place
-// PATCH  /api/saved?kind=place&id= { name?, state?, location?, range_mi?, home_lat?, home_lng? } -> the place
-// DELETE /api/saved?kind=place&id=               -> 204 (its targets and trips go with it)
+// GET    /api/saved?kind=places                  -> [{ id, name, state, location, range_mi, home_lat, home_lng, lifers_scope, seenCount, targets: [code], trips: [{ id, place_id, starts_on, ends_on, active }] }]
+// POST   /api/saved?kind=place { name, state, location, range_mi?, lifers_scope? } -> 201 the place
+// PATCH  /api/saved?kind=place&id= { name?, state?, location?, range_mi?, home_lat?, home_lng?, lifers_scope? } -> the place
+// DELETE /api/saved?kind=place&id=               -> 204 (its targets, seen list and trips go with it)
 // PUT    /api/saved?kind=place-targets&id= { codes: [] } -> the place
-// GET    /api/saved?kind=place-suggestions&id=&from=&to= -> { from, to, sampled, suggestions: [{ speciesCode, comName, days, sampled }] }
+// GET    /api/saved?kind=place-seen&id=          -> [code] the place's own seen list ("Seen it" while there adds to it)
+// PUT    /api/saved?kind=place-seen&id= { codes: [] } -> [code] (manual edits, up to 2000)
+// GET    /api/saved?kind=place-suggestions&id=&from=&to=&scope=life|place -> { from, to, sampled, scope, suggestions: [{ speciesCode, comName, days, sampled }] }
 // POST   /api/saved?kind=trip { place_id, starts_on, ends_on } -> 201 the trip
 // PATCH  /api/saved?kind=trip&id= { place_id?, starts_on?, ends_on? } -> the trip
 // DELETE /api/saved?kind=trip&id=                -> 204
@@ -87,8 +89,14 @@ module.exports = route(['GET', 'POST', 'PUT', 'PATCH', 'DELETE'], async (req, re
   if (req.query.kind === 'place-suggestions') {
     if (req.method !== 'GET') throw new HttpError(405, 'Method not allowed')
     res.setHeader('Cache-Control', 'no-store')
-    const found = await places.suggestTargets(user, req.query.id, { from: req.query.from, to: req.query.to })
+    const found = await places.suggestTargets(user, req.query.id, { from: req.query.from, to: req.query.to, scope: req.query.scope === 'place' ? 'place' : 'life' })
     return res.status(200).json({ ...found, suggestions: await named(found.suggestions) })
+  }
+  if (req.query.kind === 'place-seen') {
+    res.setHeader('Cache-Control', 'no-store')
+    if (req.method === 'GET') return res.status(200).json(await places.placeSeen(user, req.query.id))
+    if (req.method === 'PUT') return res.status(200).json(await places.setPlaceSeen(user, req.query.id, body(req).codes))
+    throw new HttpError(405, 'Method not allowed')
   }
   if (req.query.kind === 'trip') {
     res.setHeader('Cache-Control', 'no-store')
@@ -107,7 +115,12 @@ module.exports = route(['GET', 'POST', 'PUT', 'PATCH', 'DELETE'], async (req, re
     if (req.method === 'POST' && req.query.evidence === '1') return res.status(200).json(await named(await splitEvidence(body(req))))
     if (req.method === 'POST' && req.query.import === '1') return res.status(200).json(await importLifeList(user.id, body(req).csv))
     const code = assertSpecies(String(req.method === 'POST' ? body(req).speciesCode || '' : req.query.speciesCode || ''))
-    if (req.method === 'POST') { await markSeen(user.id, code); return res.status(201).json({ speciesCode: code }) }
+    if (req.method === 'POST') {
+      await markSeen(user.id, code)
+      // Away at one of their places: on that place's own list too.
+      const placeId = await places.markSeenAtPlace(user, code)
+      return res.status(201).json({ speciesCode: code, ...(placeId ? { placeId } : {}) })
+    }
     if (req.method === 'DELETE') { await unmarkSeen(user.id, code); return res.status(204).end() }
     throw new HttpError(405, 'Method not allowed')
   }

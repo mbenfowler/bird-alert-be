@@ -1,7 +1,7 @@
 const { normalizeLocale } = require('../../lib/i18n')
 const { route, body, HttpError } = require('../../lib/http')
 const db = require('../../lib/db')
-const { activePlaceOf } = require('../../lib/places')
+const { activePlaceOf, lastTripOf } = require('../../lib/places')
 const {
   normalizeEmail, assertValidEmail, assertValidPassword, findUserByEmail, findUserById, sanitizeUser, touchLastSeen, platformOf
 } = require('../../lib/users')
@@ -35,14 +35,16 @@ const signupPlace = (state, location) => {
   return { state: regionState, location: code }
 }
 /** The user as the app sees them, with whether they have a passkey yet. */
-// The place the person is at today, if not home (lib/places), rides along with the account.
+// The place the person is at today, if not home (lib/places), rides along with the account, and a
+// trip that just ended (for a one-time "welcome back"; PATCH /api/user { trip_return_seen: true }).
 const withPasskeys = async (user) => ({
   ...sanitizeUser(user),
   hasPasskey: Boolean(await db('passkeys').where({ user_id: user.id }).first('id')),
-  activePlace: await activePlaceOf(user)
+  activePlace: await activePlaceOf(user),
+  lastTrip: await lastTripOf(user)
 })
 
-const EMAIL_PREFERENCES = ['alert_digest_email_enabled', 'rare_sightings_email_enabled', 'migration_email_enabled', 'watchlist_email_fallback']
+const EMAIL_PREFERENCES = ['alert_digest_email_enabled', 'rare_sightings_email_enabled', 'migration_email_enabled', 'watchlist_email_fallback', 'trip_emails_enabled']
 
 const actions = {
   // GET /api/auth/exists?email= -> { userExists }

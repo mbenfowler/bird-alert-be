@@ -1933,3 +1933,166 @@ test('the API: places, targets and trips by kind; "I\'m here now" and home alert
     await db('users').where({ id }).del()
   }
 })
+
+test('a place keeps its own seen list: edited by hand, added to by "Seen it" while there, and its lifers can count against it', async () => {
+  const places = require('../lib/places')
+  const savedApi = require('../api/saved')
+  const { fakeReq, fakeRes } = require('./helpers')
+  const { createSession } = require('../lib/auth')
+  const [{ id }] = await db('users').insert({ email: 'place-seen@example.com', password_hash: 'x', location: 'US-ZS-002', state: 'ZS' }).returning('id')
+  const session = fakeRes(); createSession(session, await db('users').where({ id }).first())
+  const cookie = String(session.headers['set-cookie']).split(';')[0]
+  const call = async (method, query, body) => { const res = fakeRes(); await savedApi(fakeReq({ method, headers: { cookie }, query, body }), res); return res }
+  const status = async (fn) => { try { await fn(); return 200 } catch (error) { return error.status } }
+  try {
+    const user = await db('users').where({ id }).first()
+    const place = await places.createPlace(user, { name: 'Colorado (work)', state: 'ZS', location: 'US-ZS-009', lifers_scope: 'place' })
+    assert.equal(place.lifers_scope, 'place')
+    assert.equal(await status(() => places.updatePlace(user, place.id, { lifers_scope: 'state' })), 400)
+    assert.deepEqual((await call('PUT', { kind: 'place-seen', id: String(place.id) }, { codes: ['lazbun', 'wesmea'] })).body, ['lazbun', 'wesmea'])
+    assert.equal((await call('PUT', { kind: 'place-seen', id: String(place.id) }, { codes: Array.from({ length: 2001 }, (_, i) => `sp${i}x`) })).statusCode, 400, 'up to 2000')
+
+    // At home, "Seen it" is the life list only; at the place, its own list too.
+    await call('POST', { kind: 'seen' }, { speciesCode: 'mallar3' })
+    assert.deepEqual(await places.placeSeen(user, place.id), ['lazbun', 'wesmea'])
+    await db('users').where({ id }).update({ active_place_id: place.id })
+    const seen = await call('POST', { kind: 'seen' }, { speciesCode: 'stejay' })
+    assert.deepEqual([seen.statusCode, seen.body.placeId], [201, place.id])
+    assert.deepEqual((await call('GET', { kind: 'place-seen', id: String(place.id) })).body, ['lazbun', 'stejay', 'wesmea'])
+    assert.equal((await places.listPlaces(user))[0].seenCount, 3)
+    // A hand edit keeps the day a bird was first seen there.
+    await places.setPlaceSeen(await db('users').where({ id }).first(), place.id, ['stejay'])
+    assert.notEqual((await db('place_seen').where({ place_id: place.id, species_code: 'stejay' }).first()).seen_on, null)
+  } finally {
+    await db('seen_birds').where({ user_id: id }).del()
+    await db('users').where({ id }).del()
+  }
+})
+
+test('lifers at a place count against the life list, or the place\'s own list when it says so; suggestions likewise', async () => {
+  const ebird = require('../lib/ebird')
+  const places = require('../lib/places')
+  const seasonality = require('../lib/seasonality')
+  const { runPushAlerts } = require('../lib/pushAlerts')
+  const originals = { recent: ebird.recentObservations, notable: ebird.notableObservations, subregions: ebird.subregions, info: ebird.regionInfo }
+  ebird.subregions = async () => [{ code: 'US-ZR-009', name: 'Denver' }]
+  ebird.notableObservations = async () => []
+  ebird.regionInfo = async () => { throw new Error('no center') }
+  await db('birds').insert({ speciesCode: 'stejay', comName: "Steller's Jay", sciName: 'Cyanocitta stelleri', category: 'species' }).onConflict('speciesCode').ignore()
+  const [{ id }] = await db('users').insert({ email: 'place-lifers@example.com', password_hash: 'x', location: 'US-ZR-002', state: 'ZR', push_lifer_enabled: true, push_watchlist_enabled: false, push_notable_enabled: false, range_mi: 0 }).returning('id')
+  await db('push_subscriptions').insert({ user_id: id, endpoint: 'https://push.example/place-lifers', p256dh: 'k', auth: 'a' })
+  // Seen Steller's Jay in life; ten other birds on each list, so both are trusted.
+  const ten = Array.from({ length: 10 }, (_, i) => `xx${i}yy`)
+  await db('seen_birds').insert([...ten, 'stejay'].map((species_code) => ({ user_id: id, species_code, first_seen: '2020-01-01', source: 'tap' })))
+  ebird.recentObservations = async (region) => (region === 'US-ZR-009' ? [{ speciesCode: 'stejay', comName: "Steller's Jay", locId: 'LJ', locName: 'Pine Grove', obsDt: '2026-11-10 08:00', lat: 39.7, lng: -105, subId: 'J1' }] : [])
+  const sent = []
+  const send = async (userId, payload) => { if (userId === id) sent.push(payload); return { sent: 1, gone: 0 } }
+  try {
+    const user = await db('users').where({ id }).first()
+    const place = await places.createPlace(user, { name: 'Colorado (work)', state: 'ZR', location: 'US-ZR-009', range_mi: 0 })
+    await places.setPlaceSeen(user, place.id, ten)
+    await db('users').where({ id }).update({ active_place_id: place.id })
+    // Against the life list: seen before, so no lifer.
+    await runPushAlerts({ send })
+    assert.equal(sent.length, 0)
+    // Against the place's own list: new there.
+    await places.updatePlace(user, place.id, { lifers_scope: 'place' })
+    await runPushAlerts({ send })
+    assert.equal(sent.length, 1)
+    assert.match(`${sent[0].title} ${sent[0].body}`, /Steller's Jay/)
+
+    // Suggestions: scope 'place' leaves out only the place's list, 'life' the life list.
+    const area = 'US-ZR-009'
+    const from = dayFrom(20)
+    const days = seasonality.daysBetween(seasonality.addDays(seasonality.yearAgo(from), -5), seasonality.addDays(seasonality.yearAgo(from), 5))
+    await db('region_days').insert(days.map((day) => ({ region: area, day, species_count: 1, has_locations: true }))).onConflict(['region', 'day']).ignore()
+    await db('region_species_days').insert(days.map((day) => ({ region: area, day, speciesCode: 'stejay' }))).onConflict(['region', 'day', 'speciesCode']).ignore()
+    assert.deepEqual((await places.suggestTargets(user, place.id, { from, to: from, scope: 'place' })).suggestions.map((s) => s.speciesCode), ['stejay'])
+    assert.deepEqual((await places.suggestTargets(user, place.id, { from, to: from })).suggestions.map((s) => s.speciesCode), [], 'already on the life list')
+    await db('region_species_days').where({ region: area }).del()
+    await db('region_days').where({ region: area }).del()
+  } finally {
+    Object.assign(ebird, { recentObservations: originals.recent, notableObservations: originals.notable, subregions: originals.subregions, regionInfo: originals.info })
+    await db('nearby_cache').where('key', 'like', 'areas:%').del()
+    await db('push_log').where({ user_id: id }).del()
+    await db('seen_birds').where({ user_id: id }).del()
+    await db('users').where({ id }).del()
+  }
+})
+
+test('trip notes: one when a trip starts and one the day before it ends, each once, only when wanted', async () => {
+  const places = require('../lib/places')
+  const { tripNoticeMessage } = require('../lib/mailer')
+  const ebird = require('../lib/ebird')
+  const original = ebird.subregions
+  ebird.subregions = async () => [{ code: 'US-ZQ-002', name: 'Hall' }]
+  const [{ id }] = await db('users').insert({ email: 'trip-notes@example.com', password_hash: 'x', location: 'US-ZQ-002', state: 'ZQ', email_confirmed: true }).returning('id')
+  const notes = []
+  const send = async (user, kind, vars) => { if (user.id === id) notes.push({ kind, ...vars }) }
+  try {
+    const user = await db('users').where({ id }).first()
+    const place = await places.createPlace(user, { name: 'Colorado (work)', state: 'CO', location: 'US-CO-031' })
+    const { trip } = await places.createTrip(user, { place_id: place.id, starts_on: dayFrom(0), ends_on: dayFrom(3) })
+    await places.runTripNotices({ send })
+    assert.deepEqual(notes.map((n) => [n.kind, n.place, n.ends, n.home]), [['started', 'Colorado (work)', dayFrom(3), 'Hall']])
+    await places.runTripNotices({ send })
+    assert.equal(notes.length, 1, 'once')
+
+    // The day before it ends: the reminder, once.
+    notes.length = 0
+    await db('trips').where({ id: trip.id }).update({ ends_on: dayFrom(1) })
+    await places.runTripNotices({ send })
+    await places.runTripNotices({ send })
+    assert.deepEqual(notes.map((n) => [n.kind, n.tripId]), [['ending', trip.id]])
+
+    // Turned off, or an unconfirmed address: none.
+    notes.length = 0
+    const { trip: later } = await places.createTrip(user, { place_id: place.id, starts_on: dayFrom(0), ends_on: dayFrom(5) })
+    await db('users').where({ id }).update({ trip_emails_enabled: false })
+    await places.runTripNotices({ send })
+    assert.equal(notes.length, 0)
+    await db('users').where({ id }).update({ trip_emails_enabled: true, email_confirmed: false })
+    await places.runTripNotices({ send })
+    assert.equal(notes.length, 0)
+    assert.equal((await db('trips').where({ id: later.id }).first()).started_notice_at, null, 'still owed if they confirm')
+
+    // The words.
+    const start = tripNoticeMessage(user, 'started', { tripId: trip.id, place: 'Colorado (work)', ends: '2026-11-15', home: 'Hall' })
+    assert.equal(start.subject, 'Your trip to Colorado (work) has started')
+    assert.match(start.text, /You’re set for Colorado \(work\) until November 15\. Your account will switch back to Hall when your trip ends\./)
+    assert.match(start.text, /\/unsubscribe\//)
+    const ending = tripNoticeMessage(user, 'ending', { tripId: trip.id, place: 'Colorado (work)', ends: '2026-11-15', home: 'Hall' })
+    assert.equal(ending.subject, 'Your trip to Colorado (work) ends tomorrow')
+    assert.match(ending.text, /A reminder: your account switches back to Hall at the end of your trip on November 15\./)
+    assert.match(ending.text, new RegExp(`Extend my trip: .*/settings#places\\?trip=${trip.id}`))
+  } finally {
+    ebird.subregions = original
+    await db('nearby_cache').where('key', 'like', 'areas:%').del()
+    await db('users').where({ id }).del()
+  }
+})
+
+test('back home: /me says a trip just ended, once, until the app says it was seen', async () => {
+  const auth = require('../api/auth/[action]')
+  const userApi = require('../api/user')
+  const { fakeReq, fakeRes } = require('./helpers')
+  const { createSession } = require('../lib/auth')
+  const [{ id }] = await db('users').insert({ email: 'back-home@example.com', password_hash: 'x', location: 'US-ZP-002', state: 'ZP' }).returning('id')
+  const session = fakeRes(); createSession(session, await db('users').where({ id }).first())
+  const cookie = String(session.headers['set-cookie']).split(';')[0]
+  const me = async () => { const res = fakeRes(); await auth(fakeReq({ method: 'GET', headers: { cookie }, query: { action: 'me' } }), res); return res.body }
+  try {
+    const [{ id: pid }] = await db('places').insert({ user_id: id, name: 'Colorado (work)', state: 'CO', location: 'US-CO-031' }).returning('id')
+    const [{ id: tid }] = await db('trips').insert({ place_id: pid, starts_on: dayFrom(-4), ends_on: dayFrom(-1) }).returning('id')
+    assert.deepEqual((await me()).lastTrip, { id: tid, place_name: 'Colorado (work)', ended_on: dayFrom(-1) })
+    const res = fakeRes()
+    await userApi(fakeReq({ method: 'PATCH', headers: { cookie }, body: { trip_return_seen: true } }), res)
+    assert.equal(res.body.lastTrip, null)
+    assert.equal((await me()).lastTrip, null, 'once')
+    // A trip ending today hasn't ended yet.
+    await db('trips').insert({ place_id: pid, starts_on: dayFrom(-1), ends_on: dayFrom(0) })
+    assert.equal((await me()).lastTrip, null)
+  } finally {
+    await db('users').where({ id }).del()
+  }
+})

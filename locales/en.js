@@ -97,6 +97,19 @@ module.exports = {
       body: 'Here’s the link to choose a new Bird Alert password. It works once and expires in an hour:',
       ignore: 'If you didn’t ask for this, ignore it; your password stays as it is.'
     },
+    // The trip notes: when a trip starts, and the day before it ends.
+    trip: {
+      started: {
+        subject: 'Your trip to {place} has started',
+        body: 'You’re set for {place} until {ends}. Your account will switch back to {home} when your trip ends.'
+      },
+      ending: {
+        subject: 'Your trip to {place} ends tomorrow',
+        body: 'A reminder: your account switches back to {home} at the end of your trip on {ends}.'
+      },
+      extend: 'Extend my trip:',
+      unsubscribe: 'Don’t want these trip notes? Turn them off:'
+    },
     digest: {
       subject: { one: '{bird} was spotted near you', other: '{count} birds from your watch list were spotted near you' },
       text: 'Birds on your watch list were reported nearby:',
@@ -151,6 +164,9 @@ module.exports = {
    * request). Developer-facing validation messages are left out on purpose.
    */
   errors: {
+    'Lifers count against the life list or this place\'s list': 'Lifers count against the life list or this place\'s list',
+    'Seen birds must be a list': 'Seen birds must be a list',
+    'A place\'s list can have up to 2000 birds': 'A place\'s list can have up to 2000 birds',
     'Give the place a name': 'Give the place a name',
     'Choose where the place is': 'Choose where the place is',
     'Choose one of the offered distances': 'Choose one of the offered distances',
