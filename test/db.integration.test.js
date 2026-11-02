@@ -2741,3 +2741,67 @@ test('the migration: every trip becomes a solo event at its place, with its date
     await db('users').where({ id: user.id }).del()
   }
 })
+
+test('the event page\'s scouting: members only, last week\'s reports of the targets and the ones quiet two weeks, likely lifers when none, the area asked once an hour', async () => {
+  const events = require('../lib/events')
+  const scouting = require('../lib/scouting')
+  const birds = [['eletro', 'Elegant Trogon'], ['mexchi', 'Mexican Chickadee'], ['monqua', 'Montezuma Quail'], ['whewoo', 'White-eared Hummingbird']]
+  await db('birds').insert(birds.map(([speciesCode, comName]) => ({ speciesCode, comName, sciName: comName }))).onConflict('speciesCode').ignore()
+  const [{ id }] = await db('users').insert({ email: 'scout-view@example.com', password_hash: 'x', location: 'US-GA-139', state: 'GA', email_confirmed: true }).returning('id')
+  const [{ id: stranger }] = await db('users').insert({ email: 'scout-view-stranger@example.com', password_hash: 'x', location: 'US-GA-139', state: 'GA', email_confirmed: true }).returning('id')
+  const likelyFor = scouting.likelyFor
+  try {
+    const user = await db('users').where({ id }).first()
+    const [place] = await db('places').insert({ user_id: id, name: 'Huachucas', state: 'AZ', location: 'US-AZ-023', range_mi: 0 }).returning('*')
+    await db('place_targets').insert(['eletro', 'mexchi', 'monqua', 'whewoo'].map((code) => ({ place_id: place.id, species_code: code })))
+    const event = await eventAt(id, place, { starts_on: dayFrom(10), ends_on: dayFrom(10), kind: 'bigday', scout: true, scout_days: 21 })
+    const feed = [
+      { speciesCode: 'eletro', comName: 'Elegant Trogon', locName: 'Ramsey Canyon', locId: 'L1', lat: 31.45, lng: -110.3, obsDt: `${dayFrom(-1)} 07:10`, subId: 'S1', userDisplayName: 'Jane Birder', obsValid: true, obsReviewed: true, hasRichMedia: true },
+      { speciesCode: 'eletro', comName: 'Elegant Trogon', locName: 'Miller Canyon', locId: 'L2', lat: 31.42, lng: -110.27, obsDt: `${dayFrom(-4)} 08:00`, subId: 'S2', userDisplayName: 'Joe Birder', obsValid: true, obsReviewed: false },
+      { speciesCode: 'whewoo', comName: 'White-eared Hummingbird', locName: 'Beatty\'s', locId: 'L3', lat: 31.4, lng: -110.25, obsDt: `${dayFrom(-3)} 09:00`, subId: 'S3', userDisplayName: 'Jane Birder', obsValid: true, obsReviewed: false },
+      { speciesCode: 'mexchi', comName: 'Mexican Chickadee', locName: 'Carr Canyon', locId: 'L4', lat: 31.43, lng: -110.29, obsDt: `${dayFrom(-10)} 09:00`, subId: 'S4', obsValid: true, obsReviewed: false },
+      { speciesCode: 'acowoo', comName: 'Acorn Woodpecker', locName: 'Sierra Vista', locId: 'L5', lat: 31.5, lng: -110.3, obsDt: `${dayFrom(0)} 08:00`, subId: 'S5', obsValid: true }
+    ]
+    let calls = 0
+    const fetchFeed = async (key) => { calls += 1; assert.equal(key, 'county:US-AZ-023'); return feed }
+
+    // Members only.
+    await assert.rejects(events.eventScouting({ id: stranger }, event.id, { fetchFeed }), (e) => e.status === 404)
+    await assert.rejects(events.eventScouting(user, 'nope', { fetchFeed }), (e) => e.status === 404)
+
+    // Targets: each one's latest report in the last 7 days, newest first; none in 14 days is unreported.
+    const view = await events.eventScouting(user, event.id, { fetchFeed })
+    assert.equal(view.days_to_go, 10)
+    assert.deepEqual(view.window, { from: dayFrom(-11), to: dayFrom(10) })
+    assert.equal(view.using, 'targets')
+    assert.deepEqual(view.reported.map((r) => [r.code, r.locName, r.subId]), [['eletro', 'Ramsey Canyon', 'S1'], ['whewoo', 'Beatty\'s', 'S3']])
+    assert.deepEqual(view.reported[0], { code: 'eletro', speciesCode: 'eletro', comName: 'Elegant Trogon', locName: 'Ramsey Canyon', locId: 'L1', lat: 31.45, lng: -110.3, obsDt: `${dayFrom(-1)} 07:10`, birders: 1, confirmed: true, media: 'photo', subId: 'S1' })
+    assert.equal(view.reported[1].confirmed, null, 'an ordinary report has nothing to confirm')
+    assert.deepEqual(view.unreported, [{ code: 'monqua', speciesCode: 'monqua', comName: 'Montezuma Quail' }])
+    assert.ok(!view.reported.some((r) => r.code === 'mexchi') && !view.unreported.some((r) => r.code === 'mexchi'), '10 days ago: neither last week nor quiet')
+    assert.ok(!JSON.stringify(view).includes('Birder'), 'no observer names')
+
+    // Asked again within the hour: the area's feed is not fetched again.
+    await events.eventScouting(user, event.id, { fetchFeed })
+    assert.equal(calls, 1)
+
+    // No targets: the person's likely lifers for the dates stand in.
+    await db('event_targets').where({ event_id: event.id }).del()
+    scouting.likelyFor = async () => ['monqua', 'whewoo']
+    const standIn = await events.eventScouting(user, event.id, { fetchFeed })
+    assert.equal(standIn.using, 'likely_lifers')
+    assert.deepEqual(standIn.reported.map((r) => r.code), ['whewoo'])
+    assert.deepEqual(standIn.unreported.map((r) => r.code), ['monqua'])
+    assert.equal(calls, 1)
+
+    // Past: empty lists, no countdown, nothing fetched.
+    await db('events').where({ id: event.id }).update({ starts_on: dayFrom(-3), ends_on: dayFrom(-2) })
+    const past = await events.eventScouting(user, event.id, { fetchFeed: async () => { throw new Error('a past event asks nothing') } })
+    assert.deepEqual([past.days_to_go, past.reported, past.unreported], [null, [], []])
+  } finally {
+    scouting.likelyFor = likelyFor
+    await db('events').where({ owner_id: id }).del()
+    await db('places').where({ user_id: id }).del()
+    await db('users').whereIn('id', [id, stranger]).del()
+  }
+})
