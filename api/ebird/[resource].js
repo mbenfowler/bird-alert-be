@@ -2,7 +2,7 @@ const { route, HttpError } = require('../../lib/http')
 const ebird = require('../../lib/ebird')
 const db = require('../../lib/db')
 const { arrivingSoon, seasonality } = require('../../lib/seasonality')
-const { runChecklistSync, userRegions } = require('../../lib/checklists')
+const { runChecklistSync, userRegions, fillExploredSoon } = require('../../lib/checklists')
 const { EBIRD_THROTTLED } = require('../../lib/adminStats')
 const { pruneDaily } = require('../../lib/retention')
 const { whereToFind, notableCodes } = require('../../lib/hotspots')
@@ -13,6 +13,7 @@ const { nearbyPublic } = require('../../lib/nearby')
 const { placeSearch, parsePoints } = require('../../lib/placeSearch')
 const { drive } = require('../../lib/routing')
 const { getShare, isBot, sharePage } = require('../../lib/shares')
+const { getSessionUser } = require('../../lib/auth')
 const { areasOf, countries, provincesOf, areaAt, areaSearch } = require('../../lib/areas')
 const { chase } = require('../../lib/chase')
 const { withAba } = require('../../lib/abaCodes')
@@ -27,6 +28,17 @@ const cache = (maxAge, swr) => `public, max-age=${Math.min(maxAge, 300)}, s-maxa
 
 // Read-only proxy for the eBird calls the app makes, so the API key stays on the server and the
 // CDN can absorb repeat requests. Each resource sets a cache lifetime that matches how often the data moves.
+/**
+ * An area with little on file, looked at by someone signed in (exploring it, say): fill it once, so
+ * the "still gathering" note comes true within minutes. Logged-out visitors never set it off.
+ */
+const THIN = 20
+const fillIfThin = async (region, data, req) => {
+  if ((data?.onFile?.checklists ?? Infinity) >= THIN) return
+  const user = await getSessionUser(req).catch(() => null)
+  if (user) fillExploredSoon(region)
+}
+
 const resources = {
   // GET /api/ebird/name-locales -> [{ locale, name }]: the languages a person can choose for the app
   // and its bird names (the app's words exist in English only so far; bird names in all of these).
@@ -106,12 +118,14 @@ const resources = {
   // GET /api/ebird/where-to-go?region=&codes=a,b,c -> { species, places: [{ locId, locName, expected, birds, bestTime, seenToday }],
   //   route: { stops, covers, url, drive, origin }, grades: { High: { n, hits, rate, enough }, ... } } the watch list's places folded together, ranked by birds a visit can expect (any number of codes; beyond 1000 the rest are ignored)
   'where-to-go': {
-    handler: ({ region, codes, from }) => {
+    handler: async ({ region, codes, from }, req) => {
       const list = String(codes || '').split(',').map((c) => c.trim()).filter(Boolean).map(ebird.assertSpecies)
       if (!list.length) throw new HttpError(400, 'codes is required')
       // Long lists are fine (the bulk path costs the same); beyond a thousand, the rest are simply not considered.
       // `from=lat,lng` (optional): the route counts the drive from there, and its directions start there.
-      return whereToGo(ebird.assertRegion(region), list.slice(0, 1000), { origin: parseOrigin(from) })
+      const data = await whereToGo(ebird.assertRegion(region), list.slice(0, 1000), { origin: parseOrigin(from) })
+      await fillIfThin(region, data, req)
+      return data
     },
     cacheControl: cache(600, 3600)
   },
@@ -121,10 +135,13 @@ const resources = {
   //   With &species=<code>: { region, days, since, onFile, species: { code, comName }, hotspots: [{ locId, name, lat, lng,
   //   checklists, detailed, reports, frequency, lastSeen: { day, subId, howMany } }] } where that bird was reported most reliably
   'best-hotspots': {
-    handler: ({ region, days, species }) => {
+    handler: async ({ region, days, species }, req) => {
       const county = assertCounty(ebird.assertRegion(region))
-      if (species === undefined || species === '') return bestHotspots(county, parseDays(days))
-      return bestHotspotsFor(county, parseDays(days), ebird.assertSpecies(String(species)))
+      const data = species === undefined || species === ''
+        ? await bestHotspots(county, parseDays(days))
+        : await bestHotspotsFor(county, parseDays(days), ebird.assertSpecies(String(species)))
+      await fillIfThin(county, data, req)
+      return data
     },
     cacheControl: cache(600, 3600)
   },

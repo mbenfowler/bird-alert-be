@@ -2111,3 +2111,18 @@ test('back home: /me says a trip just ended, once, until the app says it was see
     await db('users').where({ id }).del()
   }
 })
+
+test('an explored area with little on file is filled once, and only a few new areas an hour', async () => {
+  const { fillExplored, EXPLORE_FILLS_PER_HOUR } = require('../lib/checklists')
+  await db('job_runs').where('kind', 'like', 'explore-fill:%').del()
+  const filled = []
+  const fill = async (region) => { filled.push(region); return {} }
+  await fillExplored('US-CO-031', { fill })
+  await fillExplored('US-CO-031', { fill })
+  assert.deepEqual(filled, ['US-CO-031'], 'once per area')
+  assert.equal(await fillExplored('US-CO', { fill }), null, 'a whole state is never filled this way')
+  for (let i = 0; i < EXPLORE_FILLS_PER_HOUR + 3; i++) await fillExplored(`US-CO-${String(100 + i).padStart(3, '0')}`, { fill })
+  assert.equal(filled.length, EXPLORE_FILLS_PER_HOUR, 'a handful an hour across everyone')
+  await db('job_runs').where('kind', 'like', 'explore-fill:%').del()
+})
+
