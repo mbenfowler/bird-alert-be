@@ -28,7 +28,9 @@ module.exports = {
     awayParen: '{place} ({distance} away)',
     awayInParen: '{place} ({distance} away in {county})',
     in: 'in {county}',
-    inParen: '{place} (in {county})'
+    inParen: '{place} (in {county})',
+    inPlace: 'in {county} ({place})',
+    atPlace: 'near {place}'
   },
   evidence: {
     confirmed: 'Confirmed by eBird reviewer',
@@ -73,6 +75,7 @@ module.exports = {
     viewChecklist: 'View checklist on eBird',
     mapAlt: 'Map of where the birds were reported',
     moreCards: '...and {count} more. See them all in the app.',
+    placeHeading: '{place} · {county}',
     seen: '{count} seen',
     abaCode: 'ABA Code {code}',
     openApp: 'Open the app: {url}',
@@ -148,6 +151,20 @@ module.exports = {
    * request). Developer-facing validation messages are left out on purpose.
    */
   errors: {
+    'Give the place a name': 'Give the place a name',
+    'Choose where the place is': 'Choose where the place is',
+    'Choose one of the offered distances': 'Choose one of the offered distances',
+    'That spot is not a place on the map': 'That spot is not a place on the map',
+    'You can save up to 10 places': 'You can save up to 10 places',
+    'No such place': 'No such place',
+    'Target birds must be a list': 'Target birds must be a list',
+    'A place can have up to 50 target birds': 'A place can have up to 50 target birds',
+    'A trip needs a start and an end date': 'A trip needs a start and an end date',
+    'A trip has to end on or after the day it starts': 'A trip has to end on or after the day it starts',
+    'A trip can be up to 60 days long': 'A trip can be up to 60 days long',
+    'That trip has already ended': 'That trip has already ended',
+    'A trip can start up to a year from now': 'A trip can start up to a year from now',
+    'No such trip': 'No such trip',
     'An account with that email already exists': 'An account with that email already exists',
     'Incorrect email or password': 'Incorrect email or password',
     'Please enter a valid email address': 'Please enter a valid email address',

@@ -1,6 +1,7 @@
 const { normalizeLocale } = require('../../lib/i18n')
 const { route, body, HttpError } = require('../../lib/http')
 const db = require('../../lib/db')
+const { activePlaceOf } = require('../../lib/places')
 const {
   normalizeEmail, assertValidEmail, assertValidPassword, findUserByEmail, findUserById, sanitizeUser, touchLastSeen, platformOf
 } = require('../../lib/users')
@@ -34,7 +35,12 @@ const signupPlace = (state, location) => {
   return { state: regionState, location: code }
 }
 /** The user as the app sees them, with whether they have a passkey yet. */
-const withPasskeys = async (user) => ({ ...sanitizeUser(user), hasPasskey: Boolean(await db('passkeys').where({ user_id: user.id }).first('id')) })
+// The place the person is at today, if not home (lib/places), rides along with the account.
+const withPasskeys = async (user) => ({
+  ...sanitizeUser(user),
+  hasPasskey: Boolean(await db('passkeys').where({ user_id: user.id }).first('id')),
+  activePlace: await activePlaceOf(user)
+})
 
 const EMAIL_PREFERENCES = ['alert_digest_email_enabled', 'rare_sightings_email_enabled', 'migration_email_enabled', 'watchlist_email_fallback']
 
