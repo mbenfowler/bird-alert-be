@@ -20,6 +20,11 @@ module.exports = {
     where: '{state} · {county} · {date}',
     whereNoCounty: '{state} · {date}'
   },
+  // An area named in prose (lib/places areaLabel): "Hall County", "Division No. 11 area".
+  areaName: {
+    county: '{name} County',
+    area: '{name} area'
+  },
   distance: {
     mi: '{n} mi',
     km: '{n} km',

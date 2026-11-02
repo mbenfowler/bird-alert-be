@@ -2025,8 +2025,9 @@ test('trip notes: one when a trip starts and one the day before it ends, each on
   const { tripNoticeMessage } = require('../lib/mailer')
   const ebird = require('../lib/ebird')
   const original = ebird.subregions
-  ebird.subregions = async () => [{ code: 'US-ZQ-002', name: 'Hall' }]
-  const [{ id }] = await db('users').insert({ email: 'trip-notes@example.com', password_hash: 'x', location: 'US-ZQ-002', state: 'ZQ', email_confirmed: true }).returning('id')
+  ebird.subregions = async () => [{ code: 'US-GA-139', name: 'Hall' }]
+  await db('nearby_cache').where('key', 'like', 'areas:%').del()
+  const [{ id }] = await db('users').insert({ email: 'trip-notes@example.com', password_hash: 'x', location: 'US-GA-139', state: 'GA', email_confirmed: true }).returning('id')
   const notes = []
   const send = async (user, kind, vars) => { if (user.id === id) notes.push({ kind, ...vars }) }
   try {
@@ -2034,7 +2035,7 @@ test('trip notes: one when a trip starts and one the day before it ends, each on
     const place = await places.createPlace(user, { name: 'Colorado (work)', state: 'CO', location: 'US-CO-031' })
     const { trip } = await places.createTrip(user, { place_id: place.id, starts_on: dayFrom(0), ends_on: dayFrom(3) })
     await places.runTripNotices({ send })
-    assert.deepEqual(notes.map((n) => [n.kind, n.place, n.ends, n.home]), [['started', 'Colorado (work)', dayFrom(3), 'Hall']])
+    assert.deepEqual(notes.map((n) => [n.kind, n.place, n.ends, n.home]), [['started', 'Colorado (work)', dayFrom(3), 'Hall County']], 'home said the way the app says it')
     await places.runTripNotices({ send })
     assert.equal(notes.length, 1, 'once')
 
@@ -2056,14 +2057,22 @@ test('trip notes: one when a trip starts and one the day before it ends, each on
     assert.equal(notes.length, 0)
     assert.equal((await db('trips').where({ id: later.id }).first()).started_notice_at, null, 'still owed if they confirm')
 
+    // Areas named the way the app says them, never doubled.
+    assert.equal(places.areaLabel('en', 'GA', 'Hall'), 'Hall County')
+    assert.equal(places.areaLabel('en', 'LA', 'Orleans Parish'), 'Orleans Parish')
+    assert.equal(places.areaLabel('en', 'NY', 'Kings County'), 'Kings County', 'no "County County"')
+    assert.equal(places.areaLabel('en', 'ZA-WC', 'City of Cape Town'), 'City of Cape Town')
+    assert.equal(places.areaLabel('en', 'AB', 'Division No. 11'), 'Division No. 11 area')
+    assert.equal(places.areaLabel('en', 'GB-ENG', 'Kent'), 'Kent')
+
     // The words.
-    const start = tripNoticeMessage(user, 'started', { tripId: trip.id, place: 'Colorado (work)', ends: '2026-11-15', home: 'Hall' })
+    const start = tripNoticeMessage(user, 'started', { tripId: trip.id, place: 'Colorado (work)', ends: '2026-11-15', home: 'Hall County' })
     assert.equal(start.subject, 'Your trip to Colorado (work) has started')
-    assert.match(start.text, /You’re set for Colorado \(work\) until November 15\. Your account will switch back to Hall when your trip ends\./)
+    assert.match(start.text, /You’re set for Colorado \(work\) until November 15\. Your account will switch back to Hall County when your trip ends\./)
     assert.match(start.text, /\/unsubscribe\//)
-    const ending = tripNoticeMessage(user, 'ending', { tripId: trip.id, place: 'Colorado (work)', ends: '2026-11-15', home: 'Hall' })
+    const ending = tripNoticeMessage(user, 'ending', { tripId: trip.id, place: 'Colorado (work)', ends: '2026-11-15', home: 'Hall County' })
     assert.equal(ending.subject, 'Your trip to Colorado (work) ends tomorrow')
-    assert.match(ending.text, /A reminder: your account switches back to Hall at the end of your trip on November 15\./)
+    assert.match(ending.text, /A reminder: your account switches back to Hall County at the end of your trip on November 15\./)
     assert.match(ending.text, new RegExp(`Extend my trip: .*/settings#places\\?trip=${trip.id}`))
   } finally {
     ebird.subregions = original
