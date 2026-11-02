@@ -56,6 +56,12 @@ test('insertion cost: between two stops, after the last, or before the first whe
   assert.equal(insertionCost([1, 2], 0, table).pos, 1, 'a fixed first stays first')
 })
 
+test('insertion cost never goes below zero, even when the quickest detour is fewer miles than the leg it replaces', () => {
+  // A to C is quick on the highway but long; via B is slower and shorter.
+  const table = { minutes: [[0, 10, 15], [10, 0, 10], [15, 10, 0]], miles: [[0, 4, 20], [4, 0, 4], [20, 4, 0]] }
+  assert.deepEqual(insertionCost([0, 2], 1, table), { pos: 1, minutes: 5, miles: 0 })
+})
+
 test('ordering: exact for small paths and 2-opt untangles a crossed one, the first kept first', () => {
   const xs = [0, 5, 1, 4, 2, 3]
   const m = xs.map((a) => xs.map((b) => Math.abs(a - b)))
