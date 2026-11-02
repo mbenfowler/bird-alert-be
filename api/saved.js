@@ -10,6 +10,8 @@ const { splitEvidence } = require('../lib/splitEvidence')
 const { createShare } = require('../lib/shares')
 const { sendFeedback } = require('../lib/feedback')
 const places = require('../lib/places')
+const events = require('../lib/events')
+const { requestLocale } = require('../lib/i18n')
 const { syncNewRegionSoon } = require('../lib/checklists')
 
 const savedBirdsFor = (userId) =>
@@ -43,7 +45,30 @@ const savedBirdsFor = (userId) =>
 // POST   /api/saved?kind=trip { place_id, starts_on, ends_on, kind?: trip|bigday, scout?, scout_days?: 7|14|21|28 } -> 201 the trip (a Big Day scouts by default)
 // PATCH  /api/saved?kind=trip&id= { place_id?, starts_on?, ends_on?, kind?, scout?, scout_days? } -> the trip
 // DELETE /api/saved?kind=trip&id=                -> 204
+// Group events (lib/events): a trip shared with a small group. Anyone in it can change it.
+// POST   /api/saved?kind=event-from-trip { trip_id, display_name } -> 201 the event (the trip becomes it)
+// GET    /api/saved?kind=events                   -> [{ id, name, state, location, range_mi, starts_on, ends_on, kind, scout, scout_days, scout_from, active, role,
+//                                                     members: [{ display_name, role, you }], targets: [{ code, lifer_for: [name] }], tally: [{ code, added_by_name, added_at }], invite_url, view_url }]
+// PATCH  /api/saved?kind=event&id= { name?, starts_on?, ends_on?, state?, location?, range_mi?, kind?, scout?, scout_days? } -> the event
+// DELETE /api/saved?kind=event&id=                -> 204 (organizer: ends it for everyone)
+// POST   /api/saved?kind=event-leave&id=          -> 204
+// POST   /api/saved?kind=event-invite-rotate&id=  -> the event with a new invite link (organizer)
+// PUT    /api/saved?kind=event-targets&id= { codes } -> the event
+// POST   /api/saved?kind=event-tally&id= { species_code } -> the event; DELETE ...&code= -> the event
+// POST   /api/saved?kind=event-join { token, display_name } -> the event
+// GET    /api/saved?kind=event-preview&token=     -> { name, area, starts_on, ends_on, kind, members } (no sign-in)
+// GET    /api/saved?kind=event-view&token=&locale= -> { name, area, starts_on, ends_on, kind, targets, tally, count } (no sign-in, no names)
 module.exports = route(['GET', 'POST', 'PUT', 'PATCH', 'DELETE'], async (req, res) => {
+  // The two event links anyone can open: what the event is, and (view-only) its plan and tally.
+  if (req.query.kind === 'event-preview' || req.query.kind === 'event-view') {
+    if (req.method !== 'GET') throw new HttpError(405, 'Method not allowed')
+    res.setHeader('Cache-Control', 'no-store')
+    const locale = requestLocale(req) || 'en'
+    if (req.query.kind === 'event-preview') return res.status(200).json(await events.previewEvent(String(req.query.token || ''), locale))
+    const view = await events.viewEvent(String(req.query.token || ''), locale)
+    // Bird names follow ?locale= only, as on the other public pages.
+    return res.status(200).json(req.query.locale ? await localize(view, locale) : view)
+  }
   const user = await requireUser(req)
   // Private and per person, so birds are named in the person's own language.
   const named = (data) => localize(data, user.locale)
@@ -106,6 +131,34 @@ module.exports = route(['GET', 'POST', 'PUT', 'PATCH', 'DELETE'], async (req, re
       return res.status(req.method === 'POST' ? 201 : 200).json(trip)
     }
     if (req.method === 'DELETE') { await places.deleteTrip(user, req.query.id); return res.status(204).end() }
+    throw new HttpError(405, 'Method not allowed')
+  }
+  if (String(req.query.kind || '').startsWith('event')) {
+    res.setHeader('Cache-Control', 'no-store')
+    const kind = req.query.kind
+    const id = req.query.id
+    if (kind === 'events' && req.method === 'GET') return res.status(200).json(await events.listEvents(user))
+    if (kind === 'event-from-trip' && req.method === 'POST') return res.status(201).json(await events.createFromTrip(user, body(req)))
+    if (kind === 'event-join' && req.method === 'POST') {
+      const event = await events.joinEvent(user, body(req))
+      if (places.startsSoon(event, user.timezone)) ready(event.location)
+      return res.status(200).json(event)
+    }
+    if (kind === 'event') {
+      if (req.method === 'PATCH') {
+        const event = await events.updateEvent(user, id, body(req))
+        if (places.startsSoon(event, user.timezone)) ready(event.location)
+        return res.status(200).json(event)
+      }
+      if (req.method === 'DELETE') { await events.endEvent(user, id); return res.status(204).end() }
+    }
+    if (kind === 'event-leave' && req.method === 'POST') { await events.leaveEvent(user, id); return res.status(204).end() }
+    if (kind === 'event-invite-rotate' && req.method === 'POST') return res.status(200).json(await events.rotateInvite(user, id))
+    if (kind === 'event-targets' && req.method === 'PUT') return res.status(200).json(await events.setEventTargets(user, id, body(req).codes))
+    if (kind === 'event-tally') {
+      if (req.method === 'POST') return res.status(200).json(await events.addTally(user, id, body(req).species_code))
+      if (req.method === 'DELETE') return res.status(200).json(await events.removeTally(user, id, req.query.code))
+    }
     throw new HttpError(405, 'Method not allowed')
   }
   if (req.method === 'PATCH') throw new HttpError(405, 'Method not allowed')
