@@ -59,21 +59,30 @@ const savedBirdsFor = (userId) =>
 // GET    /api/saved?kind=event-scouting&id=&locale= -> { checked_at, days_to_go|null, window: { from, to }, using: 'targets'|'likely_lifers',
 //                                                     reported: [{ code, comName, locName, locId, lat, lng, obsDt, birders, confirmed|null, media, subId }],
 //                                                     unreported: [{ code, comName }] } (last 7 days / none in 14; the area's feed kept an hour)
-// GET    /api/saved?kind=event-route&id=&from=lat,lng&add=L1,L2&drop=L3&locale= -> { from|null, stops: [{ n, locId, locName, lat, lng, new_birds: [{ code, speciesCode, comName }], leg_min, leg_mi, private, merged: [{ locId, locName }], picked, species: [code] }],
-//                                                     extras: [{ locId, locName, lat, lng, new_birds, add_min, add_mi, private, merged, dropped, species: [code] }], total_min, total_mi, covered, covered_with_extras,
+// GET    /api/saved?kind=event-route&id=&from=lat,lng&add=L1,L2&drop=L3&locale= -> { from|null, stops: [{ n, locId, locName, lat, lng, new_birds: [{ code, speciesCode, comName }], leg_min, leg_mi, private, merged: [{ locId, locName }], picked, species: [code],
+//                                                     targets_here, suggested_stay_min }],
+//                                                     extras: [{ locId, locName, lat, lng, new_birds, add_min, add_mi, private, merged, dropped, species: [code] }], total_min, total_mi, stay_min_total, covered, covered_with_extras,
 //                                                     reported, skipped, geometry: [[lat, lng]], routed, names: { code: comName }, add: [locId], drop: [locId] } (add: forced into the core, drop: kept out; lib/eventRoute: every report of the targets this week, personal spots folded
 //                                                     into hotspots, a core worth <= 15 min a bird plus extras; start: from, else the start saved with the group's route (event-route-plan), else the event's spot,
 //                                                     all rounded to 2 decimals; kept an hour, unless a species' eBird feed failed twice: then incomplete: true and not kept)
+//                                                     targets_here: the targets reported at the stop this week (folded spots included); suggested_stay_min: 15 + 7 a target,
+//                                                     to the nearest 5, from 15 to 90 (lib/eventRoute suggestStay); stay_min_total: the stops' suggested stays added up
 // POST   /api/saved?kind=event-scouting-email&id=  -> 200 { sent: true, to: 'm•••@example.com' } the scouting email, now, to you alone (lib/scoutEmail): the last 7 days, any day
 //                                                     until the event ends; targets, else likely lifers, else what's being seen there this week; the group's saved route if any.
 //                                                     Goes with trip emails off and leaves the morning report as it is. Members only (404 otherwise);
 //                                                     409 { error: 'confirm_email' } unconfirmed address; 400 { error: 'event_over' }; 429 { error: 'too_many', retry_after_min } past 3 an hour
 //                                                     per event; 503 { error: 'mail_cap' } the day's mail is used up
 // The group's own route, saved to the event (lib/eventRoutePlan): any member edits it, everyone sees the same one. Members only (404 otherwise).
-// GET    /api/saved?kind=event-route-plan&id=     -> { start: { name, lat, lng }|null, stops: [{ locId|null, name, lat, lng }], version, updated_at, updated_by_name|null, updated_by_you }
+// GET    /api/saved?kind=event-route-plan&id=     -> { start: { name, lat, lng }|null, stops: [{ locId|null, name, lat, lng, stay_min|null, targets_here, suggested_stay_min }], version, updated_at, updated_by_name|null, updated_by_you,
+//                                                     legs: [{ min, mi }|null]|null, totals: { drive_min|null, stay_min, total_min }, routed }
+//                                                     stay_min: the group's minutes there (null: use suggested_stay_min, the suggestion's formula); targets_here: targets reported
+//                                                     there this week from the event's hour-kept scouting feed (personal spots folded into the hotspot count; a typed address 0).
+//                                                     legs: one a stop, the drive into it from the stop before (the first: from the start; null when there's none), from one
+//                                                     OSRM route through start + stops, cached 30 days (lib/routing drive). totals.stay_min: each stay_min ?? suggested_stay_min.
+//                                                     routed false (OSRM failed): legs and drive_min null, total_min the stays alone
 //                                                     or { start: null, stops: null, version: 0 } when none is saved (the suggestion stands). updated_by_name: their display_name in the event, never an email
-// PUT    /api/saved?kind=event-route-plan&id= { start: { name, lat, lng }|null, stops: [{ locId: 'L123'|null, name (<= 200), lat, lng }] (<= 8), version }
-//                                                 -> 200 the saved route at version + 1 (stops rounded to 5 decimals, start to 2); 400 when invalid
+// PUT    /api/saved?kind=event-route-plan&id= { start: { name, lat, lng }|null, stops: [{ locId: 'L123'|null, name (<= 200), lat, lng, stay_min?: 0..480|null }] (<= 8), version }
+//                                                 -> 200 the saved route at version + 1, as GET gives it (stops rounded to 5 decimals, start to 2, stay_min to whole minutes); 400 when invalid
 //                                                    version is the one it was read at (0: none saved yet); any other -> 409 { error, current: the route as GET gives it }
 // DELETE /api/saved?kind=event-route-plan&id=&version= -> 200 { start: null, stops: null, version: 0 } back to the suggestion; the same 409 rule
 // PATCH  /api/saved?kind=event&id= { name?, starts_on?, ends_on?, state?, location?, range_mi?, kind?, scout?, scout_days? } -> the event
