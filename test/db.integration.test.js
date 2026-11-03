@@ -2998,3 +2998,153 @@ test('the event page\'s scouting: members only, last week\'s reports of the targ
     await db('users').whereIn('id', [id, stranger]).del()
   }
 })
+
+test('"Email me the scouting report now": members only, a confirmed address, before the event ends, 3 an hour; targets, likely lifers or what else is about, and the group\'s route', async () => {
+  const saved = require('../api/saved')
+  const scouting = require('../lib/scouting')
+  const mailer = require('../lib/mailer')
+  const routePlan = require('../lib/eventRoutePlan')
+  const { fakeReq, fakeRes } = require('./helpers')
+  const { createSession } = require('../lib/auth')
+  const birds = [['eletro', 'Elegant Trogon'], ['monqua', 'Montezuma Quail'], ['whewoo', 'White-eared Hummingbird'], ['acowoo', 'Acorn Woodpecker'], ['brrspa', 'Rufous-winged Sparrow'], ['flaowl', 'Flammulated Owl']]
+  await db('birds').insert(birds.map(([speciesCode, comName]) => ({ speciesCode, comName, sciName: comName }))).onConflict('speciesCode').ignore()
+  const person = async (email, fields = {}) => (await db('users').insert({ email, password_hash: 'x', location: 'US-GA-139', state: 'GA', email_confirmed: true, timezone: 'UTC', ...fields }).returning('*'))[0]
+  const pat = await person('pat-scout@example.com', { trip_emails_enabled: false })
+  const stranger = await person('scout-email-stranger@example.com')
+  const unconfirmed = await person('scout-email-unconfirmed@example.com', { email_confirmed: false })
+  const friend = await person('scout-email-friend@example.com')
+  const as = (user) => {
+    const session = fakeRes(); createSession(session, user)
+    const cookie = String(session.headers['set-cookie']).split(';')[0]
+    return async (id) => { const res = fakeRes(); await saved(fakeReq({ method: 'POST', headers: { cookie }, query: { kind: 'event-scouting-email', id: String(id) } }), res); return res }
+  }
+  const feed = [
+    { speciesCode: 'eletro', comName: 'Elegant Trogon', sciName: 'Elegant Trogon', locName: 'Ramsey Canyon', locId: 'L1', lat: 31.45, lng: -110.3, obsDt: `${dayFrom(-2)} 07:10`, subId: 'S1', obsValid: true, obsReviewed: false },
+    { speciesCode: 'whewoo', comName: 'White-eared Hummingbird', sciName: 'White-eared Hummingbird', locName: 'Beatty Ranch', locId: 'L3', lat: 31.4, lng: -110.25, obsDt: `${dayFrom(-3)} 09:00`, subId: 'S3', obsValid: true, obsReviewed: true },
+    { speciesCode: 'acowoo', comName: 'Acorn Woodpecker', sciName: 'Acorn Woodpecker', locName: 'Sierra Vista', locId: 'L5', lat: 31.5, lng: -110.3, obsDt: `${dayFrom(-1)} 08:00`, subId: 'S5', obsValid: true },
+    { speciesCode: 'acowoo', comName: 'Acorn Woodpecker', sciName: 'Acorn Woodpecker', locName: 'Carr Canyon', locId: 'L4', lat: 31.43, lng: -110.29, obsDt: `${dayFrom(-4)} 08:00`, subId: 'S6', obsValid: true },
+    { speciesCode: 'brrspa', comName: 'Rufous-winged Sparrow', sciName: 'Rufous-winged Sparrow', locName: 'San Pedro House', locId: 'L6', lat: 31.55, lng: -110.14, obsDt: `${dayFrom(-5)} 07:00`, subId: 'S7', obsValid: true },
+    { speciesCode: 'monqua', comName: 'Montezuma Quail', sciName: 'Montezuma Quail', locName: 'Miller Canyon', locId: 'L2', lat: 31.42, lng: -110.27, obsDt: `${dayFrom(-10)} 07:00`, subId: 'S8', obsValid: true },
+    { speciesCode: 'duck1', comName: 'duck sp.', locName: 'Pond', locId: 'L7', lat: 31.5, lng: -110.2, obsDt: `${dayFrom(-1)} 07:00`, subId: 'S9', obsValid: true }
+  ]
+  const recentObservations = ebird.recentObservations
+  const likelyFor = scouting.likelyFor
+  const sendMail = mailer.sendMail
+  let calls = 0
+  ebird.recentObservations = async (region) => { calls += 1; assert.equal(region, 'US-AZ-003'); return feed }
+  const mails = []
+  mailer.sendMail = async (m) => { mails.push(m); return {} }
+  const [place] = await db('places').insert({ user_id: pat.id, name: 'Chiricahuas', state: 'AZ', location: 'US-AZ-003', range_mi: 0 }).returning('*')
+  await db('place_targets').insert(['eletro', 'monqua', 'flaowl'].map((code) => ({ place_id: place.id, species_code: code })))
+  const event = await eventAt(pat.id, { ...place, range_mi: 0 }, { starts_on: dayFrom(10), ends_on: dayFrom(10), kind: 'bigday', scout: true })
+  await db('event_members').insert({ event_id: event.id, user_id: unconfirmed.id, role: 'member' })
+  await db('event_members').where({ event_id: event.id, user_id: pat.id }).update({ last_scout_sent_on: dayFrom(-1) })
+  const key = `scout-email:${event.id}:${pat.id}`
+  const resetLimit = () => db('nearby_cache').where({ key }).del()
+  const patCall = as(pat)
+  const last = () => mails[mails.length - 1]
+  try {
+    await db('nearby_cache').where('key', 'like', 'api:%').del()
+
+    // Not a member, or no such event: the 404 every event call gives. Unconfirmed: 409.
+    assert.equal((await as(stranger)(event.id)).statusCode, 404)
+    assert.equal((await patCall(999999)).statusCode, 404)
+    const notConfirmed = await as(unconfirmed)(event.id)
+    assert.deepEqual([notConfirmed.statusCode, notConfirmed.body], [409, { error: 'confirm_email' }])
+    assert.equal(mails.length, 0)
+    await db('event_members').where({ event_id: event.id, user_id: unconfirmed.id }).del()
+
+    // A member, with trip emails off: sent to them alone, the address masked; their targets of the last 7 days.
+    const ok = await patCall(event.id)
+    assert.deepEqual([ok.statusCode, ok.body], [200, { sent: true, to: 'p•••@example.com' }])
+    assert.equal(mails.length, 1)
+    assert.equal(last().to, 'pat-scout@example.com')
+    assert.match(last().subject, /^Scouting report for Chiricahuas \(as of \d{1,2}:\d{2} [AP]M\)$/)
+    assert.match(last().text, /Here’s your scouting report for Chiricahuas, 10 days to go\./)
+    assert.match(last().text, /Your target birds reported there in the last 7 days:\n• Elegant Trogon · Ramsey Canyon · /)
+    assert.match(last().text, /Still unreported \(nothing in the last 2 weeks\): Flammulated Owl\n/)
+    assert.ok(!last().text.includes('Montezuma Quail'), 'reported 10 days ago: neither this week nor quiet')
+    assert.ok(!last().text.includes('What’s being seen there this week'), 'targets reported: no fallback list')
+    assert.match(last().text, new RegExp(`Plan your route: \\S+/events/${event.id}\\b`))
+    assert.ok(!/Your (group’s )?route:/.test(last().text), 'no saved route, no route section')
+    assert.ok(!last().text.includes('/unsubscribe/'), 'asked for: not a trip note to turn off')
+    // The morning report is left as it was.
+    const member = await db('event_members').where({ event_id: event.id, user_id: pat.id }).first()
+    assert.equal(require('../lib/places').dayOf(member.last_scout_sent_on), dayFrom(-1))
+
+    // A saved route: its stops, numbered, and where to meet; a group says so.
+    await db('event_members').insert({ event_id: event.id, user_id: friend.id, role: 'member' })
+    const plan = await routePlan.putPlan(pat, event.id, { start: { name: 'Our motel', lat: 31.9, lng: -109.2 }, stops: [{ locId: 'L1', name: 'Ramsey Canyon', lat: 31.45, lng: -110.3 }, { locId: null, name: 'Carr Canyon', lat: 31.43, lng: -110.29 }], version: 0 })
+    assert.ok(plan.ok)
+    assert.equal((await patCall(event.id)).statusCode, 200)
+    assert.match(last().text, /Your group’s route:\nMeeting point: Our motel\n1\. Ramsey Canyon\n2\. Carr Canyon/)
+    assert.ok(!last().text.includes('Plan your route'))
+    assert.match(last().text, /with your group, 10 days to go/)
+
+    // No targets: likely lifers stand in.
+    await db('event_targets').where({ event_id: event.id }).del()
+    scouting.likelyFor = async () => ['whewoo', 'monqua']
+    assert.equal((await patCall(event.id)).statusCode, 200)
+    assert.match(last().text, /You haven’t picked target birds yet, so here are likely lifers for your dates\./)
+    assert.match(last().text, /Likely lifers reported there in the last 7 days:\n• White-eared Hummingbird · Beatty Ranch · /)
+
+    // The 4th within the hour: 429, with how long to wait.
+    const tooMany = await patCall(event.id)
+    assert.equal(tooMany.statusCode, 429)
+    assert.equal(tooMany.body.error, 'too_many')
+    assert.ok(tooMany.body.retry_after_min >= 1 && tooMany.body.retry_after_min <= 60, String(tooMany.body.retry_after_min))
+    assert.equal(mails.length, 3)
+
+    // No targets and no likely lifers: what's being seen there this week, rarest first, then the most reported; and an invitation to pick targets.
+    await resetLimit()
+    scouting.likelyFor = async () => []
+    assert.equal((await patCall(event.id)).statusCode, 200)
+    const text = last().text
+    assert.ok(!text.includes('None of your target birds'), 'no targets: nothing to say of them')
+    const list = text.split('What’s being seen there this week:\n')[1].split('\n\n')[0].split('\n')
+    assert.deepEqual(list.map((l) => l.split(' · ')[0]), ['• White-eared Hummingbird', '• Acorn Woodpecker', '• Elegant Trogon', '• Rufous-winged Sparrow'])
+    assert.match(list[0], /· Beatty Ranch · .* · rare there$/)
+    assert.match(list[1], /^• Acorn Woodpecker · Sierra Vista · /, 'its newest report')
+    assert.ok(!text.includes('Montezuma Quail') && !text.includes('duck sp.'), 'older than a week, or not one species: left out')
+    assert.match(text, new RegExp(`Pick the birds you’re after and this report will follow them: \\S+/events/${event.id}\\b`))
+
+    // Targets picked but none reported this week: said so, and what else is about.
+    await db('event_targets').insert({ event_id: event.id, species_code: 'monqua', added_by: pat.id })
+    assert.equal((await patCall(event.id)).statusCode, 200)
+    assert.match(last().text, /None of your target birds were reported there in the last 7 days\./)
+    assert.match(last().text, /What’s being seen there this week:\n• White-eared Hummingbird/)
+    assert.ok(!last().text.includes('Pick the birds you’re after'))
+
+    // The day's mail used up: 503, and the try doesn't count against them.
+    await resetLimit()
+    mailer.sendMail = async () => { const e = new Error('cap'); e.code = 'MAIL_CAP'; throw e }
+    const capped = await patCall(event.id)
+    assert.deepEqual([capped.statusCode, capped.body], [503, { error: 'mail_cap' }])
+    const row = await db('nearby_cache').where({ key }).first()
+    assert.deepEqual(row.detail, [])
+    mailer.sendMail = async (m) => { mails.push(m); return {} }
+
+    // On the day itself it still goes, worded for the day; the day before is the final report. Once it's over: 400.
+    await db('events').where({ id: event.id }).update({ starts_on: dayFrom(0), ends_on: dayFrom(0) })
+    assert.equal((await patCall(event.id)).statusCode, 200)
+    assert.match(last().text, /Your scouting report for Chiricahuas: the trip is today\./)
+    await db('events').where({ id: event.id }).update({ starts_on: dayFrom(1), ends_on: dayFrom(1) })
+    assert.equal((await patCall(event.id)).statusCode, 200)
+    assert.match(last().text, /Your final scouting report for Chiricahuas: the trip is tomorrow\./)
+    await db('events').where({ id: event.id }).update({ starts_on: dayFrom(-3), ends_on: dayFrom(-1) })
+    const over = await patCall(event.id)
+    assert.deepEqual([over.statusCode, over.body], [400, { error: 'event_over' }])
+
+    // The area's feed came from eBird once, shared for the hour; the morning report is still to come.
+    assert.equal(calls, 1)
+    assert.equal(require('../lib/places').dayOf((await db('event_members').where({ event_id: event.id, user_id: pat.id }).first()).last_scout_sent_on), dayFrom(-1))
+  } finally {
+    ebird.recentObservations = recentObservations
+    scouting.likelyFor = likelyFor
+    mailer.sendMail = sendMail
+    await db('nearby_cache').where('key', 'like', 'scout-email:%').del()
+    await db('events').where({ owner_id: pat.id }).del()
+    await db('places').where({ user_id: pat.id }).del()
+    await db('users').whereIn('id', [pat.id, stranger.id, unconfirmed.id, friend.id]).del()
+  }
+})
