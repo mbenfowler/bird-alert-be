@@ -903,6 +903,8 @@ test('an unconfirmed account gets one reminder a day after signing up, and never
   const { runConfirmReminders } = require('../lib/confirmReminder')
   const now = new Date('2026-11-10T12:00:00Z')
   const hoursAgo = (h) => new Date(now.getTime() - h * 3600_000)
+  // Other tests' accounts are made with today's real date, which drifts into this test's window: only these count.
+  await db('users').where('email_confirmed', false).update({ email_confirmed: true })
   const [due] = await db('users').insert({ email: 'remind-me@example.com', password_hash: 'x', email_confirmed: false, created_at: hoursAgo(30) }).returning('id')
   await db('users').insert([
     { email: 'too-new@example.com', password_hash: 'x', email_confirmed: false, created_at: hoursAgo(5) },
