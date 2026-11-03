@@ -12,7 +12,7 @@ const { syncNewRegionSoon } = require('../lib/checklists')
 const { assertArea } = require('../lib/areas')
 
 const STRING_FIELDS = ['state', 'location']
-const BOOLEAN_FIELDS = ['alert_digest_email_enabled', 'rare_sightings_email_enabled', 'push_watchlist_enabled', 'push_notable_enabled', 'push_notable_batched', 'push_first_of_season', 'push_lifer_enabled', 'migration_email_enabled', 'watchlist_email_fallback', 'rare_alerts_need_proof', 'keep_home_alerts', 'trip_emails_enabled']
+const BOOLEAN_FIELDS = ['alert_digest_email_enabled', 'rare_sightings_email_enabled', 'push_watchlist_enabled', 'push_notable_enabled', 'push_notable_batched', 'push_first_of_season', 'push_lifer_enabled', 'migration_email_enabled', 'watchlist_email_fallback', 'rare_alerts_need_proof', 'notable_skip_seen', 'keep_home_alerts', 'trip_emails_enabled']
 
 // DELETE /api/user { confirm: 'delete' } -> 204: the account and everything kept for it (watch list, life
 // list, alerts, passkeys, routes) are gone for good, and the session ends. Shared links stay up,
@@ -30,6 +30,10 @@ const deleteAccount = async (req, res) => {
 }
 
 // PATCH /api/user { onboarded?: true (setup finished or skipped; it never shows again), email?, state?, location?, alert_digest_email_enabled?, rare_sightings_email_enabled?, push_watchlist_enabled?, push_notable_enabled?, push_notable_batched?, push_first_of_season?, push_lifer_enabled?, migration_email_enabled?, active_place_id? (own place or null), keep_home_alerts? }
+//   notable_skip_seen?: true leaves rare-bird ("Notable sightings") pushes and the uncommon-sightings email
+//   out for birds already on the life list (or a place's own list, when its lifers count against it),
+//   unless the bird is on the watch list; with fewer than 10 birds on the list nothing is left out.
+//   Off by default. Returned with the rest of the user (here and on the session check).
 module.exports = route(['PATCH', 'DELETE'], async (req, res) => {
   if (req.method === 'DELETE') return deleteAccount(req, res)
   const user = await requireUser(req)
