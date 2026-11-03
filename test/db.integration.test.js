@@ -3195,3 +3195,124 @@ test('"Email me the scouting report now": members only, a confirmed address, bef
     await db('users').whereIn('id', [pat.id, stranger.id, unconfirmed.id, friend.id]).del()
   }
 })
+
+test('rare birds still to see: notable pushes and the uncommon-sightings email skip life birds unless watched, by the place\'s list when it says so, never on a short list', async () => {
+  const { runPushAlerts } = require('../lib/pushAlerts')
+  const { DIGESTS } = require('../lib/digests')
+  const places = require('../lib/places')
+  const region = 'US-ZN-001'
+  const area = 'US-ZN-009'
+  const keep = { recent: ebird.recentObservations, notable: ebird.notableObservations, subregions: ebird.subregions, info: ebird.regionInfo }
+  ebird.subregions = async () => [{ code: area, name: 'Far County' }]
+  ebird.regionInfo = async () => { throw new Error('no center') }
+  const base = { password_hash: 'x', location: region, state: 'ZN', push_notable_enabled: true, push_watchlist_enabled: false, range_mi: 0, push_quiet_start: null, push_quiet_end: null, email_confirmed: true }
+  const [{ id: skip }] = await db('users').insert({ ...base, email: 'skip-seen@example.com', notable_skip_seen: true }).returning('id')
+  const [{ id: all }] = await db('users').insert({ ...base, email: 'skip-seen-off@example.com' }).returning('id')
+  const ids = [skip, all]
+  await db('push_subscriptions').insert(ids.map((id) => ({ user_id: id, endpoint: `https://push.example/skip-${id}`, p256dh: 'k', auth: 'a' })))
+  const names = { nsrail: 'Seen Rail', nskite: 'New Kite', nswren: 'Starred Wren' }
+  for (const [speciesCode, comName] of Object.entries(names)) {
+    await db('birds').insert({ speciesCode, comName, sciName: `${comName} sci`, category: 'species' }).onConflict('speciesCode').ignore()
+  }
+  // Both have seen the rail and the wren (and nine more); the skipping account has starred the wren.
+  const nine = Array.from({ length: 9 }, (_, i) => `ns${i}zz`)
+  for (const id of ids) await db('seen_birds').insert([...nine, 'nsrail', 'nswren'].map((species_code) => ({ user_id: id, species_code, first_seen: '2020-01-01', source: 'tap' })))
+  await db('saved_birds').insert({ user_id: skip, speciesCode: 'nswren', bird_id: (await db('birds').where({ speciesCode: 'nswren' }).first('id')).id })
+  const obs = (speciesCode, subId) => ({ speciesCode, comName: names[speciesCode], locId: `L${subId}`, locName: 'Marsh', obsDt: '2026-11-03 08:00', lat: 34.3, lng: -83.8, subId, userDisplayName: 'Ann', obsReviewed: true, obsValid: true })
+  let feeds = { [region]: [obs('nsrail', 'R1'), obs('nskite', 'K1'), obs('nswren', 'W1')] }
+  ebird.recentObservations = async () => []
+  ebird.notableObservations = async (r) => feeds[r] || []
+  const sent = []
+  const send = async (userId, payload) => { sent.push([userId, `${payload.title} ${payload.body}`]); return { sent: 1, gone: 0 } }
+  const heard = (userId) => Object.values(names).filter((name) => sent.some(([u, text]) => u === userId && text.includes(name))).sort()
+  const reset = async () => { sent.length = 0; await db('push_log').whereIn('user_id', ids).del() }
+  try {
+    // On: the rail (seen) is left out; the kite (new) and the starred wren (seen, but watched) come.
+    await runPushAlerts({ send })
+    assert.deepEqual(heard(skip), ['New Kite', 'Starred Wren'])
+    assert.deepEqual(heard(all), ['New Kite', 'Seen Rail', 'Starred Wren'], 'off: every rare bird, as before')
+
+    // The email likewise; and when every rare bird is one they've seen, no email that day.
+    const skipUser = await db('users').where({ id: skip }).first()
+    const allUser = await db('users').where({ id: all }).first()
+    assert.deepEqual((await DIGESTS.rare.select(skipUser, feeds[region], { preview: true })).map((o) => o.speciesCode).sort(), ['nskite', 'nswren'])
+    assert.equal((await DIGESTS.rare.select(allUser, feeds[region], { preview: true })).length, 3)
+    feeds = { [region]: [obs('nsrail', 'R2')] }
+    const mailed = []
+    const kind = 'rare-skip-seen-test'
+    const run = await runDigest({ ...DIGESTS.rare, kind, send: async (user, rows) => { if (ids.includes(user.id)) mailed.push([user.id, rows.map((o) => o.speciesCode)]) } })
+    assert.deepEqual(mailed, [[all, ['nsrail']]], 'nothing left for the skipping account: no email, as on a quiet day')
+    assert.equal(await db('digest_log').where({ kind, user_id: skip }).first(), undefined)
+    assert.ok(run.summary.some((s) => s.userId === all))
+    await db('digest_log').where({ kind }).del()
+
+    // A life list under ten birds can't be trusted: nothing is left out.
+    await reset()
+    feeds = { [region]: [obs('nsrail', 'R3')] }
+    await db('seen_birds').where({ user_id: skip }).whereIn('species_code', nine.slice(0, 2)).del()
+    await runPushAlerts({ send })
+    assert.deepEqual(heard(skip), ['Seen Rail'], 'short life list: no filtering')
+    await db('seen_birds').insert(nine.slice(0, 2).map((species_code) => ({ user_id: skip, species_code, first_seen: '2020-01-01', source: 'tap' })))
+
+    // At a place whose lifers count against its own list: that list decides (once it has ten birds).
+    await reset()
+    await db('users').where({ id: skip }).update({ keep_home_alerts: false })
+    const user = await db('users').where({ id: skip }).first()
+    const place = await places.createPlace(user, { name: 'Far trip', state: 'ZN', location: area, range_mi: 0, lifers_scope: 'place' })
+    await db('users').where({ id: skip }).update({ active_place_id: place.id })
+    // Ten birds there, the kite among them; the rail is on the life list but not on the place's.
+    await places.setPlaceSeen(user, place.id, [...nine, 'nskite'])
+    feeds = { [area]: [obs('nsrail', 'R4'), obs('nskite', 'K4')] }
+    await runPushAlerts({ send })
+    assert.deepEqual(heard(skip), ['Seen Rail'], 'the place\'s own list: the rail is new there, the kite is not')
+    // Under ten on the place's list: the life list decides again.
+    await reset()
+    await places.setPlaceSeen(user, place.id, ['nskite'])
+    feeds = { [area]: [obs('nsrail', 'R5'), obs('nskite', 'K5')] }
+    await runPushAlerts({ send })
+    assert.deepEqual(heard(skip), ['New Kite'], 'a short place list falls back to the life list')
+    // The email at the place is judged the same way.
+    const visitor = places.atPlace(await db('users').where({ id: skip }).first(), await places.activePlacesFor([await db('users').where({ id: skip }).first()]).then((m) => m.get(skip)))
+    assert.deepEqual((await DIGESTS.rare.select(visitor, feeds[area], { preview: true })).map((o) => o.speciesCode), ['nskite'])
+  } finally {
+    Object.assign(ebird, { recentObservations: keep.recent, notableObservations: keep.notable, subregions: keep.subregions, regionInfo: keep.info })
+    await db('nearby_cache').where('key', 'like', 'areas:%').del()
+    await db('users').whereIn('id', ids).update({ active_place_id: null })
+    await db('places').whereIn('user_id', ids).del()
+    await db('push_log').whereIn('user_id', ids).del()
+    await db('digest_log').whereIn('user_id', ids).del()
+    await db('saved_birds').whereIn('user_id', ids).del()
+    await db('seen_birds').whereIn('user_id', ids).del()
+    await db('push_subscriptions').whereIn('user_id', ids).del()
+    await db('users').whereIn('id', ids).del()
+  }
+})
+
+test('rare birds still to see: PATCH /api/user takes notable_skip_seen (true or false only) and the user carries it', async () => {
+  const userApi = require('../api/user')
+  const { fakeReq, fakeRes } = require('./helpers')
+  const { createSession } = require('../lib/auth')
+  const user = await db('users').where({ id: userId }).first()
+  assert.equal(user.notable_skip_seen, false, 'off by default')
+  const session = fakeRes(); createSession(session, user)
+  const cookie = String(session.headers['set-cookie']).split(';')[0]
+  const patch = async (body) => { const res = fakeRes(); await userApi(fakeReq({ method: 'PATCH', headers: { cookie }, body }), res); return res }
+  assert.equal((await patch({ notable_skip_seen: 'yes' })).statusCode, 400)
+  const on = await patch({ notable_skip_seen: true })
+  assert.deepEqual([on.statusCode, on.body.notable_skip_seen], [200, true])
+  assert.equal((await db('users').where({ id: userId }).first()).notable_skip_seen, true)
+  const off = await patch({ notable_skip_seen: false })
+  assert.equal(off.body.notable_skip_seen, false)
+})
+
+test('the notable_skip_seen migration goes down and up again', async () => {
+  const name = '20261121090000_notable_skip_seen.js'
+  try {
+    await db.migrate.down({ name })
+    assert.equal(await db.schema.hasColumn('users', 'notable_skip_seen'), false)
+  } finally {
+    await db.migrate.up({ name })
+  }
+  assert.equal(await db.schema.hasColumn('users', 'notable_skip_seen'), true)
+  assert.equal((await db('users').where({ id: userId }).first()).notable_skip_seen, false)
+})
