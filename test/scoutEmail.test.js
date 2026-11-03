@@ -176,3 +176,59 @@ test('everything from the data is escaped in the HTML and read as typed in the t
   assert.match(mail.text, /O'Neil "Pond" & Co/)
   assert.match(mail.text, /Meeting point: Mo & Jo's/)
 })
+
+// The saved route as lib/eventRoutePlan routeDetails gives it.
+const timedRoute = {
+  start: { name: 'Sierra Vista Motel', lat: 31.55, lng: -110.3 },
+  stops: [
+    { locId: 'L1', name: 'Ramsey Canyon Preserve', lat: 31.45, lng: -110.3, stay_min: 45, targets_here: 6, suggested_stay_min: 55 },
+    { locId: 'L2', name: 'Miller Canyon', lat: 31.42, lng: -110.27, stay_min: null, targets_here: 2, suggested_stay_min: 30 },
+    { locId: null, name: 'A friend\'s feeders', lat: 31.5, lng: -110.2, stay_min: null, targets_here: 0, suggested_stay_min: 15 },
+    { locId: 'L4', name: 'San Pedro House', lat: 31.55, lng: -110.14, stay_min: 120, targets_here: 1, suggested_stay_min: 20 }
+  ],
+  legs: [{ min: 24, mi: 12.3 }, { min: 15, mi: 4.2 }, { min: 40, mi: 18 }, { min: 30, mi: 15.6 }],
+  totals: { drive_min: 109, stay_min: 210, total_min: 319 },
+  routed: true
+}
+
+test('a timed route is an itinerary: the drive into each stop, the time there (suggested when not set) and its targets, then the totals', () => {
+  const mail = scoutingMessage(pat, { ...daily, group: true, route: timedRoute })
+  const section = mail.text.split('Your group’s route:\n')[1].split('\n\n')[0]
+  assert.equal(section, [
+    'Meeting point: Sierra Vista Motel',
+    '↓ 24 min drive · 12 mi',
+    '1. Ramsey Canyon Preserve · 45 min there (6 targets)',
+    '↓ 15 min drive · 4.2 mi',
+    '2. Miller Canyon · 30 min there (suggested, 2 targets)',
+    '↓ 40 min drive · 18 mi',
+    '3. A friend\'s feeders · 15 min there (suggested)',
+    '↓ 30 min drive · 16 mi',
+    '4. San Pedro House · 2 h there (1 target)',
+    'Driving 1 h 49 min · At stops 3 h 30 min · Total 5 h 19 min'
+  ].join('\n'))
+  assert.match(mail.html, /↓ 24 min drive · 12 mi<\/div>/)
+  assert.match(mail.html, /1\. Ramsey Canyon Preserve · 45 min there \(6 targets\)<\/div>/)
+  assert.match(mail.html, /A friend&#39;s feeders · 15 min there \(suggested\)/)
+  assert.match(mail.html, />Driving 1 h 49 min · At stops 3 h 30 min · Total 5 h 19 min<\/div>/)
+  assert.match(mail.html, />Plan the route<\/a>/, 'the button stays')
+  assert.ok(!mail.text.includes('Drive times weren'))
+})
+
+test('a timed route OSRM couldn\'t drive: no drive lines, the stays alone, and it says so', () => {
+  const mail = scoutingMessage(pat, { ...daily, route: { ...timedRoute, start: null, legs: null, routed: false, totals: { drive_min: null, stay_min: 210, total_min: 210 } } })
+  const section = mail.text.split('Your route:\n')[1].split('\n\n')[0]
+  assert.doesNotMatch(section, /↓|drive ·|Meeting point|Driving/)
+  assert.match(section, /^1\. Ramsey Canyon Preserve · 45 min there \(6 targets\)\n2\. Miller Canyon/)
+  assert.match(section, /\nAt stops 3 h 30 min\nDrive times weren’t available, so the total is the time at stops alone\.$/)
+  assert.match(mail.html, /Drive times weren’t available/)
+  assert.doesNotMatch(mail.html, /↓/)
+})
+
+test('a timed route\'s names are escaped in the HTML and read as typed in the text', () => {
+  const route = { ...timedRoute, start: { name: 'Mo & Jo\'s <Motel>' }, stops: [{ ...timedRoute.stops[0], name: '<i>Stop</i> & "Co"' }], legs: [timedRoute.legs[0]], totals: { drive_min: 24, stay_min: 45, total_min: 69 } }
+  const mail = scoutingMessage(pat, { ...daily, route })
+  assert.doesNotMatch(mail.html, /<i>Stop|<Motel>/)
+  assert.match(mail.html, /Meeting point: Mo &amp; Jo&#39;s &lt;Motel&gt;/)
+  assert.match(mail.html, /1\. &lt;i&gt;Stop&lt;\/i&gt; &amp; &quot;Co&quot; · 45 min there/)
+  assert.match(mail.text, /Meeting point: Mo & Jo's <Motel>\n↓ 24 min drive · 12 mi\n1\. <i>Stop<\/i> & "Co" · 45 min there \(6 targets\)\nDriving 24 min · At stops 45 min · Total 1 h 9 min/)
+})
