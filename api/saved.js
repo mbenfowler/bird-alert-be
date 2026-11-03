@@ -12,7 +12,8 @@ const { sendFeedback } = require('../lib/feedback')
 const places = require('../lib/places')
 const events = require('../lib/events')
 const { eventRoute } = require('../lib/eventRoute')
-const { requestLocale } = require('../lib/i18n')
+const routePlan = require('../lib/eventRoutePlan')
+const { requestLocale, translateError } = require('../lib/i18n')
 const { syncNewRegionSoon } = require('../lib/checklists')
 
 const savedBirdsFor = (userId) =>
@@ -60,7 +61,15 @@ const savedBirdsFor = (userId) =>
 // GET    /api/saved?kind=event-route&id=&from=lat,lng&add=L1,L2&drop=L3&locale= -> { from|null, stops: [{ n, locId, locName, lat, lng, new_birds: [{ code, speciesCode, comName }], leg_min, leg_mi, private, merged: [{ locId, locName }], picked, species: [code] }],
 //                                                     extras: [{ locId, locName, lat, lng, new_birds, add_min, add_mi, private, merged, dropped, species: [code] }], total_min, total_mi, covered, covered_with_extras,
 //                                                     reported, skipped, geometry: [[lat, lng]], routed, names: { code: comName }, add: [locId], drop: [locId] } (add: forced into the core, drop: kept out; lib/eventRoute: every report of the targets this week, personal spots folded
-//                                                     into hotspots, a core worth <= 15 min a bird plus extras; start: from, else the event's spot, both rounded to 2 decimals; kept an hour)
+//                                                     into hotspots, a core worth <= 15 min a bird plus extras; start: from, else the start saved with the group's route (event-route-plan), else the event's spot,
+//                                                     all rounded to 2 decimals; kept an hour, unless a species' eBird feed failed twice: then incomplete: true and not kept)
+// The group's own route, saved to the event (lib/eventRoutePlan): any member edits it, everyone sees the same one. Members only (404 otherwise).
+// GET    /api/saved?kind=event-route-plan&id=     -> { start: { name, lat, lng }|null, stops: [{ locId|null, name, lat, lng }], version, updated_at, updated_by_name|null, updated_by_you }
+//                                                     or { start: null, stops: null, version: 0 } when none is saved (the suggestion stands). updated_by_name: their display_name in the event, never an email
+// PUT    /api/saved?kind=event-route-plan&id= { start: { name, lat, lng }|null, stops: [{ locId: 'L123'|null, name (<= 200), lat, lng }] (<= 8), version }
+//                                                 -> 200 the saved route at version + 1 (stops rounded to 5 decimals, start to 2); 400 when invalid
+//                                                    version is the one it was read at (0: none saved yet); any other -> 409 { error, current: the route as GET gives it }
+// DELETE /api/saved?kind=event-route-plan&id=&version= -> 200 { start: null, stops: null, version: 0 } back to the suggestion; the same 409 rule
 // PATCH  /api/saved?kind=event&id= { name?, starts_on?, ends_on?, state?, location?, range_mi?, kind?, scout?, scout_days? } -> the event
 // DELETE /api/saved?kind=event&id=                -> 204 (organizer: deletes it for everyone; others leave)
 // POST   /api/saved?kind=event-leave&id=          -> 204
@@ -69,7 +78,7 @@ const savedBirdsFor = (userId) =>
 // POST   /api/saved?kind=event-tally&id= { species_code } -> the event; DELETE ...&code= -> the event
 // POST   /api/saved?kind=event-join { token, display_name } -> the event
 // GET    /api/saved?kind=event-preview&token=     -> { name, area, starts_on, ends_on, kind, members } (no sign-in)
-// GET    /api/saved?kind=event-view&token=&locale= -> { name, area, starts_on, ends_on, kind, targets, tally, count } (no sign-in, no names)
+// GET    /api/saved?kind=event-view&token=&locale= -> { name, area, starts_on, ends_on, kind, targets, tally, count, route: { start: null, stops }|null } (no sign-in, no names; the saved route never shows its start)
 module.exports = route(['GET', 'POST', 'PUT', 'PATCH', 'DELETE'], async (req, res) => {
   // The two event links anyone can open: what the event is, and (view-only) its plan and tally.
   if (req.query.kind === 'event-preview' || req.query.kind === 'event-view') {
@@ -156,6 +165,13 @@ module.exports = route(['GET', 'POST', 'PUT', 'PATCH', 'DELETE'], async (req, re
       // `names` is a map, which localize can't see into: named as a list, then put back.
       const names = await localize(Object.entries(plan.names || {}).map(([speciesCode, comName]) => ({ speciesCode, comName })), locale)
       return res.status(200).json({ ...(await localize(plan, locale)), names: Object.fromEntries(names.map((b) => [b.speciesCode, b.comName])) })
+    }
+    if (kind === 'event-route-plan') {
+      // A save from an older copy: 409 with the route as it is now, so the app can say who changed it.
+      const answer = (result) => (result.ok ? res.status(200).json(result.plan) : res.status(409).json({ error: translateError(requestLocale(req), 'Someone else changed the route'), current: result.current }))
+      if (req.method === 'GET') return res.status(200).json(await routePlan.getPlan(user, id))
+      if (req.method === 'PUT') return answer(await routePlan.putPlan(user, id, body(req)))
+      if (req.method === 'DELETE') return answer(await routePlan.deletePlan(user, id, req.query.version ?? body(req).version))
     }
     if (kind === 'event-join' && req.method === 'POST') {
       const event = await events.joinEvent(user, body(req))
