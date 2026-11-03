@@ -1607,7 +1607,7 @@ test('areas anywhere eBird covers: lists are kept, a point or a town becomes an 
   }
 })
 
-test('languages: bird names come from eBird in the reader\'s language, the words stay English until a catalog exists, and distances follow the country', async () => {
+test('languages: bird names come from eBird in the reader\'s language, the words from its catalog, and distances follow the country', async () => {
   const birdNames = require('../lib/birdNames')
   const { sightingNotification } = require('../lib/notifications')
   const { alertDigestMessage } = require('../lib/mailer')
@@ -1647,12 +1647,12 @@ test('languages: bird names come from eBird in the reader\'s language, the words
     await api(fakeReq({ query: { resource: 'name-locales' } }), offered)
     assert.deepEqual(offered.body.map((l) => l.locale), ['en', 'es-MX', 'fr-CA'])
 
-    // A push to someone reading Spanish in Mexico: the bird in Spanish, the words English (no catalog yet), km.
+    // A push to someone reading Spanish in Mexico: the bird and the words in Spanish, km.
     const reader = { locale: 'es-MX', state: 'SON' }
     const inSpanish = await birdNames.inLanguage(reader.locale)
     const push = sightingNotification(inSpanish({ kind: 'notable', speciesCode: 'vermfl', comName: 'Vermilion Flycatcher', subId: 'S1', locName: 'Río', obsDt: '2026-10-30 08:00', lat: 32, lng: -110, away: { miles: 12, county: 'Pima' } }), {}, langFor(reader))
-    assert.equal(push.title, '❗ Notable: Mosquero Cardenal reported 19 km away')
-    assert.match(push.body, /^Río · 19 km away in Pima · /)
+    assert.equal(push.title, '❗ Notable: Mosquero Cardenal a 19 km')
+    assert.match(push.body, /^Río · a 19 km, en Pima · /)
 
     // Units follow the country: miles in the US, km in Canada and everywhere else.
     assert.deepEqual([langFor({ state: 'GA' }).unit, langFor({ state: 'ON' }).unit, langFor({ state: 'ZA-WC' }).unit], ['mi', 'km', 'km'])

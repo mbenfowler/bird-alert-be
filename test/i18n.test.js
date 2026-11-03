@@ -11,7 +11,7 @@ const lookup = (key) => key.split('.').reduce((node, part) => (node == null ? no
 const DYNAMIC = [
   ...['confirm', 'reminder', 'reset'].flatMap((kind) => [`mail.${kind}.body`, `mail.${kind}.ignore`, `mail.${kind}.subject`]),
   ...['photo', 'audio', 'video'].map((media) => `evidence.${media}`),
-  ...['county', 'municipality', 'area'].map((word) => `places.${word}`)
+  ...['county', 'municipality', 'area'].flatMap((word) => [`places.${word}`, `places.your.${word}`])
 ]
 
 const sources = () => {
@@ -45,7 +45,8 @@ test('t fills values, picks plurals, and falls back to English for a language or
   assert.equal(i18n.t('en', 'push.watched', { bird: 'Painted Bunting' }), '⭐ Painted Bunting spotted nearby!')
   assert.equal(i18n.t('en', 'evidence.birders', { count: 1 }), '1 birder')
   assert.equal(i18n.t('en', 'evidence.birders', { count: 4 }), '4 birders')
-  assert.equal(i18n.t('es-MX', 'push.nearby'), 'nearby', 'no Spanish catalog yet: English')
+  assert.equal(i18n.t('es-MX', 'push.nearby'), i18n.catalogs['es-MX'].push.nearby)
+  assert.equal(i18n.t('de', 'push.nearby'), 'nearby', 'no German catalog: English')
   assert.equal(i18n.t(null, 'push.nearby'), 'nearby')
   assert.equal(i18n.t('en', 'no.such.key'), 'no.such.key')
 })
@@ -58,7 +59,7 @@ test('locales: only offered ones, in BCP-47, and eBird\'s own code for their bir
   assert.equal(i18n.ebirdLocale('es-MX'), 'es_MX')
   assert.equal(i18n.ebirdLocale('fr-CA'), 'fr_CA')
   assert.equal(i18n.ebirdLocale(null), 'en')
-  assert.deepEqual(i18n.UI_LOCALES, ['en'])
+  assert.deepEqual(i18n.UI_LOCALES, ['en', 'es-MX', 'fr-CA'])
 })
 
 test('dates and distances read the way they always have in English, and naturally in other languages', () => {
@@ -76,9 +77,36 @@ test('dates and distances read the way they always have in English, and naturall
 
 test('errors people see are translated by their English text; anything else passes through', () => {
   for (const [source, text] of Object.entries(en.errors)) assert.equal(source, text, 'English is its own source')
-  assert.equal(i18n.translateError('fr-CA', 'Please log in'), 'Please log in', 'no French catalog yet')
+  assert.notEqual(i18n.translateError('fr-CA', 'Please log in'), 'Please log in')
+  assert.equal(i18n.translateError('de', 'Please log in'), 'Please log in', 'no German catalog: English')
   assert.equal(i18n.translateError('en', 'range_mi must be one of 0, 15, 30'), 'range_mi must be one of 0, 15, 30')
   assert.equal(i18n.requestLocale({ query: { locale: 'es-MX' } }), 'es-MX')
   assert.equal(i18n.requestLocale({ query: {}, headers: { 'x-locale': 'fr-CA' } }), 'fr-CA')
   assert.equal(i18n.requestLocale({ query: {}, headers: {} }), null)
+})
+
+test('a language without its own variety reads the nearest catalog: fr is Canadian French, es Mexican Spanish, others English', () => {
+  assert.equal(i18n.uiLocale('fr'), 'fr-CA')
+  assert.equal(i18n.uiLocale('fr-FR'), 'fr-CA')
+  assert.equal(i18n.uiLocale('fr_BE'), 'fr-CA')
+  assert.equal(i18n.uiLocale('es'), 'es-MX')
+  assert.equal(i18n.uiLocale('es-ES'), 'es-MX')
+  assert.equal(i18n.uiLocale('de-DE'), 'en')
+  assert.equal(i18n.uiLocale(null), 'en')
+  assert.equal(i18n.t('fr', 'push.nearby'), i18n.catalogs['fr-CA'].push.nearby)
+  assert.equal(i18n.t('es-AR', 'push.nearby'), i18n.catalogs['es-MX'].push.nearby)
+  assert.equal(i18n.t('pt-BR', 'push.nearby'), 'nearby')
+  assert.equal(i18n.requestLocale({ query: { locale: 'fr' } }), 'fr-CA')
+  assert.equal(i18n.requestLocale({ query: {}, headers: { 'x-locale': 'de' } }), null)
+  assert.equal(i18n.intlLocale('fr'), 'fr-CA')
+})
+
+test('Spanish and French read their own dates, numbers and plurals', () => {
+  assert.equal(i18n.formatLongDate('2026-10-15', 'es-MX'), '15 de octubre')
+  assert.equal(i18n.formatLongDate('2026-10-15', 'fr-CA'), '15 octobre')
+  assert.equal(i18n.formatDistance(12, 'km', 'fr-CA'), i18n.t('fr-CA', 'distance.km', { n: '19' }))
+  assert.equal(i18n.formatNumber(12345, 'fr-CA'), '12 345')
+  assert.equal(i18n.formatNumber(12345, 'es-MX'), '12,345')
+  assert.notEqual(i18n.t('fr-CA', 'evidence.birders', { count: 0 }), i18n.t('fr-CA', 'evidence.birders', { count: 2 }), 'French says 0 in the singular')
+  assert.equal(i18n.t('es-MX', 'evidence.birders', { count: 0 }), i18n.t('es-MX', 'evidence.birders', { count: 2 }).replace('2', '0'))
 })
