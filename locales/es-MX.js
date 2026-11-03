@@ -166,6 +166,19 @@ module.exports = {
       noRoute: 'Todavía no hay una ruta guardada.',
       planRouteButton: 'Planea tu ruta',
       planTheRoute: 'Planear la ruta',
+      itinerary: {
+        drive: '↓ {time} de manejo · {distance}',
+        stop: '{n}. {name} · {time} ahí',
+        suggested: 'sugerido',
+        targets: { one: '{count} objetivo', other: '{count} objetivos' },
+        notes: '({notes})',
+        totals: 'Manejo {drive} · En paradas {stay} · Total {total}',
+        totalsNoDrive: 'En paradas {stay}',
+        noDriveTimes: 'No había tiempos de manejo disponibles, así que el total es solo el tiempo en las paradas.',
+        minutes: '{m} min',
+        hours: '{h} h',
+        hoursMinutes: '{h} h {m} min'
+      },
       openEvent: 'Abrir el evento',
       unsubscribe: 'Desactivar los correos de viaje'
     },
@@ -247,6 +260,7 @@ module.exports = {
     'A stop\'s name is text, up to 200 characters': 'El nombre de una parada es texto, de hasta 200 caracteres',
     'A start\'s name is text, up to 200 characters': 'El nombre de un inicio es texto, de hasta 200 caracteres',
     'A stop\'s locId is an eBird location id (like L123456) or null': 'El locId de una parada es un id de ubicación de eBird (como L123456) o null',
+    'A stop\'s stay_min is minutes from 0 to 480, or null for the suggestion': 'El stay_min de una parada son minutos de 0 a 480, o null para la sugerencia',
     'version is the version the route was read at (0 when none was saved)': 'version es la versión con la que se leyó la ruta (0 si no había ninguna guardada)',
     'Choose a name the group will see (up to 40 characters)': 'Elige un nombre que verá el grupo (hasta 40 caracteres)',
     'Give the event a name': 'Ponle un nombre al evento',

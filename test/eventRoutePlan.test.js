@@ -21,3 +21,81 @@ test('a saved route that isn\'t one is a 400', () => {
   ]) assert.throws(() => cleanPlan(bad), (e) => e.status === 400, JSON.stringify(bad))
   assert.equal(cleanPlan({ stops: [{ ...stop, name: 'x'.repeat(200) }], version: 0 }).stops[0].name.length, 200)
 })
+
+const { routeDetails, targetsAt } = require('../lib/eventRoutePlan')
+const { suggestStay } = require('../lib/eventRoute')
+
+test('a stop\'s stay_min: whole minutes from 0 to 480, rounded; null or absent is the suggestion (left unsaved); anything else is a 400', () => {
+  const plan = cleanPlan({ stops: [{ ...stop, stay_min: 44.6 }, { ...stop, stay_min: 0 }, { ...stop, stay_min: 480 }, { ...stop, stay_min: null }, stop], version: 0 })
+  assert.deepEqual(plan.stops.map((s) => s.stay_min), [45, 0, 480, undefined, undefined])
+  assert.ok(!('stay_min' in plan.stops[3]), 'null is not stored')
+  for (const bad of [-1, 480.6, 481, '30', NaN, Infinity, true, {}]) {
+    assert.throws(() => cleanPlan({ stops: [{ ...stop, stay_min: bad }], version: 0 }), (e) => e.status === 400 && /stay_min/.test(e.message), String(bad))
+  }
+})
+
+test('the suggested stay: 15 min and 7 a target, to the nearest 5, from 15 to 90', () => {
+  assert.deepEqual([0, 1, 2, 3, 4, 5, 6, 10, 11, 40].map(suggestStay), [15, 20, 30, 35, 45, 50, 55, 85, 90, 90])
+  assert.deepEqual([-2, NaN, undefined, null].map(suggestStay), [15, 15, 15, 15])
+})
+
+// The area's feed: a report on a line of latitude 31; public unless told.
+const today = '2026-11-03'
+const rec = (speciesCode, locId, lng, { obsDt = '2026-11-01 08:00', priv = false } = {}) =>
+  ({ speciesCode, comName: speciesCode, locId, locName: `Place ${locId}`, lat: 31, lng, obsDt, locationPrivate: priv })
+const records = [
+  rec('aaa', 'L1', -110), rec('bbb', 'L1', -110), rec('aaa', 'L1', -110, { obsDt: '2026-10-31 07:00' }),
+  rec('ccc', 'L9', -110.003, { priv: true }), // a personal spot ~300 m from L1: folds into it
+  rec('ddd', 'L1', -110, { obsDt: '2026-10-20 08:00' }), // a target, but not this week
+  rec('zzz', 'L2', -109), // not a target
+  rec('ddd', 'L3', -108)
+]
+const scouting = { records, targets: ['aaa', 'bbb', 'ccc', 'ddd'], today }
+
+test('targets at each stop: distinct targets this week, a personal spot folded into the hotspot counted with it; no locId or none reported: 0', () => {
+  const stops = [{ locId: 'L1' }, { locId: 'L9' }, { locId: 'L2' }, { locId: 'L3' }, { locId: null }, { locId: 'L77' }]
+  assert.deepEqual(targetsAt(stops, scouting), [3, 3, 0, 1, 0, 0])
+  assert.deepEqual(targetsAt(stops, { records: [], targets: [], today: null }), [0, 0, 0, 0, 0, 0])
+})
+
+// A drive along the given points: a degree of longitude is 60 minutes and 50 miles.
+const lineDrive = (calls = []) => async (points) => {
+  calls.push(points.map((p) => p.name))
+  const legs = points.slice(1).map((p, i) => ({ minutes: Math.abs(p.lng - points[i].lng) * 60, miles: Math.abs(p.lng - points[i].lng) * 50 }))
+  return { legs, minutes: legs.reduce((s, l) => s + l.minutes, 0), miles: legs.reduce((s, l) => s + l.miles, 0), geometry: [] }
+}
+const saved = {
+  start: { name: 'Motel', lat: 31, lng: -110.5 },
+  stops: [{ locId: 'L1', name: 'Canyon', lat: 31, lng: -110 }, { locId: null, name: 'A house', lat: 31, lng: -109.8, stay_min: 10 }, { locId: 'L3', name: 'Marsh', lat: 31, lng: -108, stay_min: 120 }]
+}
+
+test('legs with a start: the drive into each stop from the one before, the first from the start; stays and totals', async () => {
+  const calls = []
+  const plan = await routeDetails(saved, scouting, { drive: lineDrive(calls) })
+  assert.deepEqual(calls, [['Motel', 'Canyon', 'A house', 'Marsh']], 'one route through start and stops')
+  assert.equal(plan.routed, true)
+  assert.deepEqual(plan.legs, [{ min: 30, mi: 25 }, { min: 12, mi: 10 }, { min: 108, mi: 90 }])
+  assert.deepEqual(plan.stops.map((s) => [s.stay_min, s.targets_here, s.suggested_stay_min]), [[null, 3, 35], [10, 0, 15], [120, 1, 20]])
+  assert.deepEqual(plan.totals, { drive_min: 150, stay_min: 35 + 10 + 120, total_min: 150 + 165 })
+  assert.deepEqual(plan.start, saved.start)
+})
+
+test('legs without a start: the first stop has none; one stop alone needs no route', async () => {
+  const calls = []
+  const plan = await routeDetails({ start: null, stops: saved.stops }, scouting, { drive: lineDrive(calls) })
+  assert.deepEqual(calls, [['Canyon', 'A house', 'Marsh']])
+  assert.deepEqual(plan.legs, [null, { min: 12, mi: 10 }, { min: 108, mi: 90 }])
+  assert.deepEqual(plan.totals, { drive_min: 120, stay_min: 165, total_min: 285 })
+  const boom = async () => { throw new Error('not called') }
+  const one = await routeDetails({ start: null, stops: [saved.stops[0]] }, scouting, { drive: boom })
+  assert.deepEqual([one.routed, one.legs, one.totals], [true, [null], { drive_min: 0, stay_min: 35, total_min: 35 }])
+})
+
+test('OSRM failing (null, a throw, or legs that don\'t fit): routed false, no legs, the total the stays alone', async () => {
+  const fails = [async () => null, async () => { throw new Error('down') }, async () => ({ legs: [{ minutes: 5, miles: 1 }], minutes: 5, miles: 1 })]
+  for (const drive of fails) {
+    const plan = await routeDetails(saved, scouting, { drive })
+    assert.deepEqual([plan.routed, plan.legs, plan.totals], [false, null, { drive_min: null, stay_min: 165, total_min: 165 }])
+    assert.equal(plan.stops.length, 3)
+  }
+})
