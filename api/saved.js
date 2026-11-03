@@ -13,6 +13,7 @@ const places = require('../lib/places')
 const events = require('../lib/events')
 const { eventRoute } = require('../lib/eventRoute')
 const routePlan = require('../lib/eventRoutePlan')
+const { emailScoutingNow } = require('../lib/scoutEmail')
 const { requestLocale, translateError } = require('../lib/i18n')
 const { syncNewRegionSoon } = require('../lib/checklists')
 
@@ -63,6 +64,11 @@ const savedBirdsFor = (userId) =>
 //                                                     reported, skipped, geometry: [[lat, lng]], routed, names: { code: comName }, add: [locId], drop: [locId] } (add: forced into the core, drop: kept out; lib/eventRoute: every report of the targets this week, personal spots folded
 //                                                     into hotspots, a core worth <= 15 min a bird plus extras; start: from, else the start saved with the group's route (event-route-plan), else the event's spot,
 //                                                     all rounded to 2 decimals; kept an hour, unless a species' eBird feed failed twice: then incomplete: true and not kept)
+// POST   /api/saved?kind=event-scouting-email&id=  -> 200 { sent: true, to: 'm•••@example.com' } the scouting email, now, to you alone (lib/scoutEmail): the last 7 days, any day
+//                                                     until the event ends; targets, else likely lifers, else what's being seen there this week; the group's saved route if any.
+//                                                     Goes with trip emails off and leaves the morning report as it is. Members only (404 otherwise);
+//                                                     409 { error: 'confirm_email' } unconfirmed address; 400 { error: 'event_over' }; 429 { error: 'too_many', retry_after_min } past 3 an hour
+//                                                     per event; 503 { error: 'mail_cap' } the day's mail is used up
 // The group's own route, saved to the event (lib/eventRoutePlan): any member edits it, everyone sees the same one. Members only (404 otherwise).
 // GET    /api/saved?kind=event-route-plan&id=     -> { start: { name, lat, lng }|null, stops: [{ locId|null, name, lat, lng }], version, updated_at, updated_by_name|null, updated_by_you }
 //                                                     or { start: null, stops: null, version: 0 } when none is saved (the suggestion stands). updated_by_name: their display_name in the event, never an email
@@ -158,6 +164,10 @@ module.exports = route(['GET', 'POST', 'PUT', 'PATCH', 'DELETE'], async (req, re
     }
     if (kind === 'event-scouting' && req.method === 'GET') {
       return res.status(200).json(await localize(await events.eventScouting(user, id), req.query.locale || user.locale))
+    }
+    if (kind === 'event-scouting-email' && req.method === 'POST') {
+      const { status, body: answer } = await emailScoutingNow(user, id)
+      return res.status(status).json(answer)
     }
     if (kind === 'event-route' && req.method === 'GET') {
       const locale = req.query.locale || user.locale
