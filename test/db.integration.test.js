@@ -11,7 +11,7 @@ const seasonality = require('../lib/seasonality')
 let userId
 before(async () => {
   await db.migrate.latest()
-  for (const table of ['event_tally', 'event_targets', 'event_members', 'events', 'trips', 'place_targets', 'places', 'taxonomy_names', 'hq_alerts', 'hotspot_weeks', 'hq_picks', 'feedback', 'passkeys', 'shares', 'seen_birds', 'taxonomy_ref', 'user_routes', 'hotspot_ref', 'mail_counts', 'error_log', 'drive_cache', 'nearby_cache', 'place_predictions', 'checklist_species', 'checklists', 'bird_sounds', 'digest_log', 'push_handoff', 'push_log', 'push_subscriptions', 'saved_birds', 'auth_throttle', 'season_firsts', 'region_species_days', 'region_days', 'job_runs', 'users', 'birds']) await db(table).del()
+  for (const table of ['event_routes', 'event_tally', 'event_targets', 'event_members', 'events', 'trips', 'place_targets', 'places', 'taxonomy_names', 'hq_alerts', 'hotspot_weeks', 'hq_picks', 'feedback', 'passkeys', 'shares', 'seen_birds', 'taxonomy_ref', 'user_routes', 'hotspot_ref', 'mail_counts', 'error_log', 'drive_cache', 'nearby_cache', 'place_predictions', 'checklist_species', 'checklists', 'bird_sounds', 'digest_log', 'push_handoff', 'push_log', 'push_subscriptions', 'saved_birds', 'auth_throttle', 'season_firsts', 'region_species_days', 'region_days', 'job_runs', 'users', 'birds']) await db(table).del()
   // Nothing in here may reach eBird; the hourly job's history fetch is a no-op unless a test says otherwise.
   ebird.historicObservations = async () => []
   ;[{ id: userId }] = await db('users').insert({
@@ -2773,6 +2773,130 @@ test('the event route: the same members-only rule as scouting, every report this
     await db('events').where({ owner_id: id }).del()
     await db('places').where({ user_id: id }).del()
     await db('users').whereIn('id', [id, stranger]).del()
+  }
+})
+
+test('the group\'s saved route: members only, versioned saves (a stale one is a 409 with who changed it), its start the suggestion\'s, its stops on the view link without the start', async () => {
+  const saved = require('../api/saved')
+  const { eventRoute } = require('../lib/eventRoute')
+  const { fakeReq, fakeRes } = require('./helpers')
+  const { createSession } = require('../lib/auth')
+  await db('birds').insert([['eletro', 'Elegant Trogon'], ['whewoo', 'White-eared Hummingbird']].map(([speciesCode, comName]) => ({ speciesCode, comName, sciName: comName }))).onConflict('speciesCode').ignore()
+  const person = async (email) => (await db('users').insert({ email, password_hash: 'x', location: 'US-GA-139', state: 'GA', email_confirmed: true }).returning('*'))[0]
+  const matt = await person('plan-matt@example.com')
+  const sam = await person('plan-sam@example.com')
+  const stranger = await person('plan-stranger@example.com')
+  const as = (user) => {
+    const session = fakeRes(); createSession(session, user)
+    const cookie = String(session.headers['set-cookie']).split(';')[0]
+    return async (method, query, body) => { const res = fakeRes(); await saved(fakeReq({ method, headers: { cookie }, query, body }), res); return res }
+  }
+  try {
+    const [place] = await db('places').insert({ user_id: matt.id, name: 'Huachucas', state: 'AZ', location: 'US-AZ-019', range_mi: 0 }).returning('*')
+    await db('place_targets').insert(['eletro', 'whewoo'].map((code) => ({ place_id: place.id, species_code: code })))
+    const event = await eventAt(matt.id, place, { starts_on: dayFrom(10), ends_on: dayFrom(10), kind: 'bigday', scout: true, home_lat: 31.4049, home_lng: -110.2551 })
+    await db('event_members').where({ event_id: event.id, user_id: matt.id }).update({ display_name: 'Matt' })
+    await db('event_members').insert({ event_id: event.id, user_id: sam.id, display_name: 'Sam', role: 'member' })
+    const id = String(event.id)
+    const q = { kind: 'event-route-plan', id }
+    const mattCall = as(matt)
+    const samCall = as(sam)
+    const strangerCall = as(stranger)
+    const view = async () => { const res = fakeRes(); await saved(fakeReq({ query: { kind: 'event-view', token: event.view_token } }), res); return res.body }
+
+    // Nothing saved: the suggestion stands, and the view link has no route.
+    const none = await mattCall('GET', q)
+    assert.deepEqual([none.statusCode, none.body], [200, { start: null, stops: null, version: 0 }])
+    assert.equal((await view()).route, null)
+
+    // Not a member, or no such event: 404, as scouting.
+    const good = { start: { name: 'Our motel', lat: 31.52491, lng: -110.35512 }, stops: [{ locId: 'L1', name: 'Ramsey Canyon', lat: 31.4501234, lng: -110.3000049 }, { locId: null, name: '12 Main St', lat: 31.5, lng: -110.2 }], version: 0 }
+    for (const [method, body] of [['GET'], ['PUT', good], ['DELETE']]) {
+      assert.equal((await strangerCall(method, { ...q, version: '0' }, body)).statusCode, 404)
+      assert.equal((await mattCall(method, { ...q, id: '999999', version: '0' }, body)).statusCode, 404)
+    }
+
+    // Checked: a list of up to 8 stops, each with finite lat/lng, a name up to 200 characters and an eBird locId or null; a start likewise or null; a version.
+    const stop = good.stops[0]
+    for (const bad of [
+      { ...good, stops: 'L1' }, { ...good, stops: Array(9).fill(stop) }, { ...good, stops: [{ ...stop, lat: '31.4' }] }, { ...good, stops: [{ ...stop, lng: Infinity }] },
+      { ...good, stops: [{ ...stop, lat: 91 }] }, { ...good, stops: [{ ...stop, name: 'x'.repeat(201) }] }, { ...good, stops: [{ ...stop, name: 7 }] },
+      { ...good, stops: [{ ...stop, locId: 'X1' }] }, { ...good, stops: [{ ...stop, locId: 'L1x' }] }, { ...good, start: { name: 'Home', lat: 31 } },
+      { ...good, start: 'home' }, { ...good, version: -1 }, { ...good, version: undefined }
+    ]) assert.equal((await mattCall('PUT', q, bad)).statusCode, 400, JSON.stringify(bad).slice(0, 80))
+    assert.equal((await mattCall('GET', q)).body.version, 0)
+
+    // Saved at version 1: stops to 5 decimals, the start to 2 (no one's doorstep), who saved it by the name they go by.
+    const first = await mattCall('PUT', q, good)
+    assert.equal(first.statusCode, 200)
+    assert.deepEqual(first.body.start, { name: 'Our motel', lat: 31.52, lng: -110.36 })
+    assert.deepEqual(first.body.stops, [{ locId: 'L1', name: 'Ramsey Canyon', lat: 31.45012, lng: -110.3 }, { locId: null, name: '12 Main St', lat: 31.5, lng: -110.2 }])
+    assert.deepEqual([first.body.version, first.body.updated_by_name, first.body.updated_by_you, Boolean(first.body.updated_at)], [1, 'Matt', true, true])
+    const seen = await samCall('GET', q)
+    assert.deepEqual([seen.body.stops, seen.body.version, seen.body.updated_by_name, seen.body.updated_by_you], [first.body.stops, 1, 'Matt', false])
+    assert.doesNotMatch(JSON.stringify(seen.body), /@/, 'never an email')
+
+    // Sam changes it (version 2); Matt's save from version 1, or as if none were saved, is a 409 with the route as it is, by Sam.
+    const second = await samCall('PUT', q, { start: null, stops: [stop], version: 1 })
+    assert.deepEqual([second.statusCode, second.body.version, second.body.start, second.body.updated_by_name], [200, 2, null, 'Sam'])
+    for (const version of [1, 0, 7]) {
+      const stale = await mattCall('PUT', q, { ...good, version })
+      assert.equal(stale.statusCode, 409)
+      assert.ok(stale.body.error)
+      assert.deepEqual([stale.body.current.version, stale.body.current.updated_by_name, stale.body.current.updated_by_you, stale.body.current.stops.length], [2, 'Sam', false, 1])
+    }
+    const third = await mattCall('PUT', q, { ...good, version: 2 })
+    assert.deepEqual([third.statusCode, third.body.version, third.body.updated_by_name], [200, 3, 'Matt'])
+
+    // The view link: the stops, never the start.
+    const shown = await view()
+    assert.deepEqual(shown.route, { start: null, stops: third.body.stops })
+    assert.doesNotMatch(JSON.stringify(shown), /Our motel/)
+
+    // The suggestion starts at the saved start (before the event's spot); a from given still wins.
+    const feed = [{ speciesCode: 'whewoo', comName: 'White-eared Hummingbird', locName: 'Ramsey Canyon', locId: 'L1', lat: 31.45, lng: -110.3, obsDt: `${dayFrom(-1)} 09:00`, subId: 'S3', locationPrivate: false },
+      { speciesCode: 'eletro', comName: 'Elegant Trogon', locName: 'Ramsey Canyon', locId: 'L1', lat: 31.45, lng: -110.3, obsDt: `${dayFrom(-1)} 09:00`, subId: 'S3', locationPrivate: false }]
+    let tables = 0
+    const table = async (points) => { tables += 1; const f = (k) => points.map((a) => points.map((b) => (Math.abs(a.lat - b.lat) + Math.abs(a.lng - b.lng)) * k)); return { minutes: f(100), miles: f(70) } }
+    const drive = async (points) => ({ legs: points.slice(1).map(() => ({ minutes: 10, miles: 5 })), minutes: 10 * (points.length - 1), miles: 5 * (points.length - 1), geometry: points.map((p) => [p.lat, p.lng]) })
+    // Each species' feed: failing every time, or only the first time per species.
+    let speciesCalls = 0
+    const down = async () => { speciesCalls += 1; throw new Error('eBird 503') }
+    const tried = new Set()
+    const flaky = async (key, code) => { speciesCalls += 1; if (!tried.has(code)) { tried.add(code); throw new Error('eBird 503') } return feed.filter((r) => r.speciesCode === code) }
+    const tools = { fetchFeed: async () => feed, table, drive, retryMs: 0 }
+
+    // A feed failing twice: asked once more each, then the plan says it's incomplete and isn't kept.
+    const partial = await eventRoute(matt, event.id, { ...tools, fetchSpecies: down })
+    assert.deepEqual([partial.from, partial.incomplete, partial.routed, speciesCalls], [{ lat: 31.52, lng: -110.36 }, true, true, 4])
+    await eventRoute(matt, event.id, { ...tools, fetchSpecies: down })
+    assert.equal(tables, 2, 'an incomplete plan is not kept')
+    // Failing once: the retry gets it; complete, and kept.
+    speciesCalls = 0
+    const whole = await eventRoute(matt, event.id, { ...tools, fetchSpecies: flaky })
+    assert.deepEqual([whole.incomplete, speciesCalls, tables], [undefined, 4, 3])
+    assert.equal((await eventRoute(matt, event.id, { ...tools, fetchSpecies: flaky })).incomplete, undefined)
+    assert.equal(tables, 3, 'a complete plan is kept')
+    const asked = await eventRoute(matt, event.id, { ...tools, fetchSpecies: flaky, from: '31.6,-110.5' })
+    assert.deepEqual(asked.from, { lat: 31.6, lng: -110.5 })
+
+    // Cleared, by its version under the same rule: back to the suggestion and the event's spot.
+    assert.equal((await samCall('DELETE', q)).statusCode, 400)
+    const staleDelete = await samCall('DELETE', { ...q, version: '2' })
+    assert.deepEqual([staleDelete.statusCode, staleDelete.body.current.version], [409, 3])
+    const cleared = await samCall('DELETE', { ...q, version: '3' })
+    assert.deepEqual([cleared.statusCode, cleared.body], [200, { start: null, stops: null, version: 0 }])
+    assert.deepEqual((await mattCall('GET', q)).body, { start: null, stops: null, version: 0 })
+    assert.equal((await view()).route, null)
+    assert.deepEqual((await eventRoute(matt, event.id, { ...tools, fetchSpecies: flaky })).from, { lat: 31.4, lng: -110.26 })
+    // Saving again starts over at version 1; the route goes with the event.
+    assert.equal((await samCall('PUT', q, good)).body.version, 1)
+    await db('events').where({ id: event.id }).del()
+    assert.equal((await db('event_routes').where({ event_id: event.id })).length, 0)
+  } finally {
+    await db('events').where({ owner_id: matt.id }).del()
+    await db('places').where({ user_id: matt.id }).del()
+    await db('users').whereIn('id', [matt.id, sam.id, stranger.id]).del()
   }
 })
 
