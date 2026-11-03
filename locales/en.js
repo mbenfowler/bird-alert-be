@@ -5,13 +5,20 @@
  */
 module.exports = {
   format: {
-    dateTime: '{date}, {time}'
+    dateTime: '{date}, {time}',
+    colon: '{label}:'
   },
   // What a county is called where the reader lives (lib/regions countyWord), for prose.
   places: {
     county: 'county',
     municipality: 'municipality',
-    area: 'area'
+    area: 'area',
+    // The same, as "your county" (a French reader's word takes "ton" or "ta").
+    your: {
+      county: 'your county',
+      municipality: 'your municipality',
+      area: 'your area'
+    }
   },
   // The preview card under a shared ABA Code 4 or 5 sighting (lib/shareCard.js). Bitmap fonts: plain ASCII only.
   card: {
@@ -203,7 +210,7 @@ module.exports = {
       subject: 'Migration this week in {place}: {headline}',
       quietWeek: 'a quiet week',
       heading: 'Migration this week in {place}',
-      intro: 'Who turned up, who moved on, and who to expect next, from a year of eBird reports for your {countyWord}.',
+      intro: 'Who turned up, who moved on, and who to expect next, from a year of eBird reports for {yourArea}.',
       arrivals: { one: '{count} arrival', other: '{count} arrivals' },
       movedOnCount: '{count} moved on',
       toWatchFor: '{count} to watch for',
