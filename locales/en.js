@@ -131,7 +131,7 @@ module.exports = {
       yesterday: 'yesterday',
       daysAgo: { one: '{count} day ago', other: '{count} days ago' },
       underway: 'under way',
-      withGroup: 'with your group',
+      withGroup: 'With your group',
       subjectAround: { one: '{place}: {seen} of {count} target around · {when}', other: '{place}: {seen} of {count} targets around · {when}' },
       subjectAroundLifers: { one: '{place}: {seen} of {count} likely lifer around · {when}', other: '{place}: {seen} of {count} likely lifers around · {when}' },
       subjectNone: '{place}: no targets reported yet · {when}',

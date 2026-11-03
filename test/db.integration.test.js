@@ -2405,9 +2405,12 @@ test('Big Days scout by default, and scouting sends one report a day in the wind
     assert.match(mine[0].data.url, new RegExp(`/events/${trip.id}$`))
     assert.match(mine[0].body, /Elegant Trogon · South Fork, Cave Creek Canyon/)
     const mail = mails.find((m) => m.to === 'scout@example.com')
-    assert.equal(mail.subject, 'Scouting Chiricahuas: 5 days to go')
-    assert.match(mail.text, /Elegant Trogon · South Fork, Cave Creek Canyon/)
-    assert.match(mail.text, /Still unreported \(nothing in the last 2 weeks\): .*Flammulated Owl/)
+    // Reported yesterday at 07:10: new in the last 24 hours only before 07:10 today.
+    assert.match(mail.subject, /^Chiricahuas: (1 of 4 targets around|Elegant Trogon new today) · 5 days to go$/)
+    assert.match(mail.text, /Bird of the day: Elegant Trogon\nSouth Fork, Cave Creek Canyon · /)
+    assert.match(mail.text, /Where they’re being seen:\n- South Fork, Cave Creek Canyon \(yesterday\)\n   Elegant Trogon\n   Checklist on eBird: https:\/\/ebird.org\/checklist\/S1/)
+    assert.match(mail.text, /Still missing \(nothing in the last 2 weeks\): .*Flammulated Owl/)
+    assert.match(mail.html, /Turn off trip emails/)
     assert.match(mail.text, new RegExp(`/events/${trip.id}\\b`))
     assert.match(mail.text, /\/unsubscribe\//)
     assert.equal(first.reports, 2)
@@ -2447,7 +2450,7 @@ test('Big Days scout by default, and scouting sends one report a day in the wind
 
     // The email's wording when nothing turned up.
     const quiet = scoutingMessage({ ...user, email: 'scout@example.com' }, { place: 'Chiricahuas', daysToGo: 1, final: true, seen: [], unreported: ['Montezuma Quail'] })
-    assert.equal(quiet.subject, 'Final scouting report: Chiricahuas tomorrow')
+    assert.equal(quiet.subject, 'Chiricahuas: no targets reported yet · tomorrow')
     assert.match(quiet.text, /None of your target birds were reported there in the last 3 days\./)
   } finally {
     await db('events').whereIn('owner_id', [id, other]).del()
@@ -2641,9 +2644,9 @@ test('likely lifers: up to 50 when asked, for a place or an event; and they stan
     assert.ok(push, 'a report goes out though no targets were picked')
     assert.match(push.body, /^No targets picked yet, so here are likely lifers for your dates: Likely Bird 0 · Zu Spring/)
     const mail = mails.find((m) => m.to === 'likely@example.com')
-    assert.match(mail.text, /You haven’t picked target birds yet, so here are likely lifers for your dates\./)
-    assert.match(mail.text, new RegExp(`Pick your targets: .*/events/${solo.id}\\b`))
-    assert.match(mail.text, /Likely lifers reported there in the last 3 days:/)
+    assert.match(mail.text, /You haven’t picked target birds yet, so these are likely lifers for your dates\./)
+    assert.match(mail.text, new RegExp(`Pick target birds: .*/events/${solo.id}\\b`))
+    assert.match(mail.text, /\d+ of \d+ likely lifers reported in the last 3 days/)
 
     // A group event with no targets: each member's own likely lifers.
     await db('events').where({ id: solo.id }).del()
@@ -3062,14 +3065,14 @@ test('"Email me the scouting report now": members only, a confirmed address, bef
     assert.equal(mails.length, 1)
     assert.equal(last().to, 'pat-scout@example.com')
     assert.match(last().subject, /^Scouting report for Chiricahuas \(as of \d{1,2}:\d{2} [AP]M\)$/)
-    assert.match(last().text, /Here’s your scouting report for Chiricahuas, 10 days to go\./)
-    assert.match(last().text, /Your target birds reported there in the last 7 days:\n• Elegant Trogon · Ramsey Canyon · /)
-    assert.match(last().text, /Still unreported \(nothing in the last 2 weeks\): Flammulated Owl\n/)
+    assert.match(last().text, /^Chiricahuas · 10 days to go\n1 of 3 targets reported this week\n/)
+    assert.match(last().text, /Where they’re being seen:\n1\. Ramsey Canyon \(2 days ago\)\n   Elegant Trogon\n/)
+    assert.match(last().text, /Still missing \(nothing in the last 2 weeks\): Flammulated Owl\n/)
     assert.ok(!last().text.includes('Montezuma Quail'), 'reported 10 days ago: neither this week nor quiet')
     assert.ok(!last().text.includes('What’s being seen there this week'), 'targets reported: no fallback list')
-    assert.match(last().text, new RegExp(`Plan your route: \\S+/events/${event.id}\\b`))
-    assert.ok(!/Your (group’s )?route:/.test(last().text), 'no saved route, no route section')
-    assert.ok(!last().text.includes('/unsubscribe/'), 'asked for: not a trip note to turn off')
+    assert.match(last().text, new RegExp(`Your route:\nNo route saved yet\. Plan your route: \\S+/events/${event.id}#route`))
+    assert.ok(!last().text.includes('Meeting point'), 'no saved route, no stops')
+    assert.ok(!last().text.includes('/unsubscribe/') && !last().html.includes('Turn off trip emails'), 'asked for: not a trip email to turn off')
     // The morning report is left as it was.
     const member = await db('event_members').where({ event_id: event.id, user_id: pat.id }).first()
     assert.equal(require('../lib/places').dayOf(member.last_scout_sent_on), dayFrom(-1))
@@ -3081,14 +3084,16 @@ test('"Email me the scouting report now": members only, a confirmed address, bef
     assert.equal((await patCall(event.id)).statusCode, 200)
     assert.match(last().text, /Your group’s route:\nMeeting point: Our motel\n1\. Ramsey Canyon\n2\. Carr Canyon/)
     assert.ok(!last().text.includes('Plan your route'))
-    assert.match(last().text, /with your group, 10 days to go/)
+    assert.match(last().text, /^Chiricahuas · 10 days to go\nWith your group\n/)
+    assert.match(last().html, /Plan the route/)
 
     // No targets: likely lifers stand in.
     await db('event_targets').where({ event_id: event.id }).del()
     scouting.likelyFor = async () => ['whewoo', 'monqua']
     assert.equal((await patCall(event.id)).statusCode, 200)
-    assert.match(last().text, /You haven’t picked target birds yet, so here are likely lifers for your dates\./)
-    assert.match(last().text, /Likely lifers reported there in the last 7 days:\n• White-eared Hummingbird · Beatty Ranch · /)
+    assert.match(last().text, /You haven’t picked target birds yet, so these are likely lifers for your dates\./)
+    assert.match(last().text, /1 of 2 likely lifers reported this week/)
+    assert.match(last().text, /Bird of the day: White-eared Hummingbird\nBeatty Ranch · .*\nConfirmed by eBird reviewer/)
 
     // The 4th within the hour: 429, with how long to wait.
     const tooMany = await patCall(event.id)
@@ -3103,18 +3108,20 @@ test('"Email me the scouting report now": members only, a confirmed address, bef
     assert.equal((await patCall(event.id)).statusCode, 200)
     const text = last().text
     assert.ok(!text.includes('None of your target birds'), 'no targets: nothing to say of them')
-    const list = text.split('What’s being seen there this week:\n')[1].split('\n\n')[0].split('\n')
-    assert.deepEqual(list.map((l) => l.split(' · ')[0]), ['• White-eared Hummingbird', '• Acorn Woodpecker', '• Elegant Trogon', '• Rufous-winged Sparrow'])
-    assert.match(list[0], /· Beatty Ranch · .* · rare there$/)
-    assert.match(list[1], /^• Acorn Woodpecker · Sierra Vista · /, 'its newest report')
+    assert.ok(!text.includes('targets reported'), 'no targets: no bar')
+    const list = text.split('What’s being seen there this week:\n')[1].split('\n\n')[0]
+    assert.deepEqual(list.split('\n').filter((l) => /^\d\./.test(l)), ['1. Beatty Ranch (3 days ago)', '2. Sierra Vista (yesterday)', '3. Ramsey Canyon (2 days ago)', '4. San Pedro House (5 days ago)'])
+    assert.match(list, /1\. Beatty Ranch \(3 days ago\)\n   White-eared Hummingbird \(rare there\)\n   Checklist on eBird: https:\/\/ebird.org\/checklist\/S3/)
+    assert.match(list, /2\. Sierra Vista \(yesterday\)\n   Acorn Woodpecker\n/, 'its newest report')
     assert.ok(!text.includes('Montezuma Quail') && !text.includes('duck sp.'), 'older than a week, or not one species: left out')
-    assert.match(text, new RegExp(`Pick the birds you’re after and this report will follow them: \\S+/events/${event.id}\\b`))
+    assert.match(text, new RegExp(`Pick the birds you’re after and this report will follow them\\. \\S+/events/${event.id}\\b`))
 
     // Targets picked but none reported this week: said so, and what else is about.
     await db('event_targets').insert({ event_id: event.id, species_code: 'monqua', added_by: pat.id })
     assert.equal((await patCall(event.id)).statusCode, 200)
     assert.match(last().text, /None of your target birds were reported there in the last 7 days\./)
-    assert.match(last().text, /What’s being seen there this week:\n• White-eared Hummingbird/)
+    assert.match(last().text, /What’s being seen there this week:\n1\. Beatty Ranch/)
+    assert.match(last().text, /0 of 1 target reported this week/)
     assert.ok(!last().text.includes('Pick the birds you’re after'))
 
     // The day's mail used up: 503, and the try doesn't count against them.
@@ -3129,10 +3136,10 @@ test('"Email me the scouting report now": members only, a confirmed address, bef
     // On the day itself it still goes, worded for the day; the day before is the final report. Once it's over: 400.
     await db('events').where({ id: event.id }).update({ starts_on: dayFrom(0), ends_on: dayFrom(0) })
     assert.equal((await patCall(event.id)).statusCode, 200)
-    assert.match(last().text, /Your scouting report for Chiricahuas: the trip is today\./)
+    assert.match(last().text, /^Chiricahuas · today\n/)
     await db('events').where({ id: event.id }).update({ starts_on: dayFrom(1), ends_on: dayFrom(1) })
     assert.equal((await patCall(event.id)).statusCode, 200)
-    assert.match(last().text, /Your final scouting report for Chiricahuas: the trip is tomorrow\./)
+    assert.match(last().text, /^Chiricahuas · tomorrow\n/)
     await db('events').where({ id: event.id }).update({ starts_on: dayFrom(-3), ends_on: dayFrom(-1) })
     const over = await patCall(event.id)
     assert.deepEqual([over.statusCode, over.body], [400, { error: 'event_over' }])
