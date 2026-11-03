@@ -2955,7 +2955,9 @@ test('the migration: every trip becomes a solo event at its place, with its date
       [place.id, 'Chiricahuas', 'AZ', 'US-AZ-003', 15, 31.9, dayFrom(30), dayFrom(32), 'trip', false, 21]
     ])
     assert.notEqual(made[0].invite_token, made[1].invite_token)
-    const members = await db('event_members').whereIn('event_id', made.map((e) => e.id)).orderBy('event_id')
+    // In the events' order (by date): the migration reads the trips in no set order, so their event ids needn't follow it.
+    const order = made.map((e) => e.id)
+    const members = (await db('event_members').whereIn('event_id', order)).sort((x, y) => order.indexOf(x.event_id) - order.indexOf(y.event_id))
     assert.deepEqual(members.map((m) => [m.user_id, m.role, m.display_name, m.last_scout_sent_on && dayOf(m.last_scout_sent_on), m.started_notice_at?.toISOString() ?? null, m.archived_at]), [
       [user.id, 'organizer', null, dayFrom(0), sent.toISOString(), null],
       [user.id, 'organizer', null, null, null, null]

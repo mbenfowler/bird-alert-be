@@ -198,7 +198,7 @@ test('a timed route is an itinerary: the drive into each stop, the time there (s
     'Meeting point: Sierra Vista Motel',
     '↓ 24 min drive · 12 mi',
     '1. Ramsey Canyon Preserve · 45 min there (6 targets)',
-    '↓ 15 min drive · 4.2 mi',
+    '↓ 15 min drive · 4 mi',
     '2. Miller Canyon · 30 min there (suggested, 2 targets)',
     '↓ 40 min drive · 18 mi',
     '3. A friend\'s feeders · 15 min there (suggested)',
@@ -212,6 +212,16 @@ test('a timed route is an itinerary: the drive into each stop, the time there (s
   assert.match(mail.html, />Driving 1 h 49 min · At stops 3 h 30 min · Total 5 h 19 min<\/div>/)
   assert.match(mail.html, />Plan the route<\/a>/, 'the button stays')
   assert.ok(!mail.text.includes('Drive times weren'))
+})
+
+test('a reader outside the US gets the drives in km (the API keeps miles)', () => {
+  const sam = { ...pat, email: 'sam@example.ca', state: 'CA-ON' }
+  const section = scoutingMessage(sam, { ...daily, route: timedRoute }).text.split('Your route:\n')[1].split('\n\n')[0]
+  assert.match(section, /^Meeting point: Sierra Vista Motel\n↓ 24 min drive · 20 km\n1\. Ramsey Canyon Preserve/)
+  assert.match(section, /↓ 15 min drive · 7 km\n.*\n↓ 40 min drive · 29 km\n.*\n↓ 30 min drive · 25 km\n/)
+  assert.doesNotMatch(section, / mi\b/)
+  assert.match(scoutingMessage(sam, { ...daily, route: timedRoute }).html, /↓ 24 min drive · 20 km<\/div>/)
+  assert.match(scoutingMessage({ ...pat, state: 'AZ' }, { ...daily, route: timedRoute }).text, /↓ 24 min drive · 12 mi\n/, 'a US state: miles')
 })
 
 test('a timed route OSRM couldn\'t drive: no drive lines, the stays alone, and it says so', () => {

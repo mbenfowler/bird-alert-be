@@ -177,8 +177,7 @@ module.exports = {
         noDriveTimes: 'Drive times weren’t available, so the total is the time at stops alone.',
         minutes: '{m} min',
         hours: '{h} h',
-        hoursMinutes: '{h} h {m} min',
-        miles: '{n} mi'
+        hoursMinutes: '{h} h {m} min'
       },
       openEvent: 'Open the event',
       unsubscribe: 'Turn off trip emails'
