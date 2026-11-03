@@ -101,13 +101,13 @@ module.exports = {
     hi: 'Salut,',
     confirm: {
       subject: 'Confirme ton courriel pour Bird Alert',
-      body: 'Merci de t’être inscrit à Bird Alert ! Clique sur le lien de confirmation ci-dessous et je vais commencer à t’envoyer tes oiseaux ici :',
-      ignore: 'Si tu ne t’es pas inscrit, tu peux ignorer ce message.'
+      body: 'Merci pour ton inscription à Bird Alert ! Clique sur le lien de confirmation ci-dessous et je vais commencer à t’envoyer tes oiseaux ici :',
+      ignore: 'Si ce n’est pas toi qui as créé ce compte, tu peux ignorer ce message.'
     },
     reminder: {
       subject: 'Confirme ton courriel pour commencer à recevoir tes alertes d’oiseaux',
-      body: 'On dirait que tu t’es inscrit à Bird Alert hier, mais tu n’as pas encore confirmé ton courriel. Clique sur le lien de confirmation ci-dessous et je vais commencer à t’envoyer tes oiseaux ici :',
-      ignore: 'Tu ne t’es pas inscrit ? Ignore ce message ; c’est le seul rappel.'
+      body: 'On dirait que tu as créé ton compte Bird Alert hier, mais tu n’as pas encore confirmé ton courriel. Clique sur le lien de confirmation ci-dessous et je vais commencer à t’envoyer tes oiseaux ici :',
+      ignore: 'Ce n’est pas toi qui as créé ce compte ? Ignore ce message ; c’est le seul rappel.'
     },
     reset: {
       subject: 'Réinitialise ton mot de passe Bird Alert',
@@ -272,7 +272,7 @@ module.exports = {
     'Incorrect email or password': 'Courriel ou mot de passe incorrect',
     'Please enter a valid email address': 'Entre une adresse courriel valide',
     'Please log in': 'Connecte-toi',
-    'Not logged in': 'Pas connecté',
+    'Not logged in': 'Connexion requise',
     'Too many attempts. Please try again later.': 'Trop de tentatives. Réessaie plus tard.',
     'That account no longer exists': 'Ce compte n’existe plus',
     'This link is invalid or has expired': 'Ce lien n’est pas valide ou a expiré',
