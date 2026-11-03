@@ -137,7 +137,23 @@ module.exports = {
       targets: 'Your targets and trip:',
       standIn: 'You haven’t picked target birds yet, so here are likely lifers for your dates.',
       pickTargets: 'Pick your targets:',
-      standInSeenHeading: 'Likely lifers reported there in the last 3 days:'
+      standInSeenHeading: 'Likely lifers reported there in the last 3 days:',
+      // The report asked for from the event page ("Email me the scouting report now"): the last 7 days, any day before the event.
+      requestedSubject: 'Scouting report for {place} (as of {time})',
+      todayIntro: 'Your scouting report for {place}: the trip is today.',
+      onNowIntro: 'Your scouting report for {place}, while the trip is on.',
+      seenHeadingWeek: 'Your target birds reported there in the last 7 days:',
+      standInSeenHeadingWeek: 'Likely lifers reported there in the last 7 days:',
+      noneSeenWeek: 'None of your target birds were reported there in the last 7 days.',
+      thisWeekHeading: 'What’s being seen there this week:',
+      thisWeekNone: 'Nothing has been reported there in the last 7 days.',
+      notable: 'rare there',
+      pickTargetsInvite: 'Pick the birds you’re after and this report will follow them:',
+      routeHeading: 'Your route:',
+      groupRouteHeading: 'Your group’s route:',
+      routeMeet: 'Meeting point: {name}',
+      routeStop: '{n}. {name}',
+      planRoute: 'Plan your route:'
     },
     digest: {
       subject: { one: '{bird} was spotted near you', other: '{count} birds from your watch list were spotted near you' },
