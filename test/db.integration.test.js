@@ -2791,6 +2791,9 @@ test('the group\'s saved route: members only, versioned saves (a stale one is a 
   await db('birds').insert([['eletro', 'Elegant Trogon'], ['whewoo', 'White-eared Hummingbird']].map(([speciesCode, comName]) => ({ speciesCode, comName, sciName: comName }))).onConflict('speciesCode').ignore()
   const person = async (email) => (await db('users').insert({ email, password_hash: 'x', location: 'US-GA-139', state: 'GA', email_confirmed: true }).returning('*'))[0]
   const matt = await person('plan-matt@example.com')
+  const routing = require('../lib/routing')
+  const realDrive = routing.drive
+  const recentObservations = ebird.recentObservations
   const sam = await person('plan-sam@example.com')
   const stranger = await person('plan-stranger@example.com')
   const as = (user) => {
@@ -2810,6 +2813,14 @@ test('the group\'s saved route: members only, versioned saves (a stale one is a 
     const samCall = as(sam)
     const strangerCall = as(stranger)
     const view = async () => { const res = fakeRes(); await saved(fakeReq({ query: { kind: 'event-view', token: event.view_token } }), res); return res.body }
+    // The area's feed (both targets at Ramsey Canyon this week) and OSRM: stand-ins, 10 minutes and 5 miles a leg.
+    await db('nearby_cache').where('key', 'like', 'api:%').del()
+    ebird.recentObservations = async () => [
+      { speciesCode: 'whewoo', comName: 'White-eared Hummingbird', locName: 'Ramsey Canyon', locId: 'L1', lat: 31.45, lng: -110.3, obsDt: `${dayFrom(-1)} 09:00`, subId: 'S3', locationPrivate: false, obsValid: true },
+      { speciesCode: 'eletro', comName: 'Elegant Trogon', locName: 'Ramsey Canyon', locId: 'L1', lat: 31.45, lng: -110.3, obsDt: `${dayFrom(-2)} 09:00`, subId: 'S4', locationPrivate: false, obsValid: true }
+    ]
+    let roads = 'up'
+    routing.drive = async (points) => (roads === 'down' ? null : { legs: points.slice(1).map(() => ({ minutes: 10, miles: 5 })), minutes: 10 * (points.length - 1), miles: 5 * (points.length - 1), geometry: [] })
 
     // Nothing saved: the suggestion stands, and the view link has no route.
     const none = await mattCall('GET', q)
@@ -2817,7 +2828,7 @@ test('the group\'s saved route: members only, versioned saves (a stale one is a 
     assert.equal((await view()).route, null)
 
     // Not a member, or no such event: 404, as scouting.
-    const good = { start: { name: 'Our motel', lat: 31.52491, lng: -110.35512 }, stops: [{ locId: 'L1', name: 'Ramsey Canyon', lat: 31.4501234, lng: -110.3000049 }, { locId: null, name: '12 Main St', lat: 31.5, lng: -110.2 }], version: 0 }
+    const good = { start: { name: 'Our motel', lat: 31.52491, lng: -110.35512 }, stops: [{ locId: 'L1', name: 'Ramsey Canyon', lat: 31.4501234, lng: -110.3000049 }, { locId: null, name: '12 Main St', lat: 31.5, lng: -110.2, stay_min: 44.6 }], version: 0 }
     for (const [method, body] of [['GET'], ['PUT', good], ['DELETE']]) {
       assert.equal((await strangerCall(method, { ...q, version: '0' }, body)).statusCode, 404)
       assert.equal((await mattCall(method, { ...q, id: '999999', version: '0' }, body)).statusCode, 404)
@@ -2829,7 +2840,7 @@ test('the group\'s saved route: members only, versioned saves (a stale one is a 
       { ...good, stops: 'L1' }, { ...good, stops: Array(9).fill(stop) }, { ...good, stops: [{ ...stop, lat: '31.4' }] }, { ...good, stops: [{ ...stop, lng: Infinity }] },
       { ...good, stops: [{ ...stop, lat: 91 }] }, { ...good, stops: [{ ...stop, name: 'x'.repeat(201) }] }, { ...good, stops: [{ ...stop, name: 7 }] },
       { ...good, stops: [{ ...stop, locId: 'X1' }] }, { ...good, stops: [{ ...stop, locId: 'L1x' }] }, { ...good, start: { name: 'Home', lat: 31 } },
-      { ...good, start: 'home' }, { ...good, version: -1 }, { ...good, version: undefined }
+      { ...good, start: 'home' }, { ...good, version: -1 }, { ...good, version: undefined }, { ...good, stops: [{ ...stop, stay_min: 481 }] }, { ...good, stops: [{ ...stop, stay_min: '30' }] }
     ]) assert.equal((await mattCall('PUT', q, bad)).statusCode, 400, JSON.stringify(bad).slice(0, 80))
     assert.equal((await mattCall('GET', q)).body.version, 0)
 
@@ -2837,27 +2848,42 @@ test('the group\'s saved route: members only, versioned saves (a stale one is a 
     const first = await mattCall('PUT', q, good)
     assert.equal(first.statusCode, 200)
     assert.deepEqual(first.body.start, { name: 'Our motel', lat: 31.52, lng: -110.36 })
-    assert.deepEqual(first.body.stops, [{ locId: 'L1', name: 'Ramsey Canyon', lat: 31.45012, lng: -110.3 }, { locId: null, name: '12 Main St', lat: 31.5, lng: -110.2 }])
+    // Each stop with its stay (the group's, to the minute; null: the suggestion), its targets this week and the suggested stay; the drives and totals.
+    assert.deepEqual(first.body.stops, [
+      { locId: 'L1', name: 'Ramsey Canyon', lat: 31.45012, lng: -110.3, stay_min: null, targets_here: 2, suggested_stay_min: 30 },
+      { locId: null, name: '12 Main St', lat: 31.5, lng: -110.2, stay_min: 45, targets_here: 0, suggested_stay_min: 15 }
+    ])
+    assert.deepEqual([first.body.legs, first.body.totals, first.body.routed], [[{ min: 10, mi: 5 }, { min: 10, mi: 5 }], { drive_min: 20, stay_min: 75, total_min: 95 }, true])
+    const stored = (await db('event_routes').where({ event_id: event.id }).first()).stops
+    assert.deepEqual(stored.map((s) => s.stay_min), [undefined, 45], 'only a stay the group set is stored')
     assert.deepEqual([first.body.version, first.body.updated_by_name, first.body.updated_by_you, Boolean(first.body.updated_at)], [1, 'Matt', true, true])
     const seen = await samCall('GET', q)
     assert.deepEqual([seen.body.stops, seen.body.version, seen.body.updated_by_name, seen.body.updated_by_you], [first.body.stops, 1, 'Matt', false])
+    assert.deepEqual([seen.body.legs, seen.body.totals], [first.body.legs, first.body.totals], 'a GET answers as the PUT did')
+    // OSRM down: no legs, the total the stays alone.
+    roads = 'down'
+    const unrouted = (await samCall('GET', q)).body
+    assert.deepEqual([unrouted.routed, unrouted.legs, unrouted.totals], [false, null, { drive_min: null, stay_min: 75, total_min: 75 }])
+    roads = 'up'
     assert.doesNotMatch(JSON.stringify(seen.body), /@/, 'never an email')
 
     // Sam changes it (version 2); Matt's save from version 1, or as if none were saved, is a 409 with the route as it is, by Sam.
     const second = await samCall('PUT', q, { start: null, stops: [stop], version: 1 })
     assert.deepEqual([second.statusCode, second.body.version, second.body.start, second.body.updated_by_name], [200, 2, null, 'Sam'])
+    assert.deepEqual([second.body.legs, second.body.totals], [[null], { drive_min: 0, stay_min: 30, total_min: 30 }], 'no start: no drive into the first stop')
     for (const version of [1, 0, 7]) {
       const stale = await mattCall('PUT', q, { ...good, version })
       assert.equal(stale.statusCode, 409)
       assert.ok(stale.body.error)
       assert.deepEqual([stale.body.current.version, stale.body.current.updated_by_name, stale.body.current.updated_by_you, stale.body.current.stops.length], [2, 'Sam', false, 1])
+      assert.deepEqual(stale.body.current.totals, second.body.totals, 'the current route as GET gives it')
     }
     const third = await mattCall('PUT', q, { ...good, version: 2 })
-    assert.deepEqual([third.statusCode, third.body.version, third.body.updated_by_name], [200, 3, 'Matt'])
+    assert.deepEqual([third.statusCode, third.body.version, third.body.updated_by_name, third.body.stops[1].stay_min], [200, 3, 'Matt', 45])
 
-    // The view link: the stops, never the start.
+    // The view link: the stops as saved, never the start.
     const shown = await view()
-    assert.deepEqual(shown.route, { start: null, stops: third.body.stops })
+    assert.deepEqual(shown.route, { start: null, stops: stored })
     assert.doesNotMatch(JSON.stringify(shown), /Our motel/)
 
     // The suggestion starts at the saved start (before the event's spot); a from given still wins.
@@ -2904,6 +2930,8 @@ test('the group\'s saved route: members only, versioned saves (a stale one is a 
     await db('events').where({ owner_id: matt.id }).del()
     await db('places').where({ user_id: matt.id }).del()
     await db('users').whereIn('id', [matt.id, sam.id, stranger.id]).del()
+    ebird.recentObservations = recentObservations
+    routing.drive = realDrive
   }
 })
 
@@ -2927,7 +2955,9 @@ test('the migration: every trip becomes a solo event at its place, with its date
       [place.id, 'Chiricahuas', 'AZ', 'US-AZ-003', 15, 31.9, dayFrom(30), dayFrom(32), 'trip', false, 21]
     ])
     assert.notEqual(made[0].invite_token, made[1].invite_token)
-    const members = await db('event_members').whereIn('event_id', made.map((e) => e.id)).orderBy('event_id')
+    // In the events' order (by date): the migration reads the trips in no set order, so their event ids needn't follow it.
+    const order = made.map((e) => e.id)
+    const members = (await db('event_members').whereIn('event_id', order)).sort((x, y) => order.indexOf(x.event_id) - order.indexOf(y.event_id))
     assert.deepEqual(members.map((m) => [m.user_id, m.role, m.display_name, m.last_scout_sent_on && dayOf(m.last_scout_sent_on), m.started_notice_at?.toISOString() ?? null, m.archived_at]), [
       [user.id, 'organizer', null, dayFrom(0), sent.toISOString(), null],
       [user.id, 'organizer', null, null, null, null]
@@ -3037,6 +3067,10 @@ test('"Email me the scouting report now": members only, a confirmed address, bef
   const recentObservations = ebird.recentObservations
   const likelyFor = scouting.likelyFor
   const sendMail = mailer.sendMail
+  const routing = require('../lib/routing')
+  const realDrive = routing.drive
+  // OSRM stand-in: 10 minutes and 5 miles a leg.
+  routing.drive = async (points) => ({ legs: points.slice(1).map(() => ({ minutes: 10, miles: 5 })), minutes: 10 * (points.length - 1), miles: 5 * (points.length - 1), geometry: [] })
   let calls = 0
   ebird.recentObservations = async (region) => { calls += 1; assert.equal(region, 'US-AZ-003'); return feed }
   const mails = []
@@ -3084,7 +3118,8 @@ test('"Email me the scouting report now": members only, a confirmed address, bef
     const plan = await routePlan.putPlan(pat, event.id, { start: { name: 'Our motel', lat: 31.9, lng: -109.2 }, stops: [{ locId: 'L1', name: 'Ramsey Canyon', lat: 31.45, lng: -110.3 }, { locId: null, name: 'Carr Canyon', lat: 31.43, lng: -110.29 }], version: 0 })
     assert.ok(plan.ok)
     assert.equal((await patCall(event.id)).statusCode, 200)
-    assert.match(last().text, /Your group’s route:\nMeeting point: Our motel\n1\. Ramsey Canyon\n2\. Carr Canyon/)
+    // As the app shows it (the same routeDetails): Ramsey Canyon has 1 target this week (Elegant Trogon), Carr Canyon is a typed point.
+    assert.match(last().text, /Your group’s route:\nMeeting point: Our motel\n↓ 10 min drive · 5 mi\n1\. Ramsey Canyon · 20 min there \(suggested, 1 target\)\n↓ 10 min drive · 5 mi\n2\. Carr Canyon · 15 min there \(suggested\)\nDriving 20 min · At stops 35 min · Total 55 min\n/)
     assert.ok(!last().text.includes('Plan your route'))
     assert.match(last().text, /^Chiricahuas · 10 days to go\nWith your group\n/)
     assert.match(last().html, /Plan the route/)
@@ -3153,6 +3188,7 @@ test('"Email me the scouting report now": members only, a confirmed address, bef
     ebird.recentObservations = recentObservations
     scouting.likelyFor = likelyFor
     mailer.sendMail = sendMail
+    routing.drive = realDrive
     await db('nearby_cache').where('key', 'like', 'scout-email:%').del()
     await db('events').where({ owner_id: pat.id }).del()
     await db('places').where({ user_id: pat.id }).del()

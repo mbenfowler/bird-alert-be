@@ -276,3 +276,15 @@ test('a stop\'s species include those of personal spots folded into it; names co
   const none = await planRoute({ places: [], reported: 0, from: null }, { table: lineTable(), drive: lineDrive() })
   assert.deepEqual(none.names, {})
 })
+
+test('the suggested route: each stop has its targets this week (folded spots included) and a suggested stay, with their total', async () => {
+  const { suggestStay } = require('../lib/eventRoute')
+  // A: 2 targets, plus 1 more at a personal spot about 300 m away that folds into it; B: 1 target, a degree east.
+  const places = buildPlaces([rep('x', 'A', -110), rep('y', 'A', -110), rep('z', 'P', -110.003, { priv: true }), rep('w', 'B', -109.9)])
+  const plan = await planRoute({ places, reported: 4, from: { lat: 31, lng: -110.1 } }, { table: lineTable(), drive: lineDrive() })
+  assert.deepEqual(plan.stops.map((s) => [s.locId, s.targets_here, s.suggested_stay_min]), [['A', 3, suggestStay(3)], ['B', 1, suggestStay(1)]])
+  assert.deepEqual([suggestStay(3), suggestStay(1)], [35, 20])
+  assert.equal(plan.stay_min_total, 55)
+  const none = await planRoute({ places: [], reported: 0, from: null }, { table: lineTable(), drive: lineDrive() })
+  assert.equal(none.stay_min_total, 0)
+})

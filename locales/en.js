@@ -165,6 +165,20 @@ module.exports = {
       noRoute: 'No route saved yet.',
       planRouteButton: 'Plan your route',
       planTheRoute: 'Plan the route',
+      // The saved route as an itinerary (lib/scoutMail): the drive into each stop, the time there, the day's totals.
+      itinerary: {
+        drive: '↓ {time} drive · {distance}',
+        stop: '{n}. {name} · {time} there',
+        suggested: 'suggested',
+        targets: { one: '{count} target', other: '{count} targets' },
+        notes: '({notes})',
+        totals: 'Driving {drive} · At stops {stay} · Total {total}',
+        totalsNoDrive: 'At stops {stay}',
+        noDriveTimes: 'Drive times weren’t available, so the total is the time at stops alone.',
+        minutes: '{m} min',
+        hours: '{h} h',
+        hoursMinutes: '{h} h {m} min'
+      },
       openEvent: 'Open the event',
       unsubscribe: 'Turn off trip emails'
     },
@@ -249,6 +263,7 @@ module.exports = {
     'A stop\'s name is text, up to 200 characters': 'A stop\'s name is text, up to 200 characters',
     'A start\'s name is text, up to 200 characters': 'A start\'s name is text, up to 200 characters',
     'A stop\'s locId is an eBird location id (like L123456) or null': 'A stop\'s locId is an eBird location id (like L123456) or null',
+    'A stop\'s stay_min is minutes from 0 to 480, or null for the suggestion': 'A stop\'s stay_min is minutes from 0 to 480, or null for the suggestion',
     'version is the version the route was read at (0 when none was saved)': 'version is the version the route was read at (0 when none was saved)',
     'Choose a name the group will see (up to 40 characters)': 'Choose a name the group will see (up to 40 characters)',
     'Give the event a name': 'Give the event a name',
