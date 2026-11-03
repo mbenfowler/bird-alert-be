@@ -83,7 +83,7 @@ test('a sighting card carries its ABA code chip for codes 3-5 only', () => {
 test('plain-text copies read as typed: no HTML escapes', () => {
   const { scoutingMessage } = require('../lib/mailer')
   const user = { email: 'pat@example.com', locale: 'en', unsubscribe_token: 'u' }
-  const mail = scoutingMessage(user, { eventId: 1, place: "Beatty's & Ramsey", daysToGo: 5, final: false, seen: [{ bird: "Lucifer Hummingbird", where: "Beatty's Guest Ranch", date: 'Nov 1', evidence: '' }], unreported: [], group: false, standIn: false })
+  const mail = scoutingMessage(user, { eventId: 1, place: "Beatty's & Ramsey", daysToGo: 5, final: false, seen: [{ code: 'lucihu', bird: "Lucifer Hummingbird", where: "Beatty's Guest Ranch", obsDt: '2026-11-01 08:00', date: 'Nov 1', evidence: '' }], unreported: [], group: false, standIn: false })
   assert.match(mail.text, /Beatty's Guest Ranch/)
   assert.match(mail.text, /Beatty's & Ramsey/)
   assert.doesNotMatch(mail.text, /&#39;|&amp;/)
