@@ -2834,7 +2834,7 @@ test('the group\'s saved route: members only, versioned saves (a stale one is a 
 
     // Nothing saved: the suggestion stands, and the view link has no route.
     const none = await mattCall('GET', q)
-    assert.deepEqual([none.statusCode, none.body], [200, { start: null, stops: null, version: 0 }])
+    assert.deepEqual([none.statusCode, none.body], [200, { start: null, stops: null, version: 0, position: null }])
     assert.equal((await view()).route, null)
 
     // Not a member, or no such event: 404, as scouting.
@@ -2928,8 +2928,8 @@ test('the group\'s saved route: members only, versioned saves (a stale one is a 
     const staleDelete = await samCall('DELETE', { ...q, version: '2' })
     assert.deepEqual([staleDelete.statusCode, staleDelete.body.current.version], [409, 3])
     const cleared = await samCall('DELETE', { ...q, version: '3' })
-    assert.deepEqual([cleared.statusCode, cleared.body], [200, { start: null, stops: null, version: 0 }])
-    assert.deepEqual((await mattCall('GET', q)).body, { start: null, stops: null, version: 0 })
+    assert.deepEqual([cleared.statusCode, cleared.body], [200, { start: null, stops: null, version: 0, position: null }])
+    assert.deepEqual((await mattCall('GET', q)).body, { start: null, stops: null, version: 0, position: null })
     assert.equal((await view()).route, null)
     assert.deepEqual((await eventRoute(matt, event.id, { ...tools, fetchSpecies: flaky })).from, { lat: 31.4, lng: -110.26 })
     // Saving again starts over at version 1; the route goes with the event.
@@ -3629,5 +3629,143 @@ test('"On my eBird checklist": each member ticks birds for themselves; members o
     await restore()
     await db('events').whereIn('id', [event.id, other.id]).del()
     await db('users').whereIn('id', [...ids, outsider.id]).del()
+  }
+})
+
+test('the group\'s route: a meeting time on the start, and where the group is, shared by everyone (latest tap wins, never a version bump)', async () => {
+  const saved = require('../api/saved')
+  const { fakeReq, fakeRes } = require('./helpers')
+  const { createSession } = require('../lib/auth')
+  const routing = require('../lib/routing')
+  const realDrive = routing.drive
+  const recentObservations = ebird.recentObservations
+  ebird.recentObservations = async () => []
+  routing.drive = async (points) => ({ legs: points.slice(1).map(() => ({ minutes: 10, miles: 5 })), minutes: 10, miles: 5, geometry: [] })
+  const person = async (email) => (await db('users').insert({ email, password_hash: 'x', location: 'US-AZ-003', state: 'AZ', email_confirmed: true }).returning('*'))[0]
+  const matt = await person('position-matt@example.com')
+  const sam = await person('position-sam@example.com')
+  const stranger = await person('position-stranger@example.com')
+  const as = (user) => {
+    const session = fakeRes(); createSession(session, user)
+    const cookie = String(session.headers['set-cookie']).split(';')[0]
+    return async (method, query, body) => { const res = fakeRes(); await saved(fakeReq({ method, headers: { cookie }, query, body }), res); return res }
+  }
+  try {
+    const event = await eventAt(matt.id, { id: null, name: 'Big Day', state: 'AZ', location: 'US-AZ-003' }, { starts_on: dayFrom(0), ends_on: dayFrom(0), kind: 'bigday', timezone: 'America/Phoenix' })
+    await db('event_members').where({ event_id: event.id, user_id: matt.id }).update({ display_name: 'Matt' })
+    await db('event_members').insert({ event_id: event.id, user_id: sam.id, display_name: 'Sam', role: 'member' })
+    const id = String(event.id)
+    const plan = { kind: 'event-route-plan', id }
+    const here = { kind: 'event-route-position', id }
+    const mattCall = as(matt)
+    const samCall = as(sam)
+    const stops = [1, 2, 3].map((n) => ({ locId: `L${n}`, name: `Stop ${n}`, lat: 31.4 + n / 100, lng: -110.3 }))
+    const start = { name: 'Sierra Vista Motel', lat: 31.55, lng: -110.3 }
+
+    // No route saved: nowhere to be.
+    assert.equal((await mattCall('POST', here, { stop: 0 })).statusCode, 409)
+
+    // The meeting time: 'HH:MM' 24-hour, kept in the start; null or absent is none; anything else a 400.
+    for (const time of ['5:15', '24:00', '05:60', '0515', 515, '05:15 AM', true]) {
+      assert.equal((await mattCall('PUT', plan, { start: { ...start, time }, stops, version: 0 })).statusCode, 400, String(time))
+    }
+    const timed = await mattCall('PUT', plan, { start: { ...start, time: '05:15' }, stops, version: 0 })
+    assert.deepEqual([timed.statusCode, timed.body.start, timed.body.position], [200, { ...start, lat: 31.55, lng: -110.3, time: '05:15' }, null])
+    assert.equal((await samCall('GET', plan)).body.start.time, '05:15', 'a GET gives it back')
+    const untimed = await mattCall('PUT', plan, { start: { ...start, time: null }, stops, version: 1 })
+    assert.deepEqual([untimed.body.start, untimed.body.version], [{ ...start, lat: 31.55, lng: -110.3 }, 2])
+    const v3 = await mattCall('PUT', plan, { start: { ...start, time: '05:15' }, stops, version: 2 })
+    assert.equal(v3.body.version, 3)
+
+    // Members only: 404 to anyone else, or no such event.
+    assert.equal((await as(stranger)('POST', here, { stop: 0 })).statusCode, 404)
+    assert.equal((await mattCall('POST', { ...here, id: '999999' }, { stop: 0 })).statusCode, 404)
+    // Checked: an index on the route (-1 the meeting point) or null; a time.
+    for (const body of [{ stop: 3 }, { stop: -2 }, { stop: 1.5 }, { stop: '1' }, { stop: 0, at: 'yesterday' }, { stop: 0, at: 12 }]) {
+      assert.equal((await mattCall('POST', here, body)).statusCode, 400, JSON.stringify(body))
+    }
+
+    // Sam taps "We're here" at stop 2 (index 1): everyone sees it, by name, and the version stays.
+    const t = (min) => new Date(Date.now() - min * 60_000).toISOString()
+    const tenAgo = t(10)
+    const tap = await samCall('POST', here, { stop: 1, at: tenAgo })
+    assert.deepEqual([tap.statusCode, tap.body], [200, { position: { stop: 1, at: tenAgo, by_name: 'Sam', by_you: true }, applied: true }])
+    const seen = (await mattCall('GET', plan)).body
+    assert.deepEqual([seen.position.stop, seen.position.by_name, seen.position.by_you, seen.version], [1, 'Sam', false, 3])
+    assert.doesNotMatch(JSON.stringify(seen.position), /@/, 'never an email')
+
+    // Matt's phone was offline: his earlier tap (stop 1, 20 minutes ago) syncs now and changes nothing.
+    const late = await mattCall('POST', here, { stop: 0, at: t(20) })
+    assert.deepEqual([late.statusCode, late.body.applied, late.body.position.stop, late.body.position.by_name], [200, false, 1, 'Sam'])
+    // A newer one wins; at the meeting point is -1.
+    const newer = await mattCall('POST', here, { stop: -1, at: t(5) })
+    assert.deepEqual([newer.body.applied, newer.body.position.stop, newer.body.position.by_you], [true, -1, true])
+    const next = await mattCall('POST', here, { stop: 2, at: t(1) })
+    assert.deepEqual([next.body.applied, next.body.position.stop], [true, 2])
+
+    // A tap from the future is taken as now: a later real tap still wins over it.
+    const before = Date.now()
+    const future = await samCall('POST', here, { stop: 1, at: new Date(Date.now() + 3_600_000).toISOString() })
+    const at = Date.parse(future.body.position.at)
+    assert.ok(future.body.applied && at >= before - 1000 && at <= Date.now(), 'clamped to now')
+    await new Promise((resolve) => setTimeout(resolve, 5))
+    assert.equal((await mattCall('POST', here, { stop: 0 })).body.position.stop, 0, 'no at: now')
+
+    // None of it touched the version: an edit from version 3 still saves.
+    assert.equal((await db('event_routes').where({ event_id: event.id }).first()).version, 3)
+    // The stops change so the index is past the end: no position; one still on it stays.
+    await mattCall('POST', here, { stop: 2, at: new Date().toISOString() })
+    const shorter = await samCall('PUT', plan, { start: { ...start, time: '05:15' }, stops: stops.slice(0, 2), version: 3 })
+    assert.deepEqual([shorter.statusCode, shorter.body.version, shorter.body.position], [200, 4, null])
+    assert.equal((await mattCall('GET', plan)).body.position, null)
+    assert.equal((await mattCall('POST', here, { stop: 2 })).statusCode, 400, 'not on the route now')
+    await new Promise((resolve) => setTimeout(resolve, 5))
+    assert.equal((await mattCall('POST', here, { stop: 1 })).body.position.stop, 1)
+    // No start: the meeting point is gone too.
+    await new Promise((resolve) => setTimeout(resolve, 5))
+    assert.equal((await mattCall('POST', here, { stop: -1 })).body.position.stop, -1)
+    const noStart = await mattCall('PUT', plan, { start: null, stops: stops.slice(0, 2), version: 4 })
+    assert.deepEqual([noStart.statusCode, noStart.body.version, noStart.body.position], [200, 5, null])
+    assert.equal((await mattCall('POST', here, { stop: -1 })).statusCode, 400, 'no meeting point without a start')
+
+    // Cleared with null, by the same rule (an older clear changes nothing).
+    assert.equal((await mattCall('PUT', plan, { start, stops, version: 5 })).body.version, 6)
+    await new Promise((resolve) => setTimeout(resolve, 5))
+    assert.equal((await mattCall('POST', here, { stop: 0 })).body.position.stop, 0)
+    assert.deepEqual((await samCall('POST', here, { stop: null, at: t(30) })).body, { position: { stop: 0, at: (await mattCall('GET', plan)).body.position.at, by_name: 'Matt', by_you: false }, applied: false })
+    await new Promise((resolve) => setTimeout(resolve, 5))
+    assert.deepEqual((await samCall('POST', here, { stop: null })).body, { position: null, applied: true })
+    assert.equal((await mattCall('GET', plan)).body.position, null)
+  } finally {
+    await db('events').where({ owner_id: matt.id }).del()
+    await db('users').whereIn('id', [matt.id, sam.id, stranger.id]).del()
+    ebird.recentObservations = recentObservations
+    routing.drive = realDrive
+  }
+})
+
+test('the route position migration: adds the columns, and takes them away again', async () => {
+  const migration = require('../db/migrations/20261123090000_event_route_position')
+  const columns = async () => Object.keys(await db('event_routes').columnInfo()).filter((c) => c.startsWith('current_stop')).sort()
+  assert.deepEqual(await columns(), ['current_stop', 'current_stop_at', 'current_stop_by'])
+  await migration.down(db)
+  try {
+    assert.deepEqual(await columns(), [])
+  } finally {
+    await migration.up(db)
+  }
+  assert.deepEqual(await columns(), ['current_stop', 'current_stop_at', 'current_stop_by'])
+  // Whoever tapped it can go: the position stays, by no one.
+  const [owner] = await db('users').insert({ email: 'position-owner@example.com', password_hash: 'x', location: 'US-AZ-003', state: 'AZ' }).returning('*')
+  const [tapper] = await db('users').insert({ email: 'position-tapper@example.com', password_hash: 'x', location: 'US-AZ-003', state: 'AZ' }).returning('*')
+  try {
+    const event = await eventAt(owner.id, { id: null, name: 'Big Day', state: 'AZ', location: 'US-AZ-003' }, { starts_on: dayFrom(1), ends_on: dayFrom(1) })
+    await db('event_routes').insert({ event_id: event.id, stops: '[]', current_stop: 0, current_stop_at: new Date(), current_stop_by: tapper.id })
+    await db('users').where({ id: tapper.id }).del()
+    const row = await db('event_routes').where({ event_id: event.id }).first()
+    assert.deepEqual([row.current_stop, row.current_stop_by], [0, null])
+  } finally {
+    await db('events').where({ owner_id: owner.id }).del()
+    await db('users').whereIn('id', [owner.id, tapper.id]).del()
   }
 })

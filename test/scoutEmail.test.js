@@ -214,6 +214,18 @@ test('a timed route is an itinerary: the drive into each stop, the time there (s
   assert.ok(!mail.text.includes('Drive times weren'))
 })
 
+test('the meeting time, when the group set one, is on the meeting point line in the reader\'s own way', () => {
+  const route = { ...timedRoute, start: { ...timedRoute.start, time: '05:15' } }
+  const line = (user) => scoutingMessage(user, { ...daily, route }).text.split('\n').find((l) => l.includes('Sierra Vista Motel'))
+  assert.equal(line(pat), 'Meeting point: Sierra Vista Motel · 5:15 AM')
+  assert.equal(line({ ...pat, locale: 'es-MX' }), 'Punto de encuentro: Sierra Vista Motel · 5:15 a.m.')
+  assert.match(line({ ...pat, locale: 'fr-CA' }), /^Point de rencontre\s:\sSierra Vista Motel · 5\sh\s15$/)
+  assert.match(scoutingMessage(pat, { ...daily, route: { ...route, start: { ...route.start, time: '17:05' } } }).html, />Meeting point: Sierra Vista Motel · 5:05 PM<\/div>/)
+  // A route without times (the short list) says it too; no time, as before.
+  assert.match(scoutingMessage(pat, { ...daily, route: { start: { name: 'Motel', time: '05:15' }, stops: [{ name: 'Portal' }] } }).text, /Meeting point: Motel · 5:15 AM\n1\. Portal/)
+  assert.equal(scoutingMessage(pat, { ...daily, route: timedRoute }).text.includes('Meeting point: Sierra Vista Motel\n'), true)
+})
+
 test('a reader outside the US gets the drives in km (the API keeps miles)', () => {
   const sam = { ...pat, email: 'sam@example.ca', state: 'CA-ON' }
   const section = scoutingMessage(sam, { ...daily, route: timedRoute }).text.split('Your route:\n')[1].split('\n\n')[0]
