@@ -14,6 +14,7 @@ const events = require('../lib/events')
 const { eventRoute } = require('../lib/eventRoute')
 const routePlan = require('../lib/eventRoutePlan')
 const { emailScoutingNow } = require('../lib/scoutEmail')
+const eventRecap = require('../lib/eventRecap')
 const { requestLocale, translateError } = require('../lib/i18n')
 const { syncNewRegionSoon } = require('../lib/checklists')
 
@@ -57,7 +58,7 @@ const savedBirdsFor = (userId) =>
 //                                                     The event's day is judged in its own zone (timezone: an IANA name, stored on the event from its area, lib/timezones;
 //                                                     the caller's own zone, else UTC, where the area can't say), the same for every member whatever their account's zone:
 //                                                     active: today there is one of its days; past: its last day is over there; tally_open: active, or before 3 AM there the
-//                                                     morning after the last day (late entries). Adds are taken at any time all the same (an offline add can sync late).
+//                                                     morning after the last day (late entries). Adds are taken all the same until the recap is sealed, 48 hours after that (an offline add can sync late).
 //                                                     tally: birds not removed, in observed_at order. added_by_name: the first finder's display_name in the event (never an email;
 //                                                     null when they haven't chosen one or left); added_at: when it reached the server; observed_at: when it was seen (the app's
 //                                                     clock; added_at for older rows); lat/lng: 3 decimals; stop_index: 0-based in the group's saved route (event-route-plan stops),
@@ -133,6 +134,8 @@ const savedBirdsFor = (userId) =>
 //                                                    keep the first finder. A removed bird added again comes back with its original finder and time (unless this one is earlier).
 //                                                    400 'client_id is a UUID' | 'observed_at is a date and time' | 'That spot is not a place on the map' | 'Unknown species' | 'The tally is full'
 // DELETE /api/saved?kind=event-tally&id=&code=   -> the event. Off the tally for everyone, but kept (removed_at, removed_by): undo or a re-add restores it
+//                                                    Adds (but a repeated client_id), removals and undos: 409 'The recap is final, so the tally can’t change now' once
+//                                                    the recap is sealed (event-recap fixesUntil). The checklist ticks (event-tally-mark) stay open: they're each member's own.
 // POST   /api/saved?kind=event-tally-undo&id= { species_code } (or &code=) -> 200 { ...the event, entry } the removed bird back as it was (finder, time, spot,
 //                                                    marks), however long ago it was removed; already on the tally: unchanged. 404 'That bird isn’t on the tally' if never added
 // POST   /api/saved?kind=event-tally-mark&id= { tally_id } -> the event: "added to my eBird checklist" for that bird, yours alone (marked_by_me); idempotent
@@ -146,7 +149,30 @@ const savedBirdsFor = (userId) =>
 // GET    /api/saved?kind=event-view&token=&locale= -> { name, area, starts_on, ends_on, kind, timezone, active, tally_open, targets, tally: [{ code, speciesCode, comName, added_at }],
 //                                                     count, route: { start: null, stops }|null } (no sign-in, no names, no spots; the saved route never shows its start;
 //                                                     removed birds left out; active and tally_open as for members, in the event's zone, so the page knows to keep refreshing)
+// The event recap (lib/eventRecap), once the event is over: the members' view, and the public one by its share code.
+// GET    /api/saved?kind=event-recap&event=&locale= -> { audience: 'members', status: 'open'|'sealed', fixesUntil, shareCode, event: { id, name, kind: 'big_day'|'trip', area,
+//                                                     startsOn, endsOn, timezone, lat, lng }, members: [{ id, name|null, organizer }],
+//                                                     totals: { species, stops, miles|null, fieldMinutes|null, firstBird|null, lastBird|null, bestStop: { index, name, species }|null,
+//                                                       bestHour: { start: 'HH:00', added }|null },
+//                                                     timeline: [{ n, speciesCode, comName, at, stopIndex|null, place|null, lifer, liferFor: [name] }],
+//                                                     lifers: [{ speciesCode, comName, at, place|null, who|null, number }],
+//                                                     highlights: { rarest: { speciesCode, comName, aba, at, place|null }|null, scoutingCalled: { speciesCode, comName, emailedOn, at, place|null }|null },
+//                                                     targets: { total, found, missed: [comName] }, stops: [{ index, name, lat, lng, arrive|null, stayMin|null, species, added }],
+//                                                     route: { miles|null, line: [[lat, lng]]|null }, byMember: [{ name|null, count, only: [comName] }], together,
+//                                                     candidates: [{ speciesCode, comName }] (open only; [] sealed) }
+//                                                     Members only (404 otherwise); 409 { error: 'not_ended' } before the tally closes (3 AM the morning after the last
+//                                                     day, in the event's zone). open: computed live, and the tally takes fixes until fixesUntil (48 hours after it
+//                                                     closes); sealed: frozen at the first read or morning run after that. Birds named in ?locale= or your own language.
+// GET    /api/saved?kind=event-recap&share=&locale= -> the same with audience 'public', for anyone (no sign-in): no members, byMember, together, candidates or
+//                                                     shareCode; liferFor and who null; stops that aren't public eBird hotspots left out of stops and the line, and
+//                                                     their names null wherever a bird was found there. English unless ?locale=. 404 for a bad code; the same 409.
 module.exports = route(['GET', 'POST', 'PUT', 'PATCH', 'DELETE'], async (req, res) => {
+  // The recap's public view: anyone with the share code.
+  if (req.query.kind === 'event-recap' && req.query.share !== undefined) {
+    if (req.method !== 'GET') throw new HttpError(405, 'Method not allowed')
+    res.setHeader('Cache-Control', 'no-store')
+    return res.status(200).json(await eventRecap.publicRecap(String(req.query.share), { locale: req.query.locale || 'en' }))
+  }
   // The two event links anyone can open: what the event is, and (view-only) its plan and tally.
   if (req.query.kind === 'event-preview' || req.query.kind === 'event-view') {
     if (req.method !== 'GET') throw new HttpError(405, 'Method not allowed')
@@ -226,6 +252,9 @@ module.exports = route(['GET', 'POST', 'PUT', 'PATCH', 'DELETE'], async (req, re
     if (kind === 'event-scouting' && req.method === 'GET') {
       const locale = req.query.locale || user.locale
       return res.status(200).json(await localize(await events.eventScouting(user, id, { locale }), locale))
+    }
+    if (kind === 'event-recap' && req.method === 'GET') {
+      return res.status(200).json(await eventRecap.memberRecap(user, req.query.event ?? id, { locale: req.query.locale || user.locale }))
     }
     if (kind === 'event-scouting-email' && req.method === 'POST') {
       const { status, body: answer } = await emailScoutingNow(user, id)

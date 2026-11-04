@@ -190,6 +190,30 @@ module.exports = {
       openEvent: 'Open the event',
       unsubscribe: 'Turn off trip emails'
     },
+    // "Your recap is ready" (lib/recapMail), once to each member after the tally closes.
+    recap: {
+      kickerBigDay: 'Your Big Day recap is ready',
+      kickerTrip: 'Your trip recap is ready',
+      title: { one: '{event}: {count} species in {area}', other: '{event}: {count} species in {area}' },
+      subject: 'Your recap is ready: {title}',
+      stops: { one: '{count} stop', other: '{count} stops' },
+      lifers: { one: '{count} lifer', other: '{count} lifers' },
+      hiName: 'Hi {name},',
+      inBooksBigDay: 'The day is in the books.',
+      inBooksTrip: 'The trip is in the books.',
+      yourLifers: { one: 'You picked up {count} lifer: {first}.', other: 'You picked up {count} lifers, starting with {first} and ending with {last}.' },
+      onTally: { one: '{count} species made the tally.', other: '{count} species made the tally.' },
+      birdAt: '{bird} at {place}, {time}',
+      birdWhen: '{bird}, {time}',
+      highlights: 'Highlights',
+      rarest: '{bird} ({code})',
+      rarestAt: '{bird} ({code}), {place}',
+      called: 'The scouting called it: {bird}',
+      targets: { one: '{found} of {count} target found', other: '{found} of {count} targets found' },
+      fixes: 'Missed something, or seen by you and not on the tally? Fixes are open until {date}. After that the recap is final.',
+      button: 'See the recap',
+      unsubscribe: 'Turn off trip emails'
+    },
     digest: {
       subject: { one: '{bird} was spotted near you', other: '{count} birds from your watch list were spotted near you' },
       text: 'Birds on your watch list were reported nearby:',
@@ -283,6 +307,7 @@ module.exports = {
     'Give the event a name': 'Give the event a name',
     'An event can have up to 50 target birds': 'An event can have up to 50 target birds',
     'The tally is full': 'The tally is full',
+    'The recap is final, so the tally can’t change now': 'The recap is final, so the tally can’t change now',
     'client_id is a UUID': 'client_id is a UUID',
     'observed_at is a date and time': 'observed_at is a date and time',
     'That bird isn’t on the tally': 'That bird isn’t on the tally',
