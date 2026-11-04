@@ -84,11 +84,11 @@ test('fresh is the last 24 hours on the person\'s clock; freshness reads as toda
   assert.deepEqual([freshness('2026-11-03 07:00', '2026-11-03', 'en'), freshness('2026-11-02', '2026-11-03', 'en'), freshness('2026-10-31 07:00', '2026-11-03', 'en')], ['today', 'yesterday', '3 days ago'])
 })
 
-test('the daily email: the countdown and bar, what\'s new, the bird of the day, the map and places, what\'s missing, the route; designed, with its unsubscribe', () => {
+test('the daily email: the countdown and bar, the bird of the day, what else is new, the map and places, what\'s missing, the route; designed, with its unsubscribe', () => {
   const mail = scoutingMessage(pat, { ...daily, group: true, route: { start: { name: 'Sierra Vista Motel' }, stops: [{ name: 'Ramsey Canyon Preserve' }, { name: 'San Pedro House' }] } })
   assert.equal(mail.subject, 'Big Day 2027: Rufous-backed Robin and 1 more new today · 6 days to go')
   assert.equal(mail.to, 'pat@example.com')
-  assert.deepEqual(sections(mail.text), ['Big Day 2027 · 6 days to go', 'New: Rufous-backed Robin, Sandhill Crane', 'Bird of the day: Rufous-backed Robin (ABA Code 3)', 'Where they’re being seen:',
+  assert.deepEqual(sections(mail.text), ['Big Day 2027 · 6 days to go', 'Bird of the day: Rufous-backed Robin (ABA Code 3)', 'New: Sandhill Crane', 'Where they’re being seen:',
     'Still missing (nothing in the last 2 weeks): Montezuma Quail, Flammulated Owl', 'Your group’s route:', 'Open the event: https://bird-alert.vercel.app/events/7#scouting', sections(mail.text)[7], sections(mail.text)[8]])
   assert.match(mail.text, /^Big Day 2027 · 6 days to go\nWith your group\n4 of 8 targets reported in the last 3 days\n/)
   assert.match(mail.text, /1\. Ramsey Canyon Preserve \(yesterday\)\n   Arizona Woodpecker, Painted Redstart\n   Checklist on eBird: https:\/\/ebird.org\/checklist\/S-arizwo\n2\. Miller Canyon--Beatty's Guest Ranch \(today\)\n   Rufous-backed Robin \(rare there\)/)
@@ -103,6 +103,9 @@ test('the daily email: the countdown and bar, what\'s new, the bird of the day, 
   assert.match(html, /<td width="50%" style="height:12px;background:#ff6a00;/)
   assert.match(html, /<img src="https:\/\/example.org\/robin.jpg\?a=1&amp;b=2"/)
   assert.match(html, /ABA Code 3<\/span>/)
+  // The bird of the day first, then what else is new, without it again; the subject still counts it.
+  assert.ok(html.indexOf('4 of 8 targets') < html.indexOf('Bird of the day') && html.indexOf('Bird of the day') < html.indexOf('New:'), 'progress, hero, then new')
+  assert.match(html, /<strong>New:<\/strong> Sandhill Crane<\/p>/)
   assert.match(html, /\/api\/map\?pins=31\.4466%2C-110\.3061%2C1%3B31\.4170%2C-110\.2730%2C2%3B31\.5590%2C-109\.7160%2C3/)
   assert.match(html, /Miller Canyon--Beatty&#39;s Guest Ranch/)
   assert.equal((html.match(/Checklist on eBird/g) || []).length, 3, 'one checklist link a place')
@@ -282,4 +285,16 @@ test('each target where it stands: around in the window, quiet before it, missin
   const found = targetStatuses(['e', 'a', 'b', 'c', 'd'], records, '2026-11-03', 7)
   assert.deepEqual(found.map((t) => [t.code, t.status, t.latest?.obsDt ?? null]), [
     ['d', 'around', '2026-11-03 06:00'], ['a', 'around', '2026-11-01 08:00'], ['c', 'around', '2026-10-28 07:00'], ['b', 'quiet', '2026-10-27 07:00'], ['e', 'missing', null]])
+})
+
+test('what\'s new leaves out the bird of the day, and the subject is as it was', () => {
+  // The bird of the day is the only new one: no "New:" line; the subject still names it.
+  const alone = scoutingMessage(pat, { ...daily, seen: seen.filter((s) => s.code !== 'sancra') })
+  assert.equal(alone.subject, 'Big Day 2027: Rufous-backed Robin new today · 6 days to go')
+  assert.ok(!alone.text.includes('New:') && !alone.html.includes('New:'), 'it would only repeat the hero')
+  assert.match(alone.text, /Bird of the day: Rufous-backed Robin/)
+  // The bird of the day isn't new: every new one is listed, under it.
+  const older = scoutingMessage(pat, { ...daily, seen: [...seen.filter((s) => s.code !== 'rubrob'), row('vermfly', 'Vermilion Flycatcher', whitewater, '2026-11-01 07:00', { aba: 4 })] })
+  assert.equal(older.subject, 'Big Day 2027: Sandhill Crane new today · 6 days to go')
+  assert.deepEqual(sections(older.text).slice(1, 3), ['Bird of the day: Vermilion Flycatcher (ABA Code 4)', 'New: Sandhill Crane'])
 })
