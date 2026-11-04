@@ -691,6 +691,24 @@ test('a digest out of time says there is more, and the next call sends', async (
   assert.deepEqual(sent, [userId])
 })
 
+test('a refused mail sign-in ends the digest at the first send, logged once, nobody marked sent', async () => {
+  await db('users').where({ id: userId }).update({ alert_digest_email_enabled: true, email_confirmed: true, location: 'US-GA-139' })
+  let tries = 0
+  const before = await db('error_log').where('where', 'mail down').count('* as n').first().then((r) => Number(r.n))
+  const result = await runDigest({
+    kind: 'maildowntest',
+    preference: 'alert_digest_email_enabled',
+    fetchSightings: async () => [{ speciesCode: 'cangoo', comName: 'Canada Goose', obsDt: '2026-11-04 08:00' }],
+    select: async (_user, sightings) => sightings,
+    send: async () => { tries += 1; throw Object.assign(new Error('Mail server refused the sign-in'), { code: 'MAIL_DOWN' }) }
+  })
+  assert.equal(tries, 1)
+  assert.equal(result.mailDown, true)
+  assert.equal(result.sent, 0)
+  assert.equal(await db('digest_log').where({ kind: 'maildowntest' }).count('* as n').first().then((r) => Number(r.n)), 0, 'the next run sends to everyone')
+  assert.equal(await db('error_log').where('where', 'mail down').count('* as n').first().then((r) => Number(r.n)), before + 1)
+})
+
 test('the hourly push out of time says where to resume', async () => {
   const { runPushAlerts } = require('../lib/pushAlerts')
   await db('users').where({ id: userId }).update({ push_watchlist_enabled: true, location: 'US-GA-139', push_quiet_start: null, push_quiet_end: null })

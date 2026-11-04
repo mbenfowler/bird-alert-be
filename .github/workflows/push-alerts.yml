@@ -66,7 +66,9 @@ jobs:
         env:
           CRON_SECRET: ${{ secrets.CRON_SECRET }}
         run: |
-          curl --fail-with-body --silent --show-error --max-time 60 \
+          out=$(curl --fail-with-body --silent --show-error --max-time 60 \
             -H "Authorization: Bearer $CRON_SECRET" \
-            "https://bird-alert-be.vercel.app/api/mail/reminders"
-          echo
+            "https://bird-alert-be.vercel.app/api/mail/reminders")
+          echo "$out"
+          echo "$out" | grep -q '"mailDown":true' && { echo "::error::Gmail refused the app's sign-in (app password revoked, or the account locked or disabled). Sign in to the sending account in a browser, then check the app password."; exit 1; }
+          true
