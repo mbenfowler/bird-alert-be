@@ -11,7 +11,7 @@ const seasonality = require('../lib/seasonality')
 let userId
 before(async () => {
   await db.migrate.latest()
-  for (const table of ['event_routes', 'event_tally_marks', 'event_tally', 'event_targets', 'event_members', 'events', 'trips', 'place_targets', 'places', 'taxonomy_names', 'hq_alerts', 'hotspot_weeks', 'hq_picks', 'feedback', 'passkeys', 'shares', 'seen_birds', 'taxonomy_ref', 'user_routes', 'hotspot_ref', 'mail_counts', 'error_log', 'drive_cache', 'nearby_cache', 'place_predictions', 'checklist_species', 'checklists', 'bird_sounds', 'digest_log', 'push_handoff', 'push_log', 'push_subscriptions', 'saved_birds', 'auth_throttle', 'season_firsts', 'region_species_days', 'region_days', 'job_runs', 'users', 'birds']) await db(table).del()
+  for (const table of ['event_recaps', 'event_scout_birds', 'event_routes', 'event_tally_marks', 'event_tally', 'event_targets', 'event_members', 'events', 'trips', 'place_targets', 'places', 'taxonomy_names', 'hq_alerts', 'hotspot_weeks', 'hq_picks', 'feedback', 'passkeys', 'shares', 'seen_birds', 'taxonomy_ref', 'user_routes', 'hotspot_ref', 'mail_counts', 'error_log', 'drive_cache', 'nearby_cache', 'place_predictions', 'checklist_species', 'checklists', 'bird_sounds', 'digest_log', 'push_handoff', 'push_log', 'push_subscriptions', 'saved_birds', 'auth_throttle', 'season_firsts', 'region_species_days', 'region_days', 'job_runs', 'users', 'birds']) await db(table).del()
   // Nothing in here may reach eBird; the hourly job's history fetch is a no-op unless a test says otherwise.
   ebird.historicObservations = async () => []
   ;[{ id: userId }] = await db('users').insert({
@@ -3993,4 +3993,274 @@ test('invite links: the link needs a session, a signup from it credits the invit
   assert.match(text, /Invites: \d+ signups from invite links, \d+ inviters/)
   assert.doesNotMatch(html + text, /@example\.com/, 'no emails in the HQ email')
   await db('users').whereIn('email', ['inviter@example.com', 'invited-1@example.com', 'invited-2@example.com', 'invited-forged@example.com', 'invited-orphan@example.com']).del()
+})
+
+/**
+ * A finished Big Day for the recap tests: the Cochise group (cochiseBigDay) on `day`, a saved route
+ * of two public hotspots around a personal spot, four birds on the tally (and one taken off), Matt's
+ * life list from before, and the scouting email's bird of the day before. OSRM, eBird's feed and the
+ * area's centre are stood in for. `restore` puts them back and clears up.
+ */
+const recapDay = async (prefix, day = '2026-11-10') => {
+  const events = require('../lib/events')
+  const routing = require('../lib/routing')
+  const range = require('../lib/range')
+  const abaCodes = require('../lib/abaCodes')
+  const base = await cochiseBigDay(prefix)
+  const { event, people } = base
+  await db('events').where({ id: event.id }).update({ starts_on: day, ends_on: day })
+  const at = (hhmm) => wallClock(day, hhmm)
+  await db('birds').insert([['grhowl', 'Great Horned Owl'], ['arwoo', 'Arizona Woodpecker'], ['rubrob', 'Rufous-backed Robin', 'Turdus rufopalliatus'], ['eletro', 'Elegant Trogon'],
+    ['lewwoo', 'Lewis\'s Woodpecker'], ['monqua', 'Montezuma Quail'], ['cacwre', 'Cactus Wren']].map(([speciesCode, comName, sciName]) => ({ speciesCode, comName, sciName: sciName || comName }))).onConflict('speciesCode').ignore()
+  await db('aba_codes').insert({ sci_name: 'Turdus rufopalliatus', com_name: 'Rufous-backed Robin', code: 3, version: 'test' }).onConflict('sci_name').ignore()
+  abaCodes.forgetCodes()
+  await db('hotspot_ref').insert([['L1', 'Cave Creek Canyon', 31.88, -109.17], ['L3', 'Portal', 31.913, -109.141]].map(([loc_id, name, lat, lng]) => ({ loc_id, state: 'US-AZ', name, lat, lng }))).onConflict('loc_id').ignore()
+  await db('event_routes').insert({ event_id: event.id, updated_by: people.matt.id, stops: JSON.stringify([
+    { locId: 'L1', name: 'Cave Creek Canyon', lat: 31.88, lng: -109.17 }, { locId: null, name: 'Aunt May’s yard', lat: 31.5, lng: -110.2, stay_min: 30 }, { locId: 'L3', name: 'Portal', lat: 31.913, lng: -109.141 }]) })
+  await db('event_targets').insert(['eletro', 'monqua'].map((species_code) => ({ event_id: event.id, species_code, added_by: people.matt.id })))
+  const tally = await db('event_tally').insert([
+    { species_code: 'grhowl', observed_at: at('05:41'), stop_index: null, added_by: people.matt.id },
+    { species_code: 'arwoo', observed_at: at('07:12'), stop_index: 0, added_by: people.sam.id },
+    { species_code: 'rubrob', observed_at: at('08:47'), stop_index: 1, added_by: people.matt.id },
+    { species_code: 'eletro', observed_at: at('13:52'), stop_index: 2, added_by: people.matt.id },
+    { species_code: 'lewwoo', observed_at: at('14:00'), stop_index: 2, added_by: people.matt.id, removed_at: at('14:05'), removed_by: people.matt.id }
+  ].map((r) => ({ event_id: event.id, ...r }))).returning(['id', 'species_code'])
+  await db('event_tally_marks').insert({ event_id: event.id, user_id: people.sam.id, tally_id: tally.find((t) => t.species_code === 'grhowl').id })
+  // Matt's list: 12 birds before, and the woodpecker tapped "Seen it" on the day (a lifer all the same). Sam's is too short to judge by.
+  await db('seen_birds').insert([...['grhowl', ...Array.from({ length: 11 }, (_, i) => `xbird${i}`)].map((code) => ({ species_code: code, first_seen: '2026-01-01' })),
+    { species_code: 'arwoo', first_seen: day }].map((r) => ({ user_id: people.matt.id, ...r })))
+  await db('seen_birds').insert({ user_id: people.sam.id, species_code: 'grhowl', first_seen: '2026-01-01' })
+  await db('event_scout_birds').insert({ event_id: event.id, day: new Date(Date.parse(`${day}T00:00:00Z`) - 86_400_000).toISOString().slice(0, 10), species_code: 'eletro' })
+  const stubs = { scoutFeed: events.scoutFeed, drive: routing.drive, regionCenter: range.regionCenter }
+  events.scoutFeed = async () => ({ records: [
+    { speciesCode: 'monqua', comName: 'Montezuma Quail', obsDt: `${day} 07:00` },
+    { speciesCode: 'cacwre', comName: 'Cactus Wren', obsDt: `${day} 09:00` },
+    { speciesCode: 'eletro', comName: 'Elegant Trogon', obsDt: `${day} 10:00` },
+    { speciesCode: 'duck1', comName: 'duck sp.', obsDt: `${day} 10:00` }
+  ] })
+  routing.drive = async (points) => ({ legs: points.slice(1).map(() => ({ minutes: 30, miles: 20.4 })), geometry: points.map((p) => [p.lat, p.lng]) })
+  range.regionCenter = async () => ({ lat: 31.88123, lng: -109.75123 })
+  const restore = async () => {
+    Object.assign(events, { scoutFeed: stubs.scoutFeed })
+    routing.drive = stubs.drive
+    range.regionCenter = stubs.regionCenter
+    await db('aba_codes').where({ version: 'test' }).del()
+    abaCodes.forgetCodes()
+    await db('hotspot_ref').whereIn('loc_id', ['L1', 'L3']).del()
+    await db('events').where({ id: event.id }).del()
+    await db('seen_birds').whereIn('user_id', base.ids).del()
+    await db('users').whereIn('id', base.ids).del()
+    await base.restore()
+  }
+  return { ...base, tally, restore }
+}
+
+// A wall-clock time on `day` in Phoenix (no daylight saving: UTC-7).
+const wallClock = (day, hhmm) => new Date(`${day}T${hhmm}:00-07:00`)
+
+test('the recap: members see it all once the tally closes, anyone with the share code sees it without names or personal spots', async () => {
+  const saved = require('../api/saved')
+  const { fakeReq, fakeRes } = require('./helpers')
+  const { createSession } = require('../lib/auth')
+  const { recapCode } = require('../lib/eventRecap')
+  // Two days ago (UTC days): the tally closed yesterday at 3 AM in Phoenix, so fixes are open until tomorrow.
+  const { people, event, restore } = await recapDay('recap-view', dayFrom(-2))
+  const [outsider] = await db('users').insert({ email: 'recap-view-outsider@example.com', password_hash: 'x', location: 'US-GA-139', state: 'GA', email_confirmed: true }).returning('*')
+  const as = (user) => {
+    const session = fakeRes(); createSession(session, user)
+    const cookie = String(session.headers['set-cookie']).split(';')[0]
+    return async (query) => { const res = fakeRes(); await saved(fakeReq({ headers: { cookie }, query: { kind: 'event-recap', ...query } }), res); return res }
+  }
+  const anyone = async (query) => { const res = fakeRes(); await saved(fakeReq({ query: { kind: 'event-recap', ...query } }), res); return res }
+  try {
+    const res = await as(people.matt)({ event: String(event.id) })
+    assert.equal(res.statusCode, 200)
+    const r = res.body
+    assert.deepEqual([r.audience, r.status, r.shareCode], ['members', 'open', recapCode(event.id)])
+    assert.equal(r.fixesUntil, new Date(Date.parse(`${dayFrom(-1)}T10:00:00Z`) + 48 * 3_600_000).toISOString())
+    assert.deepEqual(r.event, { id: event.id, name: 'Cochise Big Day', kind: 'big_day', area: 'Cochise County, AZ', startsOn: dayFrom(-2), endsOn: dayFrom(-2), timezone: 'America/Phoenix', lat: 31.88, lng: -109.75 })
+    assert.deepEqual(r.members.map((m) => [m.name, m.organizer]), [['Matt', true], ['Sam', false], ['Uma', false], ['Kim', false]])
+    assert.equal(r.members[0].id, people.matt.id)
+    assert.deepEqual({ ...r.totals, firstBird: r.totals.firstBird.speciesCode, lastBird: r.totals.lastBird.speciesCode }, {
+      species: 4, stops: 3, miles: 41, fieldMinutes: 491, firstBird: 'grhowl', lastBird: 'eletro', bestStop: { index: 0, name: 'Cave Creek Canyon', species: 1 }, bestHour: { start: '05:00', added: 1 }
+    })
+    assert.deepEqual(r.timeline.map((t) => [t.n, t.comName, t.place, t.lifer, t.liferFor]), [
+      [1, 'Great Horned Owl', null, false, []], [2, 'Arizona Woodpecker', 'Cave Creek Canyon', true, ['Matt']],
+      [3, 'Rufous-backed Robin', 'Aunt May’s yard', true, ['Matt']], [4, 'Elegant Trogon', 'Portal', true, ['Matt']]
+    ], 'the bird taken off isn\'t there; a bird tapped "Seen it" on the day is still a lifer')
+    assert.equal(r.timeline[1].at, wallClock(dayFrom(-2), '07:12').toISOString())
+    assert.deepEqual(r.lifers.map((l) => [l.speciesCode, l.who, l.number, l.place]), [['arwoo', 'Matt', 13, 'Cave Creek Canyon'], ['rubrob', 'Matt', 14, 'Aunt May’s yard'], ['eletro', 'Matt', 15, 'Portal']])
+    assert.deepEqual(r.highlights.rarest, { speciesCode: 'rubrob', comName: 'Rufous-backed Robin', aba: 3, at: wallClock(dayFrom(-2), '08:47').toISOString(), place: 'Aunt May’s yard' })
+    assert.deepEqual(r.highlights.scoutingCalled, { speciesCode: 'eletro', comName: 'Elegant Trogon', emailedOn: dayFrom(-3), at: wallClock(dayFrom(-2), '13:52').toISOString(), place: 'Portal' })
+    assert.deepEqual(r.targets, { total: 2, found: 1, missed: ['Montezuma Quail'] })
+    assert.deepEqual(r.stops.map((s) => [s.index, s.name, s.species, s.added, s.stayMin]), [[0, 'Cave Creek Canyon', 1, 1, null], [1, 'Aunt May’s yard', 1, 1, 30], [2, 'Portal', 1, 1, null]])
+    assert.deepEqual(r.route, { miles: 41, line: [[31.88, -109.17], [31.5, -110.2], [31.913, -109.141]] })
+    assert.deepEqual(r.byMember, [{ name: 'Matt', count: 3, only: ['Rufous-backed Robin', 'Elegant Trogon'] }, { name: 'Sam', count: 2, only: ['Arizona Woodpecker'] }, { name: 'Uma', count: 0, only: [] }, { name: 'Kim', count: 0, only: [] }])
+    assert.equal(r.together, 0)
+    assert.deepEqual(r.candidates.map((c) => c.speciesCode), ['monqua', 'cacwre'], 'the target missed, then the area\'s birds, never what\'s on the tally or a spuh')
+    assert.doesNotMatch(JSON.stringify(r), /"_/, 'nothing internal leaves')
+
+    // In the reader's language: the timeline, and the plain lists of names too.
+    require('../lib/birdNames').forget()
+    await db('taxonomy_names').insert([['eletro', 'Trogon élégant'], ['monqua', 'Colin de Montezuma']].map(([species_code, com_name]) => ({ locale: 'fr_CA', species_code, com_name })))
+    const french = (await as(people.matt)({ event: String(event.id), locale: 'fr-CA' })).body
+    assert.equal(french.timeline[3].comName, 'Trogon élégant')
+    assert.deepEqual([french.targets.missed, french.byMember[0].only], [['Colin de Montezuma'], ['Rufous-backed Robin', 'Trogon élégant']])
+    assert.equal(french.timeline[3].comNameEn, undefined, 'the shape as agreed')
+    await db('taxonomy_names').where({ locale: 'fr_CA' }).del()
+    require('../lib/birdNames').forget()
+
+    // The public view, by the share code, signed in or not.
+    const pub = await anyone({ share: r.shareCode })
+    assert.equal(pub.statusCode, 200)
+    const p = pub.body
+    assert.deepEqual(Object.keys(p), ['audience', 'status', 'fixesUntil', 'event', 'totals', 'timeline', 'lifers', 'highlights', 'targets', 'stops', 'route'])
+    assert.equal(p.audience, 'public')
+    assert.deepEqual([p.event.lat, p.event.lng], [31.88, -109.75])
+    assert.deepEqual(p.stops.map((s) => s.name), ['Cave Creek Canyon', 'Portal'])
+    assert.deepEqual(p.route, { miles: 41, line: [[31.88, -109.17], [31.913, -109.141]] })
+    assert.deepEqual(p.timeline.map((t) => [t.place, t.stopIndex, t.liferFor]), [[null, null, null], ['Cave Creek Canyon', 0, null], [null, null, null], ['Portal', 2, null]])
+    assert.deepEqual(p.lifers.map((l) => [l.who, l.place]), [[null, 'Cave Creek Canyon'], [null, null], [null, 'Portal']])
+    assert.equal(p.highlights.rarest.place, null)
+    for (const word of ['Matt', 'Sam', 'Uma', 'Kim', 'Aunt May', 'example.com']) assert.equal(JSON.stringify(p).includes(word), false, word)
+
+    // Who can see what.
+    assert.equal((await anyone({ share: `${event.id.toString(36)}-aaaaaa` })).statusCode, 404, 'a forged code')
+    assert.equal((await anyone({ share: 'nonsense' })).statusCode, 404)
+    assert.equal((await anyone({ event: String(event.id) })).statusCode, 401, 'the members\' view needs signing in')
+    assert.equal((await as(outsider)({ event: String(event.id) })).statusCode, 404, 'members only')
+    assert.equal((await as(people.sam)({ id: String(event.id) })).statusCode, 200, 'id= works too')
+    // Before the tally closes there's no recap.
+    await db('events').where({ id: event.id }).update({ starts_on: dayFrom(0), ends_on: dayFrom(0) })
+    const live = await as(people.matt)({ event: String(event.id) })
+    assert.deepEqual([live.statusCode, live.body], [409, { error: 'not_ended' }])
+    assert.equal((await anyone({ share: r.shareCode })).statusCode, 409)
+  } finally {
+    await db('users').where({ id: outsider.id }).del()
+    await restore()
+  }
+})
+
+test('the recap seals after the fix window: frozen against later life list changes; the tally takes fixes until then and refuses them after; the morning run seals', async () => {
+  const recap = require('../lib/eventRecap')
+  const { events, people, event, tally, restore } = await recapDay('recap-seal')
+  const open = new Date('2026-11-12T00:00:00Z')
+  const sealedAt = new Date('2026-11-13T10:00:00Z')
+  const uuid = () => require('crypto').randomUUID()
+  try {
+    // While open: fixes go through, and the recap is worked out live.
+    const wren = uuid()
+    await events.addTally(people.sam, event.id, { species_code: 'cacwre', client_id: wren, observed_at: '2026-11-10T20:00:00Z' }, open)
+    await events.removeTally(people.sam, event.id, 'cacwre', open)
+    await events.undoRemoveTally(people.sam, event.id, 'cacwre', open)
+    const live = await recap.memberRecap(people.matt, event.id, { now: open })
+    assert.deepEqual([live.status, live.totals.species], ['open', 5])
+    assert.equal(await db('event_recaps').where({ event_id: event.id }).first(), undefined, 'nothing frozen while open')
+
+    // After: refused, plainly, in the reader's language too; the ticks are each member's own and stay open; a repeated add is the add already made.
+    const refused = await events.addTally(people.matt, event.id, { species_code: 'monqua' }, sealedAt).catch((e) => e)
+    assert.deepEqual([refused.status, refused.message], [409, 'The recap is final, so the tally can’t change now'])
+    assert.equal(require('../lib/i18n').translateError('fr-CA', refused.message), 'Le bilan est final, donc le décompte ne peut plus changer')
+    assert.equal((await events.removeTally(people.matt, event.id, 'grhowl', sealedAt).catch((e) => e)).status, 409)
+    assert.equal((await events.undoRemoveTally(people.matt, event.id, 'lewwoo', sealedAt).catch((e) => e)).status, 409)
+    assert.equal((await events.addTally(people.sam, event.id, { species_code: 'cacwre', client_id: wren }, sealedAt)).entry.code, 'cacwre')
+    const owl = tally.find((t) => t.species_code === 'grhowl').id
+    assert.equal((await events.markTally(people.matt, event.id, owl, sealedAt)).tally.find((t) => t.id === owl).marked_by_me, true)
+
+    // The first read after seals it; a life list changed since leaves it as it was.
+    const sealed = await recap.memberRecap(people.matt, event.id, { now: sealedAt })
+    assert.deepEqual([sealed.status, sealed.totals.species, sealed.candidates], ['sealed', 5, []])
+    assert.ok(await db('event_recaps').where({ event_id: event.id }).first())
+    await db('seen_birds').insert(['rubrob', 'eletro', 'cacwre'].map((code) => ({ user_id: people.matt.id, species_code: code, first_seen: '2025-05-01' }))).onConflict(['user_id', 'species_code']).ignore()
+    await db('event_tally').where({ event_id: event.id, species_code: 'grhowl' }).update({ removed_at: sealedAt })
+    const later = await recap.memberRecap(people.matt, event.id, { now: new Date('2026-12-01T00:00:00Z') })
+    assert.deepEqual(later.lifers.map((l) => l.speciesCode), sealed.lifers.map((l) => l.speciesCode))
+    assert.deepEqual(later.lifers.map((l) => l.speciesCode), ['arwoo', 'rubrob', 'cacwre', 'eletro'])
+    assert.equal(later.totals.species, 5, 'the frozen tally')
+    // The public view comes from the same frozen copy.
+    const pub = await recap.publicRecap(recap.recapCode(event.id), { now: new Date('2026-12-01T00:00:00Z') })
+    assert.deepEqual([pub.status, pub.totals.species, pub.lifers.length, pub.stops.length], ['sealed', 5, 4, 2])
+
+    // The morning run freezes what no one opened.
+    await db('event_recaps').where({ event_id: event.id }).del()
+    await recap.sealDue({ now: new Date('2026-11-12T12:00:00Z') })
+    assert.equal(await db('event_recaps').where({ event_id: event.id }).first(), undefined, 'still open')
+    assert.ok(await recap.sealDue({ now: new Date('2026-11-14T12:00:00Z') }) >= 1)
+    assert.ok(await db('event_recaps').where({ event_id: event.id }).first())
+  } finally {
+    await restore()
+  }
+})
+
+test('"your recap is ready": once to each member on the first run after the tally closes, in their language, and only with birds on the tally', async () => {
+  const { recapMessage } = require('../lib/mailer')
+  const { events, people, event, restore } = await recapDay('recap-mail')
+  const sent = []
+  const sendRecap = async (user, vars) => { sent.push({ user, vars }) }
+  const send = async () => {}
+  const run = (iso) => events.runEventNotices({ send, sendRecap, now: new Date(iso) })
+  const ours = () => sent.filter((s) => s.vars.event.id === event.id)
+  try {
+    await db('users').where({ id: people.sam.id }).update({ locale: 'es-MX' })
+    await db('users').where({ id: people.kim.id }).update({ trip_emails_enabled: false })
+    assert.equal((await run('2026-11-11T09:59:00Z')).recaps, 0, 'the tally is still open')
+    assert.equal(ours().length, 0)
+
+    // An empty tally waits: nothing is claimed.
+    const rows = await db('event_tally').where({ event_id: event.id }).whereNull('removed_at').select('id')
+    await db('event_tally').whereIn('id', rows.map((r) => r.id)).update({ removed_at: new Date('2026-11-10T23:00:00Z') })
+    await run('2026-11-11T13:00:00Z')
+    assert.equal(ours().length, 0)
+    assert.equal(await db('event_members').where({ event_id: event.id }).whereNotNull('recap_notice_at').first(), undefined)
+    await db('event_tally').whereIn('id', rows.map((r) => r.id)).update({ removed_at: null })
+
+    await run('2026-11-11T14:00:00Z')
+    assert.deepEqual(ours().map((s) => s.user.id).sort(), [people.matt.id, people.sam.id, people.utc.id].sort(), 'not to someone with trip emails off')
+    await run('2026-11-11T15:00:00Z')
+    await run('2026-11-12T14:00:00Z')
+    assert.equal(ours().length, 3, 'once each')
+
+    // Each in their own words, with their own lifers.
+    const forMatt = ours().find((s) => s.user.id === people.matt.id)
+    const mail = recapMessage(forMatt.user, forMatt.vars)
+    assert.equal(mail.subject, 'Your recap is ready: Cochise Big Day: 4 species in Cochise County')
+    assert.match(mail.text, /Hi Matt,/)
+    assert.match(mail.text, /You picked up 3 lifers, starting with Arizona Woodpecker at Cave Creek Canyon, 7:12 AM and ending with Elegant Trogon at Portal, 1:52 PM\./)
+    assert.match(mail.text, /The scouting called it: Elegant Trogon/)
+    assert.match(mail.text, /Fixes are open until Friday, November 13\./)
+    assert.ok(mail.headers['List-Unsubscribe'])
+    const forSam = ours().find((s) => s.user.id === people.sam.id)
+    const spanish = recapMessage(forSam.user, forSam.vars)
+    assert.match(spanish.subject, /^Tu resumen está listo: Cochise Big Day: 4 especies en /)
+    assert.match(spanish.text, /Hola, Sam:/)
+
+    // Past the fix window, a member who joins late gets none.
+    await db('event_members').where({ event_id: event.id, user_id: people.kim.id }).update({ recap_notice_at: null })
+    await db('users').where({ id: people.kim.id }).update({ trip_emails_enabled: true })
+    await run('2026-11-13T14:00:00Z')
+    assert.equal(ours().length, 3)
+  } finally {
+    await restore()
+  }
+})
+
+test('the morning scouting email keeps its bird of the day, once a day per event, for the recap', async () => {
+  const scouting = require('../lib/scouting')
+  const [{ id: owner }] = await db('users').insert({ email: 'scout-pick@example.com', password_hash: 'x', location: 'US-AZ-003', state: 'AZ', email_confirmed: true, timezone: 'UTC' }).returning('id')
+  const now = new Date(`${dayFrom(0)}T15:00:00Z`)
+  try {
+    const [{ id }] = await db('events').insert({ owner_id: owner, name: 'Scouted', state: 'AZ', location: 'US-AZ-003', range_mi: 0, starts_on: dayFrom(3), ends_on: dayFrom(3), kind: 'bigday', scout: true, scout_days: 7, timezone: 'UTC', invite_token: `inv-${Date.now()}-scoutpick`, view_token: `view-${Date.now()}-scoutpick` }).returning('id')
+    await db('event_members').insert({ event_id: id, user_id: owner, role: 'organizer' })
+    await db('event_targets').insert(['rubrob', 'eletro'].map((species_code) => ({ event_id: id, species_code })))
+    const records = [
+      { speciesCode: 'eletro', comName: 'Elegant Trogon', locName: 'Cave Creek', locId: 'L1', obsDt: `${dayFrom(0)} 07:00`, lat: 31.88, lng: -109.17 },
+      { speciesCode: 'rubrob', comName: 'Rufous-backed Robin', locName: 'San Pedro House', locId: 'L2', obsDt: `${dayFrom(-1)} 09:00`, lat: 31.55, lng: -110.14, obsReviewed: true, obsValid: true }
+    ]
+    await scouting.runScouting({ now, fetchFeed: async () => records, send: async () => {}, push: async () => ({ sent: false }), drive: async () => null })
+    const picks = await db('event_scout_birds').where({ event_id: id }).select('day', 'species_code')
+    assert.deepEqual(picks.map((p) => [require('../lib/places').dayOf(p.day), p.species_code]), [[dayFrom(0), 'rubrob']], 'the rarer one, as the email led with it')
+  } finally {
+    await db('events').where({ owner_id: owner }).del()
+    await db('users').where({ id: owner }).del()
+  }
 })
