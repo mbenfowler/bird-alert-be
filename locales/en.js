@@ -272,6 +272,7 @@ module.exports = {
     'A start\'s name is text, up to 200 characters': 'A start\'s name is text, up to 200 characters',
     'A stop\'s locId is an eBird location id (like L123456) or null': 'A stop\'s locId is an eBird location id (like L123456) or null',
     'A stop\'s stay_min is minutes from 0 to 480, or null for the suggestion': 'A stop\'s stay_min is minutes from 0 to 480, or null for the suggestion',
+    'A stop\'s locked is true or false': 'A stop\'s locked is true or false',
     'A start\'s time is HH:MM (24-hour), or null for none': 'A start\'s time is HH:MM (24-hour), or null for none',
     'stop is a stop\'s place in the route (0 the first, -1 the meeting point), or null': 'stop is a stop\'s place in the route (0 the first, -1 the meeting point), or null',
     'That stop isn\'t on the route': 'That stop isn\'t on the route',

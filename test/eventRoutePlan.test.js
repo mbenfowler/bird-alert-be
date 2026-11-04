@@ -124,3 +124,10 @@ test('a position: a stop index (-1 the meeting point) or null, and when it was t
     assert.throws(() => cleanPosition(bad, now), (e) => e.status === 400, JSON.stringify(bad))
   }
 })
+
+test('a stop can be locked in place: kept only when true, and a non-boolean is refused', () => {
+  const plan = cleanPlan({ stops: [{ ...stop, locked: true }, { ...stop, locked: false }, stop, { ...stop, stay_min: 30, locked: true }], version: 0 })
+  assert.deepEqual(plan.stops.map((s) => s.locked), [true, undefined, undefined, true])
+  assert.equal(plan.stops[3].stay_min, 30)
+  assert.throws(() => cleanPlan({ stops: [{ ...stop, locked: 'yes' }], version: 0 }), (e) => e.status === 400)
+})

@@ -263,6 +263,7 @@ module.exports = {
     'A start\'s name is text, up to 200 characters': 'Le nom d’un départ est un texte de 200 caractères au plus',
     'A stop\'s locId is an eBird location id (like L123456) or null': 'Le locId d’un arrêt est un identifiant de lieu eBird (comme L123456) ou null',
     'A stop\'s stay_min is minutes from 0 to 480, or null for the suggestion': 'Le stay_min d’un arrêt est un nombre de minutes de 0 à 480, ou null pour la suggestion',
+    'A stop\'s locked is true or false': 'Le locked d’un arrêt est true ou false',
     'A start\'s time is HH:MM (24-hour), or null for none': 'L’heure du point de départ est HH:MM (24 heures), ou null s’il n’y en a pas',
     'stop is a stop\'s place in the route (0 the first, -1 the meeting point), or null': 'stop est la place d’un arrêt dans l’itinéraire (0 le premier, -1 le point de rencontre), ou null',
     'That stop isn\'t on the route': 'Cet arrêt n’est pas sur l’itinéraire',
