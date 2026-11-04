@@ -86,3 +86,17 @@ test('Gmail refusing the sign-in becomes MAIL_DOWN, which ends a run of sends li
     refuse = null
   }
 })
+
+test('bulk mail carries one-click unsubscribe headers (RFC 8058) for its own preference; account mail none', async () => {
+  const { verifyToken } = require('../lib/tokens')
+  sent.length = 0
+  await mailer.sendRareSightingsEmail(user, [sighting], new Map())
+  await mailer.sendConfirmationEmail(user)
+  const [rare, confirm] = sent
+  assert.equal(rare.headers['List-Unsubscribe-Post'], 'List-Unsubscribe=One-Click')
+  const token = decodeURIComponent(rare.headers['List-Unsubscribe'].match(/token=([^>]+)>/)[1])
+  assert.deepEqual((({ sub, emailType }) => ({ sub, emailType }))(verifyToken(token, 'unsubscribe')), { sub: 7, emailType: 'rare_sightings_email_enabled' })
+  assert.equal(confirm.headers, undefined)
+  const fallback = mailer.alertDigestMessage({ ...user, alert_digest_email_enabled: false }, [sighting], new Map())
+  assert.match(decodeURIComponent(fallback.headers['List-Unsubscribe']), /one-click\?token=/)
+})
