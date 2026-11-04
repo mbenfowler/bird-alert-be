@@ -10,6 +10,7 @@ const { isValidTimezone } = require('../lib/quietHours')
 const { RANGE_CHOICES } = require('../lib/range')
 const { syncNewRegionSoon } = require('../lib/checklists')
 const { assertArea } = require('../lib/areas')
+const { inviteLink } = require('../lib/invites')
 
 const STRING_FIELDS = ['state', 'location']
 const BOOLEAN_FIELDS = ['alert_digest_email_enabled', 'rare_sightings_email_enabled', 'push_watchlist_enabled', 'push_notable_enabled', 'push_notable_batched', 'push_first_of_season', 'push_lifer_enabled', 'migration_email_enabled', 'watchlist_email_fallback', 'rare_alerts_need_proof', 'notable_skip_seen', 'keep_home_alerts', 'trip_emails_enabled']
@@ -34,7 +35,16 @@ const deleteAccount = async (req, res) => {
 //   out for birds already on the life list (or a place's own list, when its lifers count against it),
 //   unless the bird is on the watch list; with fewer than 10 birds on the list nothing is left out.
 //   Off by default. Returned with the rest of the user (here and on the session check).
-module.exports = route(['PATCH', 'DELETE'], async (req, res) => {
+// GET /api/user?kind=invite-link -> { url, code }: the person's "Invite a birding friend" link,
+//   https://bird-alert.vercel.app/?ref=invite-<code>. The code names no one (lib/invites.js); the same every time.
+const getKind = async (req, res) => {
+  const user = await requireUser(req)
+  if (req.query?.kind === 'invite-link') return res.status(200).json(inviteLink(user.id))
+  throw new HttpError(400, 'Unknown kind')
+}
+
+module.exports = route(['GET', 'PATCH', 'DELETE'], async (req, res) => {
+  if (req.method === 'GET') return getKind(req, res)
   if (req.method === 'DELETE') return deleteAccount(req, res)
   const user = await requireUser(req)
   const input = body(req)

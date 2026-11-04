@@ -1,0 +1,41 @@
+const { test } = require('node:test')
+const assert = require('node:assert/strict')
+const { inviteCode, inviteLink, readInvite } = require('../lib/invites')
+const { signupSourceFor, sourceLabel } = require('../lib/signupSource')
+
+test('an invite code is the id in base 36 and a short signature, and reads back to that id', () => {
+  const code = inviteCode(1234)
+  assert.match(code, /^ya-[0-9a-z]{6}$/)
+  assert.equal(inviteCode(1234), code, 'the same every time')
+  assert.notEqual(inviteCode(1235).split('-')[1], code.split('-')[1])
+  assert.deepEqual(readInvite(`invite-${code}`), { inviter: 1234 })
+  assert.deepEqual(readInvite(`INVITE-${code.toUpperCase()}`), { inviter: 1234 }, 'case does not matter')
+  const { url, code: same } = inviteLink(1234)
+  assert.equal(same, code)
+  assert.equal(url, `https://bird-alert.vercel.app/?ref=invite-${code}`)
+  assert.throws(() => inviteCode(0))
+})
+
+test('a forged or garbled invite code still counts as an invite, crediting no one', () => {
+  const code = inviteCode(42)
+  const [id, sig] = code.split('-')
+  const flipped = sig.slice(0, 5) + (sig[5] === 'a' ? 'b' : 'a')
+  assert.deepEqual(readInvite(`invite-${id}-${flipped}`), { inviter: null }, 'wrong signature')
+  assert.deepEqual(readInvite(`invite-${(43).toString(36)}-${sig}`), { inviter: null }, 'another id with this signature')
+  assert.deepEqual(readInvite(`invite-0${id}-${sig}`), { inviter: null }, 'a padded id')
+  assert.deepEqual(readInvite('invite-'), { inviter: null })
+  assert.deepEqual(readInvite('invite-hello'), { inviter: null })
+  assert.equal(readInvite('fb-ebird'), null, 'not an invite at all')
+  assert.equal(readInvite(undefined), null)
+})
+
+test('a signup from an invite link is stored as an invite with the inviter, and counted as "invite"', () => {
+  const ref = `invite-${inviteCode(7)}`
+  const src = signupSourceFor({ landing: 'home', invite: ref }, 'curl/8')
+  assert.deepEqual(src, { landing: 'home', invite: true, inviter: 7 })
+  assert.deepEqual(signupSourceFor({ ref }, null), { invite: true, inviter: 7 }, 'also read from ref')
+  assert.deepEqual(signupSourceFor({ invite: 'invite-7-zzzzzz', utm: 'fb-ebird' }, null), { utm: 'fb-ebird', invite: true })
+  assert.equal(sourceLabel(src), 'invite')
+  assert.equal(sourceLabel({ invite: true, utm: 'fb-ebird' }), 'invite')
+  assert.equal(sourceLabel({ utm: 'fb-ebird' }), 'fb-ebird')
+})

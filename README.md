@@ -19,6 +19,7 @@ All request and response bodies are JSON. Authenticated routes read an `HttpOnly
 | POST | `/api/auth/confirm` | no | `{ token }` marks the email confirmed |
 | POST | `/api/auth/resend-confirmation` | yes | re-sends the confirmation email |
 | POST | `/api/auth/unsubscribe` | no | `{ token }` turns off one email preference |
+| GET | `/api/user?kind=invite-link` | yes | → `{ url, code }`, the "Invite a birding friend" link `https://bird-alert.vercel.app/?ref=invite-<code>`; signup takes its `?ref=` value as `source.invite` |
 | PATCH | `/api/user` | yes | update `email`, `state`, `location`, `alert_digest_email_enabled`, `rare_sightings_email_enabled`, `push_watchlist_enabled`, `push_notable_enabled`, `push_notable_batched`, `push_first_of_season`, `migration_email_enabled`, `push_quiet_start`, `push_quiet_end` (hours 0-23 or null), `timezone` (IANA name the browser reports) |
 | GET | `/api/saved` | yes | the user's watch list |
 | POST | `/api/saved` | yes | `{ speciesCode }` → adds to watch list, resolving unknown codes first (idempotent) |
@@ -173,7 +174,7 @@ The workflows keep their own `schedule:` as a backup. Running a job twice is har
 
 ## Deploying
 
-Set these in the Vercel project: `PROD_PG_URL`, `SESSION_SECRET`, `CRON_SECRET`, `APP_BASE_URL`, `EBIRD_API_KEY`, `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY`, `VAPID_SUBJECT` (web push; generate the keys with `npx web-push generate-vapid-keys`), and `APP_EMAIL` plus `APP_PW` (a Gmail app password). Run `NODE_ENV=production npx knex migrate:latest` against the production database before the first deploy of a migration.
+Set these in the Vercel project: `PROD_PG_URL`, `SESSION_SECRET`, `CRON_SECRET`, `APP_BASE_URL`, `EBIRD_API_KEY`, `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY`, `VAPID_SUBJECT` (web push; generate the keys with `npx web-push generate-vapid-keys`), and `APP_EMAIL` plus `APP_PW` (a Gmail app password). Optional: `INVITE_SECRET` signs invite codes apart from `SESSION_SECRET` (setting it later changes every invite code). Run `NODE_ENV=production npx knex migrate:latest` against the production database before the first deploy of a migration.
 
 Optional: `HQ_PUSH_EMAIL`, the Bird Alert login whose devices get the HQ rarity pushes (the HQ email itself goes to `FEEDBACK_TO`); `API_LOCKDOWN=on`, which makes the eBird data endpoints answer only the Bird Alert app (its `X-Bird-Alert` header, an allowed origin, and a per-visitor rate limit), as eBird's data terms ask; off, requests without the header are only logged.
 

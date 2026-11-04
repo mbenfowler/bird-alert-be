@@ -62,7 +62,9 @@ const actions = {
   },
 
   // POST /api/auth/signup { email, password, state?, location?, source?, locale? } -> user (sets session cookie); `source` is what
-  //   brought them in (see lib/signupSource.js), kept for counting signups by where they came from
+  //   brought them in (see lib/signupSource.js), kept for counting signups by where they came from.
+  //   source.invite is an invite link's ?ref= value ('invite-<code>', lib/invites.js); a forged code still counts
+  //   as an invite, crediting no one. The new person is never told who invited them.
   signup: {
     methods: ['POST'],
     handler: async (req, res) => {
@@ -71,8 +73,11 @@ const actions = {
       assertValidPassword(password)
       if (await findUserByEmail(email)) throw new HttpError(409, 'An account with that email already exists')
 
+      const signupSource = signupSourceFor(source, req.headers['user-agent'])
+      // An inviter who has since deleted their account is credited to no one.
+      if (signupSource?.inviter && !(await db('users').where({ id: signupSource.inviter }).first('id'))) delete signupSource.inviter
       const [user] = await db('users')
-        .insert({ email, password_hash: await hashPassword(password), ...signupPlace(state, location), signup_source: signupSourceFor(source, req.headers['user-agent']), locale: normalizeLocale(locale) })
+        .insert({ email, password_hash: await hashPassword(password), ...signupPlace(state, location), signup_source: signupSource, locale: normalizeLocale(locale) })
         .returning('*')
 
       await startSession(res, user, req)
