@@ -1797,12 +1797,11 @@ test('the active place: an event covering today, else "I\'m here now", else home
     await db('events').where({ id: trip.id }).update({ starts_on: dayFrom(1), ends_on: dayFrom(3) })
     assert.equal((await places.activePlaceOf(me)).via, 'manual', 'starts tomorrow: not yet')
 
-    // Far east of UTC it's already tomorrow, so the event has begun there.
+    // Far east of UTC it may already be tomorrow for the member, but an event's day is its own zone's
+    // (be#168; here UTC): it hasn't begun, whatever the hour.
     await db('users').where({ id }).update({ timezone: 'Pacific/Kiritimati', active_place_id: null })
     me = await db('users').where({ id }).first()
-    const kiri = places.localDay('Pacific/Kiritimati')
-    const expected = kiri >= dayFrom(1) ? trip.id : null
-    assert.equal((await places.activeEventOf(me))?.id ?? null, expected)
+    assert.equal((await places.activeEventOf(me))?.id ?? null, null)
   } finally {
     await db('events').where({ owner_id: id }).del()
     await db('users').where({ id }).del()
