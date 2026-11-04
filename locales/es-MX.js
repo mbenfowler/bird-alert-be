@@ -262,6 +262,7 @@ module.exports = {
     'A start\'s name is text, up to 200 characters': 'El nombre de un inicio es texto, de hasta 200 caracteres',
     'A stop\'s locId is an eBird location id (like L123456) or null': 'El locId de una parada es un id de ubicación de eBird (como L123456) o null',
     'A stop\'s stay_min is minutes from 0 to 480, or null for the suggestion': 'El stay_min de una parada son minutos de 0 a 480, o null para la sugerencia',
+    'A stop\'s locked is true or false': 'El locked de una parada es true o false',
     'A start\'s time is HH:MM (24-hour), or null for none': 'La hora del punto de partida es HH:MM (24 horas), o null si no hay',
     'stop is a stop\'s place in the route (0 the first, -1 the meeting point), or null': 'stop es el lugar de una parada en la ruta (0 la primera, -1 el punto de encuentro), o null',
     'That stop isn\'t on the route': 'Esa parada no está en la ruta',
