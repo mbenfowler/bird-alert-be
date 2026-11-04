@@ -3883,3 +3883,57 @@ test('the route position migration: adds the columns, and takes them away again'
     await db('users').whereIn('id', [owner.id, tapper.id]).del()
   }
 })
+
+test('invite links: the link needs a session, a signup from it credits the inviter, and HQ counts invites without emails', async () => {
+  const auth = require('../api/auth/[action]')
+  const userApi = require('../api/user')
+  const { fakeReq, fakeRes } = require('./helpers')
+  const { createSession } = require('../lib/auth')
+  const { adminStats, adminSection } = require('../lib/adminStats')
+  const before = (await adminStats()).totals.invites
+
+  const anon = fakeRes()
+  await userApi(fakeReq({ method: 'GET', query: { kind: 'invite-link' } }), anon)
+  assert.equal(anon.statusCode, 401)
+
+  const [inviter] = await db('users').insert({ email: 'inviter@example.com', password_hash: 'x', location: 'US-GA-139', state: 'GA' }).returning('*')
+  const session = fakeRes(); createSession(session, inviter)
+  const cookie = String(session.headers['set-cookie']).split(';')[0]
+  const link = fakeRes()
+  await userApi(fakeReq({ method: 'GET', headers: { cookie }, query: { kind: 'invite-link' } }), link)
+  assert.equal(link.statusCode, 200)
+  assert.equal(link.body.url, `https://bird-alert.vercel.app/?ref=invite-${link.body.code}`)
+  assert.doesNotMatch(link.body.url, /inviter|example\.com/, 'no email in the link')
+  const odd = fakeRes()
+  await userApi(fakeReq({ method: 'GET', headers: { cookie }, query: { kind: 'nope' } }), odd)
+  assert.equal(odd.statusCode, 400)
+
+  const signUp = async (email, invite) => {
+    const res = fakeRes()
+    await auth(fakeReq({ method: 'POST', query: { action: 'signup' }, body: { email, password: 'longenough1', source: { landing: 'home', invite } } }), res)
+    assert.equal(res.statusCode, 201)
+    assert.equal(JSON.stringify(res.body).includes('inviter'), false, 'the new person is not told who invited them')
+    return (await db('users').where({ email }).first('id', 'signup_source'))
+  }
+  const friend = await signUp('invited-1@example.com', `invite-${link.body.code}`)
+  assert.deepEqual(friend.signup_source, { landing: 'home', invite: true, inviter: inviter.id })
+  await signUp('invited-2@example.com', `invite-${link.body.code}`)
+  const forged = await signUp('invited-forged@example.com', `invite-${inviter.id.toString(36)}-aaaaaa`)
+  assert.deepEqual(forged.signup_source, { landing: 'home', invite: true })
+  // A real code for an account that's since gone credits no one.
+  const [{ id: goneId }] = await db('users').insert({ email: 'gone-inviter@example.com', password_hash: 'x' }).returning('id')
+  const goneCode = require('../lib/invites').inviteCode(goneId)
+  await db('users').where({ id: goneId }).del()
+  const orphan = await signUp('invited-orphan@example.com', `invite-${goneCode}`)
+  assert.deepEqual(orphan.signup_source, { landing: 'home', invite: true })
+
+  const s = await adminStats()
+  assert.deepEqual(s.totals.invites, { signups: before.signups + 4, inviters: before.inviters + 1 })
+  assert.equal(s.signups.find((u) => u.id === friend.id).source, 'invite')
+  const { html, text } = adminSection(s)
+  assert.match(html, /<strong>Invites:<\/strong> \d+ signups from invite links, by \d+ (person|people) inviting/)
+  assert.match(html, new RegExp(`#${friend.id} no county · from invite`))
+  assert.match(text, /Invites: \d+ signups from invite links, \d+ inviters/)
+  assert.doesNotMatch(html + text, /@example\.com/, 'no emails in the HQ email')
+  await db('users').whereIn('email', ['inviter@example.com', 'invited-1@example.com', 'invited-2@example.com', 'invited-forged@example.com', 'invited-orphan@example.com']).del()
+})
