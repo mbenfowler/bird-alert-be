@@ -3045,6 +3045,121 @@ test('the event page\'s scouting: members only, last week\'s reports of the targ
   }
 })
 
+test('the event page\'s scouting today: what\'s new, the bird of the day and the headline as the morning push and email say them; every target where it stands, lifers marked', async () => {
+  const events = require('../lib/events')
+  const scouting = require('../lib/scouting')
+  const abaCodes = require('../lib/abaCodes')
+  const { emailScoutingNow } = require('../lib/scoutEmail')
+  await db('birds').insert([
+    { speciesCode: 'rubrob', comName: 'Rufous-backed Robin', sciName: 'Turdus rufopalliatus', birdImg: 'https://example.org/robin.jpg' },
+    ...[['eletro', 'Elegant Trogon'], ['mexchi', 'Mexican Chickadee'], ['monqua', 'Montezuma Quail'], ['whewoo', 'White-eared Hummingbird']].map(([speciesCode, comName]) => ({ speciesCode, comName, sciName: comName }))
+  ]).onConflict('speciesCode').merge(['birdImg'])
+  // The ABA codes the alerts use: by scientific name, else the English name.
+  await db('aba_codes').insert([['Turdus rufopalliatus', 'Rufous-backed Robin', 3], ['Trogon elegans', 'Elegant Trogon', 2], ['Basilinna leucotis', 'White-eared Hummingbird', 3],
+    ['Poecile sclateri', 'Mexican Chickadee', 3], ['Cyrtonyx montezumae', 'Montezuma Quail', 2]].map(([sci_name, com_name, code]) => ({ sci_name, com_name, code, version: 'test' }))).onConflict('sci_name').ignore()
+  abaCodes.forgetCodes()
+  const [{ id }] = await db('users').insert({ email: 'scout-today@example.com', password_hash: 'x', location: 'US-GA-139', state: 'GA', email_confirmed: true, trip_emails_enabled: true, timezone: 'UTC' }).returning('id')
+  const likelyFor = scouting.likelyFor
+  const d = dayFrom
+  // Noon today, UTC (the person's zone and the event's).
+  const now = new Date(`${d(0)}T12:00:00Z`)
+  // The page's hour-kept copy of the area's feed (lib/apiGuard shared): fresh for this test, and gone after it.
+  const kept = `api:${require('crypto').createHash('sha1').update('scout-view:county:US-AZ-019').digest('hex')}`
+  try {
+    const user = await db('users').where({ id }).first()
+    const [place] = await db('places').insert({ user_id: id, name: 'Huachucas', state: 'AZ', location: 'US-AZ-019', range_mi: 0 }).returning('*')
+    await db('place_targets').insert(['eletro', 'mexchi', 'monqua', 'rubrob', 'whewoo'].map((code) => ({ place_id: place.id, species_code: code })))
+    const event = await eventAt(id, place, { starts_on: d(10), ends_on: d(10), kind: 'bigday', scout: true, scout_days: 21 })
+    const feed = [
+      { speciesCode: 'rubrob', comName: 'Rufous-backed Robin', sciName: 'Turdus rufopalliatus', locName: 'Beatty Ranch', locId: 'L1', lat: 31.4, lng: -110.25, obsDt: `${d(0)} 07:30`, subId: 'S1', obsValid: true, obsReviewed: true, hasRichMedia: true },
+      { speciesCode: 'eletro', comName: 'Elegant Trogon', sciName: 'Trogon elegans', locName: 'Ramsey Canyon', locId: 'L2', lat: 31.45, lng: -110.3, obsDt: `${d(0)} 09:00`, subId: 'S2', obsValid: true, obsReviewed: false },
+      { speciesCode: 'eletro', comName: 'Elegant Trogon', sciName: 'Trogon elegans', locName: 'Miller Canyon', locId: 'L3', lat: 31.42, lng: -110.27, obsDt: `${d(-2)} 08:00`, subId: 'S3', obsValid: true, obsReviewed: false },
+      { speciesCode: 'whewoo', comName: 'White-eared Hummingbird', sciName: 'Basilinna leucotis', locName: 'Carr Canyon', locId: 'L4', lat: 31.43, lng: -110.29, obsDt: `${d(-3)} 09:00`, subId: 'S4', obsValid: true, obsReviewed: false },
+      { speciesCode: 'mexchi', comName: 'Mexican Chickadee', sciName: 'Poecile sclateri', locName: 'Rustler Park', locId: 'L5', lat: 31.9, lng: -109.28, obsDt: `${d(-10)} 09:00`, subId: 'S5', obsValid: true, obsReviewed: false }
+    ]
+    let calls = 0
+    const fetchFeed = async (key) => { calls += 1; assert.equal(key, 'county:US-AZ-019'); return feed }
+    await db('nearby_cache').where({ key: kept }).del()
+
+    // The morning report, for the same feed: one push and one email.
+    const pushes = []
+    const mails = []
+    await scouting.runScouting({ now, fetchFeed, push: async (userId, payload) => { if (userId === id) pushes.push(payload); return { sent: 1 } }, send: async (m) => { if (m.to === user.email) mails.push(m) } })
+    assert.equal(mails.length, 1)
+    const daily = mails[0]
+    assert.match(pushes[0].data.url, new RegExp(`/events/${event.id}#scouting$`), 'the push opens the scouting card')
+    assert.match(daily.text, new RegExp(`Open the event: \\S+/events/${event.id}#scouting\n`), 'so does the email')
+    assert.match(daily.html, new RegExp(`href="[^"]+/events/${event.id}#scouting"`))
+
+    const view = await events.eventScouting(user, event.id, { fetchFeed, now, locale: 'en' })
+    // The headline is the email's subject.
+    assert.equal(view.headline, 'Huachucas: Elegant Trogon and 1 more new today · 10 days to go')
+    assert.equal(view.headline, daily.subject)
+    // What's new: the email's list (newest first there), rarest first here.
+    assert.equal(daily.text.match(/^New: (.*)$/m)[1], 'Elegant Trogon, Rufous-backed Robin')
+    assert.deepEqual(view.fresh.map((f) => f.comName).sort(), daily.text.match(/^New: (.*)$/m)[1].split(', ').sort())
+    assert.deepEqual(view.fresh, [
+      { code: 'rubrob', speciesCode: 'rubrob', comName: 'Rufous-backed Robin', locName: 'Beatty Ranch', locId: 'L1', obsDt: `${d(0)} 07:30`, aba: 3, flagged: true },
+      { code: 'eletro', speciesCode: 'eletro', comName: 'Elegant Trogon', locName: 'Ramsey Canyon', locId: 'L2', obsDt: `${d(0)} 09:00`, aba: 2, flagged: false }
+    ])
+    // The bird of the day: the email's.
+    assert.match(daily.text, /Bird of the day: Rufous-backed Robin \(ABA Code 3\)\nBeatty Ranch · /)
+    const { evidence, ...hero } = view.bird_of_day
+    assert.deepEqual(hero, { code: 'rubrob', speciesCode: 'rubrob', comName: 'Rufous-backed Robin', locName: 'Beatty Ranch', obsDt: `${d(0)} 07:30`, aba: 3, photo: 'https://example.org/robin.jpg' })
+    assert.ok(evidence && daily.text.includes(evidence), 'the reviewer line the email shows')
+    // Asked for now from the page, the email says the same (its subject says when it was asked).
+    const asked = []
+    await db('nearby_cache').where({ key: `scout-email:${event.id}:${id}` }).del()
+    assert.equal((await emailScoutingNow(user, event.id, { now, fetchFeed, send: async (m) => { asked.push(m) } })).status, 200)
+    assert.match(asked[0].text, /^New: Elegant Trogon, Rufous-backed Robin$/m)
+    assert.match(asked[0].text, /Bird of the day: Rufous-backed Robin \(ABA Code 3\)/)
+
+    // Every target: around (last 7 days), quiet (in between), missing (nothing in 14). Too short a life list: no lifers marked.
+    assert.deepEqual(view.targets, [
+      { code: 'eletro', speciesCode: 'eletro', comName: 'Elegant Trogon', status: 'around', last_obs_dt: `${d(0)} 09:00`, last_loc_name: 'Ramsey Canyon', aba: 2, lifer: false },
+      { code: 'rubrob', speciesCode: 'rubrob', comName: 'Rufous-backed Robin', status: 'around', last_obs_dt: `${d(0)} 07:30`, last_loc_name: 'Beatty Ranch', aba: 3, lifer: false },
+      { code: 'whewoo', speciesCode: 'whewoo', comName: 'White-eared Hummingbird', status: 'around', last_obs_dt: `${d(-3)} 09:00`, last_loc_name: 'Carr Canyon', aba: 3, lifer: false },
+      { code: 'mexchi', speciesCode: 'mexchi', comName: 'Mexican Chickadee', status: 'quiet', last_obs_dt: `${d(-10)} 09:00`, last_loc_name: 'Rustler Park', aba: 3, lifer: false },
+      { code: 'monqua', speciesCode: 'monqua', comName: 'Montezuma Quail', status: 'missing', last_obs_dt: null, last_loc_name: null, aba: 2, lifer: false }
+    ])
+    // The old lists stay as they were.
+    assert.deepEqual(view.reported.map((r) => r.code), ['eletro', 'rubrob', 'whewoo'])
+    assert.deepEqual(view.unreported.map((r) => r.code), ['monqua'])
+
+    // A life list of 10 or more: the targets not on it are lifers.
+    const short = ['eletro', 'acowoo', 'mallar3']
+    await db('seen_birds').insert(short.map((species_code) => ({ user_id: id, species_code })))
+    assert.ok((await events.eventScouting(user, event.id, { fetchFeed, now })).targets.every((t) => !t.lifer), 'under 10 birds: none marked, as lifer alerts')
+    await db('seen_birds').insert(Array.from({ length: 8 }, (_, i) => ({ user_id: id, species_code: `filler${i}` })))
+    const listed = await events.eventScouting(user, event.id, { fetchFeed, now })
+    assert.deepEqual(listed.targets.map((t) => [t.code, t.lifer]), [['eletro', false], ['rubrob', true], ['whewoo', true], ['mexchi', true], ['monqua', true]])
+
+    // No targets picked: the likely lifers, and the headline says so.
+    await db('event_targets').where({ event_id: event.id }).del()
+    scouting.likelyFor = async () => ['monqua', 'mexchi']
+    const standIn = await events.eventScouting(user, event.id, { fetchFeed, now })
+    assert.equal(standIn.using, 'likely_lifers')
+    assert.deepEqual(standIn.targets.map((t) => [t.code, t.status]), [['mexchi', 'quiet'], ['monqua', 'missing']])
+    assert.deepEqual([standIn.fresh, standIn.bird_of_day], [[], null])
+    assert.equal(standIn.headline, 'Huachucas: no likely lifers reported yet · 10 days to go')
+    assert.equal(calls, 2, 'one for the morning run, one for the page: kept an hour, however often it\'s asked')
+
+    // Past: nothing.
+    await db('events').where({ id: event.id }).update({ starts_on: d(-3), ends_on: d(-2) })
+    const past = await events.eventScouting(user, event.id, { fetchFeed: async () => { throw new Error('a past event asks nothing') }, now })
+    assert.deepEqual([past.fresh, past.bird_of_day, past.headline, past.targets], [[], null, null, []])
+  } finally {
+    scouting.likelyFor = likelyFor
+    await db('aba_codes').where({ version: 'test' }).del()
+    abaCodes.forgetCodes()
+    await db('nearby_cache').where({ key: kept }).del()
+    await db('events').where({ owner_id: id }).del()
+    await db('places').where({ user_id: id }).del()
+    await db('seen_birds').where({ user_id: id }).del()
+    await db('users').where({ id }).del()
+  }
+})
+
 test('"Email me the scouting report now": members only, a confirmed address, before the event ends, 3 an hour; targets, likely lifers or what else is about, and the group\'s route', async () => {
   const saved = require('../api/saved')
   const scouting = require('../lib/scouting')
