@@ -3095,9 +3095,9 @@ test('the event page\'s scouting today: what\'s new, the bird of the day and the
     // The headline is the email's subject.
     assert.equal(view.headline, 'Huachucas: Elegant Trogon and 1 more new today · 10 days to go')
     assert.equal(view.headline, daily.subject)
-    // What's new: the email's list (newest first there), rarest first here.
-    assert.equal(daily.text.match(/^New: (.*)$/m)[1], 'Elegant Trogon, Rufous-backed Robin')
-    assert.deepEqual(view.fresh.map((f) => f.comName).sort(), daily.text.match(/^New: (.*)$/m)[1].split(', ').sort())
+    // What's new: the email's list (its bird of the day shown above it, not again), rarest first here.
+    assert.equal(daily.text.match(/^New: (.*)$/m)[1], 'Elegant Trogon')
+    assert.deepEqual(view.fresh.map((f) => f.comName).sort(), [...daily.text.match(/^New: (.*)$/m)[1].split(', '), view.bird_of_day.comName].sort())
     assert.deepEqual(view.fresh, [
       { code: 'rubrob', speciesCode: 'rubrob', comName: 'Rufous-backed Robin', locName: 'Beatty Ranch', locId: 'L1', obsDt: `${d(0)} 07:30`, aba: 3, flagged: true },
       { code: 'eletro', speciesCode: 'eletro', comName: 'Elegant Trogon', locName: 'Ramsey Canyon', locId: 'L2', obsDt: `${d(0)} 09:00`, aba: 2, flagged: false }
@@ -3111,7 +3111,7 @@ test('the event page\'s scouting today: what\'s new, the bird of the day and the
     const asked = []
     await db('nearby_cache').where({ key: `scout-email:${event.id}:${id}` }).del()
     assert.equal((await emailScoutingNow(user, event.id, { now, fetchFeed, send: async (m) => { asked.push(m) } })).status, 200)
-    assert.match(asked[0].text, /^New: Elegant Trogon, Rufous-backed Robin$/m)
+    assert.match(asked[0].text, /^New: Elegant Trogon$/m)
     assert.match(asked[0].text, /Bird of the day: Rufous-backed Robin \(ABA Code 3\)/)
 
     // Every target: around (last 7 days), quiet (in between), missing (nothing in 14). Too short a life list: no lifers marked.
