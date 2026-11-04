@@ -83,18 +83,30 @@ const savedBirdsFor = (userId) =>
 //                                                     409 { error: 'confirm_email' } unconfirmed address; 400 { error: 'event_over' }; 429 { error: 'too_many', retry_after_min } past 3 an hour
 //                                                     per event; 503 { error: 'mail_cap' } the day's mail is used up
 // The group's own route, saved to the event (lib/eventRoutePlan): any member edits it, everyone sees the same one. Members only (404 otherwise).
-// GET    /api/saved?kind=event-route-plan&id=     -> { start: { name, lat, lng }|null, stops: [{ locId|null, name, lat, lng, stay_min|null, targets_here, suggested_stay_min }], version, updated_at, updated_by_name|null, updated_by_you,
-//                                                     legs: [{ min, mi }|null]|null, totals: { drive_min|null, stay_min, total_min }, routed }
+// GET    /api/saved?kind=event-route-plan&id=     -> { start: { name, lat, lng, time? }|null, stops: [{ locId|null, name, lat, lng, stay_min|null, targets_here, suggested_stay_min }], version, updated_at, updated_by_name|null, updated_by_you,
+//                                                     legs: [{ min, mi }|null]|null, totals: { drive_min|null, stay_min, total_min }, routed,
+//                                                     position: { stop, at, by_name|null, by_you }|null }
+//                                                     start.time: the meeting time, 'HH:MM' 24-hour on the event's own clock (events.timezone); absent: none.
+//                                                     position: where the group is on the route (event-route-position): stop 0-based in stops, -1 at the meeting point;
+//                                                     at: when the member tapped it (ISO); by_name: their display_name in the event, never an email. null when none
+//                                                     is set, or the stops changed since so it's no longer on the route.
 //                                                     stay_min: the group's minutes there (null: use suggested_stay_min, the suggestion's formula); targets_here: targets reported
 //                                                     there this week from the event's hour-kept scouting feed (personal spots folded into the hotspot count; a typed address 0).
 //                                                     legs: one a stop, the drive into it from the stop before (the first: from the start; null when there's none), from one
 //                                                     OSRM route through start + stops, cached 30 days (lib/routing drive). totals.stay_min: each stay_min ?? suggested_stay_min.
 //                                                     routed false (OSRM failed): legs and drive_min null, total_min the stays alone
-//                                                     or { start: null, stops: null, version: 0 } when none is saved (the suggestion stands). updated_by_name: their display_name in the event, never an email
-// PUT    /api/saved?kind=event-route-plan&id= { start: { name, lat, lng }|null, stops: [{ locId: 'L123'|null, name (<= 200), lat, lng, stay_min?: 0..480|null }] (<= 8), version }
+//                                                     or { start: null, stops: null, version: 0, position: null } when none is saved (the suggestion stands). updated_by_name: their display_name in the event, never an email
+// PUT    /api/saved?kind=event-route-plan&id= { start: { name, lat, lng, time?: 'HH:MM'|null }|null, stops: [{ locId: 'L123'|null, name (<= 200), lat, lng, stay_min?: 0..480|null }] (<= 8), version }
 //                                                 -> 200 the saved route at version + 1, as GET gives it (stops rounded to 5 decimals, start to 2, stay_min to whole minutes); 400 when invalid
 //                                                    version is the one it was read at (0: none saved yet); any other -> 409 { error, current: the route as GET gives it }
-// DELETE /api/saved?kind=event-route-plan&id=&version= -> 200 { start: null, stops: null, version: 0 } back to the suggestion; the same 409 rule
+// DELETE /api/saved?kind=event-route-plan&id=&version= -> 200 { start: null, stops: null, version: 0, position: null } back to the suggestion; the same 409 rule
+// POST   /api/saved?kind=event-route-position&id= { stop: int|null, at: ISO time } -> 200 { position: as GET event-route-plan gives it, applied }
+//                                                    "We're here", shared with the group. stop: 0-based in the saved stops, -1 the meeting point (needs a start), null clears it.
+//                                                    at: when the member tapped it (default now; one in the future is taken as now). The latest `at` wins whatever order
+//                                                    taps arrive in: an older one (or the same time) changes nothing, applied false, and the newer position comes back.
+//                                                    Never touches `version`, so it never conflicts with an edit of the route. Members only (404 otherwise);
+//                                                    409 'The route isn't saved yet'; 400 'stop is a stop's place in the route (0 the first, -1 the meeting point), or null' |
+//                                                    'That stop isn't on the route' | 'at is a date and time'
 // PATCH  /api/saved?kind=event&id= { name?, starts_on?, ends_on?, state?, location?, range_mi?, kind?, scout?, scout_days? } -> the event
 // DELETE /api/saved?kind=event&id=                -> 204 (organizer: deletes it for everyone; others leave)
 // POST   /api/saved?kind=event-leave&id=          -> 204
@@ -220,6 +232,7 @@ module.exports = route(['GET', 'POST', 'PUT', 'PATCH', 'DELETE'], async (req, re
       if (req.method === 'PUT') return answer(await routePlan.putPlan(user, id, body(req)))
       if (req.method === 'DELETE') return answer(await routePlan.deletePlan(user, id, req.query.version ?? body(req).version))
     }
+    if (kind === 'event-route-position' && req.method === 'POST') return res.status(200).json(await routePlan.postPosition(user, id, body(req)))
     if (kind === 'event-join' && req.method === 'POST') {
       const event = await events.joinEvent(user, body(req))
       if (places.startsSoon(event, event.timezone || user.timezone)) ready(event.location)
