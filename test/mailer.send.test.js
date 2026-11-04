@@ -7,7 +7,8 @@ const sent = []
 process.env.APP_EMAIL = 'birdalert.test@example.com'
 process.env.APP_PW = 'app-password'
 process.env.FORCE_SEND_MAIL = 'true'
-require('nodemailer').createTransport = () => ({ sendMail: async (message) => { sent.push(message); return { accepted: [message.to] } } })
+let refuse = null
+require('nodemailer').createTransport = () => ({ sendMail: async (message) => { if (refuse) throw refuse; sent.push(message); return { accepted: [message.to] } } })
 const mailer = require('../lib/mailer')
 
 const user = { id: 7, email: 'birder@example.com', password: 'hash', location: 'US-GA-139' }
@@ -70,4 +71,18 @@ test('replies go to the owner when FEEDBACK_TO is set, and to an explicit reply-
   sent.length = 0
   await mailer.sendMail({ to: user.email, subject: 'Hi', text: 'hi', html: '<p>hi</p>' })
   assert.equal(sent[0].replyTo, undefined, 'unset: mail clients reply to the sender as before')
+})
+
+test('Gmail refusing the sign-in becomes MAIL_DOWN, which ends a run of sends like the daily cap', async () => {
+  refuse = Object.assign(new Error('Invalid login: 534-5.7.9 Please log in with your web browser'), { code: 'EAUTH', responseCode: 534 })
+  try {
+    await assert.rejects(mailer.sendConfirmationEmail(user), (error) => error.code === 'MAIL_DOWN' && /refused the sign-in/.test(error.message))
+    assert.ok(mailer.stopsMailRun({ code: 'MAIL_DOWN' }) && mailer.stopsMailRun({ code: 'MAIL_CAP' }))
+    // Any other failure is one message's problem, not the server's.
+    refuse = Object.assign(new Error('Recipient address rejected'), { responseCode: 550 })
+    await assert.rejects(mailer.sendConfirmationEmail(user), (error) => error.code !== 'MAIL_DOWN')
+    assert.equal(mailer.stopsMailRun(refuse), false)
+  } finally {
+    refuse = null
+  }
 })
