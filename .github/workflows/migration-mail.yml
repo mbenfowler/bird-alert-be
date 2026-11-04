@@ -18,7 +18,7 @@ jobs:
           CRON_SECRET: ${{ secrets.CRON_SECRET }}
         run: |
           test -n "$CRON_SECRET" || { echo "CRON_SECRET secret is not set"; exit 1; }
-          for i in $(seq 1 30); do
+          for i in $(seq 1 80); do
             out=$(curl --fail-with-body --silent --show-error --max-time 120 \
               -H "Authorization: Bearer $CRON_SECRET" \
               https://bird-alert-be.vercel.app/api/mail/migration)

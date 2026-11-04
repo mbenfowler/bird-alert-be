@@ -225,6 +225,18 @@ const actions = {
       await db('users').where({ id: sub }).update({ [emailType]: false, updated_at: new Date() })
       res.status(200).json({ ok: true, emailType })
     }
+  },
+
+  // POST /api/auth/one-click?token= -> the same, from a mail app's own Unsubscribe button (RFC 8058:
+  // List-Unsubscribe-Post). The token rides in the address; the body is just "List-Unsubscribe=One-Click".
+  'one-click': {
+    methods: ['POST'],
+    handler: async (req, res) => {
+      const { sub, emailType } = verifyToken(String(req.query.token || ''), 'unsubscribe')
+      if (!EMAIL_PREFERENCES.includes(emailType)) throw new HttpError(400, 'Unknown email type')
+      await db('users').where({ id: sub }).update({ [emailType]: false, updated_at: new Date() })
+      res.status(200).json({ ok: true, emailType })
+    }
   }
 }
 

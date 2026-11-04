@@ -709,6 +709,45 @@ test('a refused mail sign-in ends the digest at the first send, logged once, nob
   assert.equal(await db('error_log').where('where', 'mail down').count('* as n').first().then((r) => Number(r.n)), before + 1)
 })
 
+test('digest sends go out spaced apart; a gap that would overrun the call says there is more', async () => {
+  await db('users').where({ id: userId }).update({ alert_digest_email_enabled: true, email_confirmed: true, location: 'US-GA-139' })
+  const [{ id: other }] = await db('users').insert({ email: 'gap@example.com', password_hash: 'x', location: 'US-GA-139', alert_digest_email_enabled: true, email_confirmed: true }).returning('id')
+  try {
+    const at = []
+    const options = {
+      kind: 'gaptest',
+      preference: 'alert_digest_email_enabled',
+      fetchSightings: async () => [{ speciesCode: 'cangoo', comName: 'Canada Goose', obsDt: '2026-11-04 08:00' }],
+      select: async (_user, sightings) => sightings,
+      send: async () => { at.push(Date.now()) }
+    }
+    const whole = await runDigest({ ...options, gapMs: 40 })
+    assert.equal(whole.sent, 2)
+    assert.ok(at[1] - at[0] >= 40, 'the second waits its gap')
+    await db('digest_log').where({ kind: 'gaptest' }).del()
+    at.length = 0
+    const short = await runDigest({ ...options, gapMs: 1000, deadline: Date.now() + 500 })
+    assert.deepEqual([short.sent, short.more], [1, true], 'no wait past the deadline')
+  } finally {
+    await db('digest_log').where({ kind: 'gaptest' }).del()
+    await db('users').where({ id: other }).del()
+  }
+})
+
+test('one-click unsubscribe turns off that email from the token in the address', async () => {
+  const handler = require('../api/auth/[action].js')
+  const { signToken } = require('../lib/tokens')
+  await db('users').where({ id: userId }).update({ rare_sightings_email_enabled: true })
+  const token = signToken('unsubscribe', { sub: userId, emailType: 'rare_sightings_email_enabled' }, '1d')
+  const res = { statusCode: 0, headers: {}, status (c) { this.statusCode = c; return this }, json (b) { this.body = b; return this }, setHeader (k, v) { this.headers[k] = v } }
+  await handler({ method: 'POST', query: { action: 'one-click', token }, body: 'List-Unsubscribe=One-Click', headers: {} }, res)
+  assert.equal(res.statusCode, 200)
+  assert.equal((await db('users').where({ id: userId }).first()).rare_sightings_email_enabled, false)
+  const bad = { ...res, statusCode: 0 }
+  await handler({ method: 'POST', query: { action: 'one-click', token: 'nope' }, body: '', headers: {} }, bad)
+  assert.ok(bad.statusCode >= 400)
+})
+
 test('the hourly push out of time says where to resume', async () => {
   const { runPushAlerts } = require('../lib/pushAlerts')
   await db('users').where({ id: userId }).update({ push_watchlist_enabled: true, location: 'US-GA-139', push_quiet_start: null, push_quiet_end: null })

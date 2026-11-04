@@ -164,6 +164,8 @@ test('asked for now: its own subject, the last 7 days, the day itself, and no un
   assert.match(asked.html, /Cornell Lab of Ornithology/, 'the eBird credit stays')
   const daily1 = scoutingMessage(pat, daily)
   assert.ok(daily1.text.includes('/unsubscribe/') && daily1.html.includes('/unsubscribe/'))
+  assert.equal(asked.headers, undefined, 'no one-click unsubscribe on a report asked for')
+  assert.match(daily1.headers['List-Unsubscribe'], /^<https:\/\/\S+\/api\/auth\/one-click\?token=\S+>$/)
   assert.match(scoutingMessage(pat, { ...daily, daysToGo: 1, requested }).text, /^Big Day 2027 · tomorrow\n/)
   assert.match(scoutingMessage(pat, { ...daily, daysToGo: 0, requested }).text, /^Big Day 2027 · today\n/)
   assert.match(scoutingMessage(pat, { ...daily, daysToGo: -1, requested }).text, /^Big Day 2027 · under way\n/)
