@@ -11,7 +11,7 @@ const seasonality = require('../lib/seasonality')
 let userId
 before(async () => {
   await db.migrate.latest()
-  for (const table of ['event_routes', 'event_tally', 'event_targets', 'event_members', 'events', 'trips', 'place_targets', 'places', 'taxonomy_names', 'hq_alerts', 'hotspot_weeks', 'hq_picks', 'feedback', 'passkeys', 'shares', 'seen_birds', 'taxonomy_ref', 'user_routes', 'hotspot_ref', 'mail_counts', 'error_log', 'drive_cache', 'nearby_cache', 'place_predictions', 'checklist_species', 'checklists', 'bird_sounds', 'digest_log', 'push_handoff', 'push_log', 'push_subscriptions', 'saved_birds', 'auth_throttle', 'season_firsts', 'region_species_days', 'region_days', 'job_runs', 'users', 'birds']) await db(table).del()
+  for (const table of ['event_routes', 'event_tally_marks', 'event_tally', 'event_targets', 'event_members', 'events', 'trips', 'place_targets', 'places', 'taxonomy_names', 'hq_alerts', 'hotspot_weeks', 'hq_picks', 'feedback', 'passkeys', 'shares', 'seen_birds', 'taxonomy_ref', 'user_routes', 'hotspot_ref', 'mail_counts', 'error_log', 'drive_cache', 'nearby_cache', 'place_predictions', 'checklist_species', 'checklists', 'bird_sounds', 'digest_log', 'push_handoff', 'push_log', 'push_subscriptions', 'saved_birds', 'auth_throttle', 'season_firsts', 'region_species_days', 'region_days', 'job_runs', 'users', 'birds']) await db(table).del()
   // Nothing in here may reach eBird; the hourly job's history fetch is a no-op unless a test says otherwise.
   ebird.historicObservations = async () => []
   ;[{ id: userId }] = await db('users').insert({
@@ -1684,12 +1684,15 @@ const dayFrom = (n) => new Date(Date.now() + n * 86_400_000).toISOString().slice
 /**
  * A solo event as lib/events makes one from a place, straight into the tables so any dates go: the
  * place's area and targets, the person its organizer with no name chosen yet. `place.id` may be null.
+
+ * Its days are UTC days (timezone 'UTC') unless given, so dayFrom's dates are the event's own at any
+ * hour; lib/events judges an event's day in its own zone (the area's, from lib/timezones, otherwise).
  */
 const eventAt = async (userId, place, fields = {}) => {
   const token = () => require('crypto').randomBytes(16).toString('base64url')
   const [event] = await db('events').insert({
     owner_id: userId, place_id: place.id ?? null, name: place.name, state: place.state, location: place.location, range_mi: place.range_mi ?? 30,
-    home_lat: place.home_lat ?? null, home_lng: place.home_lng ?? null, kind: 'trip', scout: false, scout_days: 21, invite_token: token(), view_token: token(), ...fields
+    home_lat: place.home_lat ?? null, home_lng: place.home_lng ?? null, kind: 'trip', scout: false, scout_days: 21, timezone: 'UTC', invite_token: token(), view_token: token(), ...fields
   }).returning('*')
   await db('event_members').insert({ event_id: event.id, user_id: userId, display_name: null, role: 'organizer' })
   const targets = place.id ? await db('place_targets').where({ place_id: place.id }).pluck('species_code') : []
@@ -2121,6 +2124,9 @@ test('event notes: to each member, one when an event starts and one the day befo
     const user = await db('users').where({ id }).first()
     const place = await places.createPlace(user, { name: 'Colorado (work)', state: 'CO', location: 'US-CO-031' })
     const trip = await events.createEvent(user, { place_id: place.id, starts_on: dayFrom(0), ends_on: dayFrom(3) })
+    assert.equal(trip.timezone, 'America/Denver', 'its zone, from its area')
+    // dayFrom's days are UTC days: the event's too (it would be Denver's, from its area).
+    await db('events').where({ owner_id: id }).update({ timezone: 'UTC' })
     await events.runEventNotices({ send })
     assert.deepEqual(notes.map((n) => [n.kind, n.place, n.ends, n.home, n.eventId]), [['started', 'Colorado (work)', dayFrom(3), 'Hall County', trip.id]], 'home said the way the app says it')
     await events.runEventNotices({ send })
@@ -2136,6 +2142,8 @@ test('event notes: to each member, one when an event starts and one the day befo
     // Turned off, or an unconfirmed address: none.
     notes.length = 0
     const later = await events.createEvent(user, { place_id: place.id, starts_on: dayFrom(0), ends_on: dayFrom(5) })
+    // dayFrom's days are UTC days: the event's too (it would be Denver's, from its area).
+    await db('events').where({ owner_id: id }).update({ timezone: 'UTC' })
     await db('users').where({ id }).update({ trip_emails_enabled: false })
     await events.runEventNotices({ send })
     assert.equal(notes.length, 0)
@@ -2365,6 +2373,8 @@ test('Big Days scout by default, and scouting sends one report a day in the wind
     const trip = await events.createEvent(user, { place_id: place.id, starts_on: dayFrom(5), ends_on: dayFrom(7), kind: 'bigday' })
     assert.deepEqual([trip.kind, trip.ends_on, trip.scout, trip.scout_days, trip.scout_from], ['bigday', dayFrom(5), true, 21, dayFrom(-16)])
     const plain = await events.createEvent(user, { place_id: place.id, starts_on: dayFrom(40), ends_on: dayFrom(41) })
+    // dayFrom's days are UTC days: the event's too (it would be Phoenix's, from its area).
+    await db('events').where({ owner_id: id }).update({ timezone: 'UTC' })
     assert.deepEqual([plain.kind, plain.scout], ['trip', false])
     assert.equal((await events.updateEvent(user, plain.id, { scout: true, scout_days: 14 })).scout_from, dayFrom(26))
     await assert.rejects(events.createEvent(user, { place_id: place.id, starts_on: dayFrom(5), ends_on: dayFrom(5), kind: 'party' }), (e) => e.status === 400)
@@ -3315,4 +3325,309 @@ test('the notable_skip_seen migration goes down and up again', async () => {
   }
   assert.equal(await db.schema.hasColumn('users', 'notable_skip_seen'), true)
   assert.equal((await db('users').where({ id: userId }).first()).notable_skip_seen, false)
+})
+
+// --- event day (the Big Day dry run) ---------------------------------------------------------------
+
+test('the event-day migration: down and up again, filling an Arizona event\'s zone; the tally keeps its rows', async () => {
+  const name = '20261122090000_event_day.js'
+  const [{ id: uid }] = await db('users').insert({ email: 'tz-migration@example.com', password_hash: 'x', location: 'US-GA-139', state: 'GA' }).returning('id')
+  try {
+    await db.migrate.down({ name })
+    assert.equal(await db.schema.hasColumn('events', 'timezone'), false)
+    assert.equal(await db.schema.hasTable('event_tally_marks'), false)
+    assert.equal(await db.schema.hasColumn('event_tally', 'client_id'), false)
+    const [az] = await db('events').insert({ owner_id: uid, name: 'Cochise Big Day', state: 'AZ', location: 'US-AZ-003', starts_on: '2026-11-10', ends_on: '2026-11-10', kind: 'bigday', invite_token: 'tz-mig-invite-000001', view_token: 'tz-mig-view-00000001' }).returning('*')
+    const [nowhere] = await db('events').insert({ owner_id: uid, name: 'Somewhere', state: 'ZV', location: 'US-ZV-009', starts_on: '2026-11-10', ends_on: '2026-11-10', invite_token: 'tz-mig-invite-000002', view_token: 'tz-mig-view-00000002' }).returning('*')
+    await db('event_tally').insert({ event_id: az.id, species_code: 'eletro', added_by: uid, added_at: '2026-11-10T14:00:00Z' })
+
+    await db.migrate.up({ name })
+    const zones = Object.fromEntries((await db('events').whereIn('id', [az.id, nowhere.id]).select('id', 'timezone')).map((e) => [e.id, e.timezone]))
+    assert.deepEqual([zones[az.id], zones[nowhere.id]], ['America/Phoenix', null], 'filled from the area; null where it can\'t say')
+    const row = await db('event_tally').where({ event_id: az.id }).first()
+    assert.ok(Number.isInteger(row.id))
+    assert.equal(new Date(row.observed_at).toISOString(), '2026-11-10T14:00:00.000Z', 'an older row was seen when it was added')
+    assert.deepEqual([row.client_id, row.lat, row.lng, row.stop_index, row.removed_at], [null, null, null, null, null])
+    assert.equal(await db.schema.hasTable('event_tally_marks'), true)
+
+    // Down again drops removed rows (as removal used to) and keeps the rest; up again is clean.
+    await db('event_tally').insert({ event_id: az.id, species_code: 'mexchi', added_by: uid, removed_at: db.fn.now() })
+    await db.migrate.down({ name })
+    assert.deepEqual(await db('event_tally').where({ event_id: az.id }).pluck('species_code'), ['eletro'])
+    await db.migrate.up({ name })
+  } finally {
+    await db.migrate.latest()
+    await db('events').where({ owner_id: uid }).del()
+    await db('users').where({ id: uid }).del()
+  }
+})
+
+/** A Big Day in Cochise County, AZ on Nov 10, with members whose accounts are in Phoenix, New York, UTC and no zone yet. */
+const cochiseBigDay = async (prefix) => {
+  const events = require('../lib/events')
+  // Nothing here may reach eBird: Arizona's counties, as eBird lists them.
+  const ebirdApi = require('../lib/ebird')
+  const original = ebirdApi.subregions
+  ebirdApi.subregions = async () => [{ code: 'US-AZ-003', name: 'Cochise' }, { code: 'US-AZ-019', name: 'Pima' }, { code: 'US-TX-141', name: 'El Paso' }]
+  const restore = async () => { ebirdApi.subregions = original; await db('nearby_cache').where('key', 'like', 'areas:%').del() }
+  const person = async (key, timezone) => (await db('users').insert({ email: `${prefix}-${key}@example.com`, password_hash: 'x', location: 'US-GA-139', state: 'GA', email_confirmed: true, timezone }).returning('*'))[0]
+  const people = { matt: await person('matt', 'America/Phoenix'), sam: await person('sam', 'America/New_York'), utc: await person('utc', 'UTC'), kim: await person('kim', null) }
+  const made = await events.createEvent(people.matt, { name: 'Cochise Big Day', state: 'AZ', location: 'US-AZ-003', starts_on: '2026-11-10', kind: 'bigday' }, new Date('2026-11-03T18:00:00Z'))
+  await db('event_members').where({ event_id: made.id, user_id: people.matt.id }).update({ display_name: 'Matt' })
+  await db('event_members').insert([['sam', 'Sam'], ['utc', 'Uma'], ['kim', 'Kim']].map(([key, display_name]) => ({ event_id: made.id, user_id: people[key].id, display_name, role: 'member' })))
+  const event = await db('events').where({ id: made.id }).first()
+  return { events, people, event, made, restore, ids: Object.values(people).map((p) => p.id) }
+}
+
+test('the event\'s day is Arizona\'s for every member: active at 10 PM and 11:59 PM Phoenix time whatever their account says, then over; the banner and the view link agree', async () => {
+  const places = require('../lib/places')
+  const { events, people, event, made, restore, ids } = await cochiseBigDay('tz-day')
+  try {
+    assert.equal(made.timezone, 'America/Phoenix', 'stored on create, from its area')
+    assert.equal(event.timezone, 'America/Phoenix')
+    const at = { '10 PM': '2026-11-11T05:00:00Z', '11:59 PM': '2026-11-11T06:59:00Z' }
+    for (const [time, iso] of Object.entries(at)) {
+      const now = new Date(iso)
+      for (const key of ['matt', 'sam', 'utc', 'kim']) {
+        const mine = (await events.listEvents(people[key], now)).find((e) => e.id === event.id)
+        assert.deepEqual([mine.timezone, mine.active, mine.past, mine.tally_open], ['America/Phoenix', true, false, true], `${key} at ${time} Phoenix`)
+        // The "Big Day today" banner (/me activeEvent) is the same rule.
+        assert.equal((await places.activeEventOf(people[key], now))?.id, event.id, `${key}'s banner at ${time}`)
+      }
+      const view = await events.viewEvent(event.view_token, 'en', now)
+      assert.deepEqual([view.active, view.tally_open, view.timezone], [true, true, 'America/Phoenix'], `view link at ${time}`)
+    }
+    // Past midnight in Phoenix it's over for all of them alike; late entries until 3 AM.
+    const after = new Date('2026-11-11T07:30:00Z')
+    for (const key of ['matt', 'sam', 'utc', 'kim']) {
+      const mine = (await events.listEvents(people[key], after)).find((e) => e.id === event.id)
+      assert.deepEqual([mine.active, mine.past, mine.tally_open], [false, true, true], key)
+      assert.equal(await places.activeEventOf(people[key], after), null)
+    }
+    assert.equal((await events.viewEvent(event.view_token, 'en', after)).active, false)
+    // Days to go in scouting count Arizona's days too: at 8 PM on the 8th there, two to go for New York's Sam (in NY it's the 9th).
+    const scouted = await events.scoutingFor(people.sam, event.id, { now: new Date('2026-11-09T03:00:00Z'), fetchFeed: async () => [] })
+    assert.equal(scouted.view.days_to_go, 2)
+    // A member's own quiet hours still go by their own zone.
+    const { inQuietHours } = require('../lib/quietHours')
+    assert.equal(inQuietHours({ ...people.sam, push_quiet_start: 22, push_quiet_end: 6 }, new Date('2026-11-11T04:00:00Z')), true, '11 PM in New York')
+    assert.equal(inQuietHours({ ...people.matt, push_quiet_start: 22, push_quiet_end: 6 }, new Date('2026-11-11T04:00:00Z')), false, '9 PM in Phoenix')
+    // A change of area takes a new zone.
+    const moved = await events.updateEvent(people.sam, event.id, { state: 'TX', location: 'US-TX-141' }, new Date('2026-11-03T18:00:00Z'))
+    assert.equal(moved.timezone, 'America/Denver')
+    assert.equal((await db('events').where({ id: event.id }).first()).timezone, 'America/Denver')
+  } finally {
+    await restore()
+    await db('events').where({ id: event.id }).del()
+    await db('users').whereIn('id', ids).del()
+  }
+})
+
+test('the tally: a repeated client_id is the same add; the first finder is kept, two members adding at once included; when and where it was seen, and the stop', async () => {
+  // Sighting times: n minutes after a moment 12 hours ago (an add is never in the future).
+  const base = Math.floor((Date.now() - 12 * 3600_000) / 1000) * 1000
+  const T = (n) => new Date(base + n * 60_000).toISOString()
+  const saved = require('../api/saved')
+  const { fakeReq, fakeRes } = require('./helpers')
+  const { createSession } = require('../lib/auth')
+  const { events, people, event, restore, ids } = await cochiseBigDay('tz-tally')
+  const as = (user) => {
+    const session = fakeRes(); createSession(session, user)
+    const cookie = String(session.headers['set-cookie']).split(';')[0]
+    return async (method, query, body) => { const res = fakeRes(); await saved(fakeReq({ method, headers: { cookie }, query: { id: String(event.id), ...query }, body }), res); return res }
+  }
+  const uuid = () => require('crypto').randomUUID()
+  try {
+    await db('event_routes').insert({ event_id: event.id, stops: JSON.stringify([{ locId: 'L1', name: 'Cave Creek Canyon', lat: 31.88, lng: -109.17 }, { locId: 'L2', name: 'Portal', lat: 31.913, lng: -109.141 }]), updated_by: people.matt.id })
+    const matt = as(people.matt)
+    const sam = as(people.sam)
+
+    // An add with its client_id, the sighting's time and spot: rounded to 3 decimals, at the nearest stop.
+    const trogon = uuid()
+    const first = await matt('POST', { kind: 'event-tally' }, { species_code: 'eletro', client_id: trogon, observed_at: T(65), lat: 31.88123, lng: -109.17456 })
+    assert.equal(first.statusCode, 200)
+    const entry = first.body.entry
+    assert.deepEqual([entry.code, entry.client_id, entry.added_by_name, entry.added_by_you, entry.observed_at instanceof Date ? entry.observed_at.toISOString() : entry.observed_at, entry.lat, entry.lng, entry.stop_index, entry.stop_name, entry.marked_by_me],
+      ['eletro', trogon, 'Matt', true, T(65), 31.881, -109.175, 0, 'Cave Creek Canyon', false])
+    assert.deepEqual(first.body.tally.map((t) => t.id), [entry.id])
+
+    // The same add again (a retry after a lost answer), even with other details: nothing changes, the row comes back, 200.
+    const again = await matt('POST', { kind: 'event-tally' }, { species_code: 'eletro', client_id: trogon, observed_at: T(180), lat: 31.9, lng: -109.2 })
+    assert.equal(again.statusCode, 200)
+    assert.deepEqual(again.body.entry, entry)
+    assert.equal(await db('event_tally').where({ event_id: event.id }).count('* as n').first().then((r) => Number(r.n)), 1)
+
+    // Someone else adds it later: still Matt's, still 7:05.
+    const later = await sam('POST', { kind: 'event-tally' }, { species_code: 'eletro', client_id: uuid(), observed_at: T(120) })
+    assert.deepEqual([later.body.entry.id, later.body.entry.added_by_name, later.body.entry.added_by_you, String(later.body.entry.observed_at.toISOString?.() ?? later.body.entry.observed_at)], [entry.id, 'Matt', false, T(65)])
+
+    // Sam syncs a sighting from before Matt's (offline in a canyon): Sam found it first, with Sam's spot (no stop near).
+    const quail = uuid()
+    await matt('POST', { kind: 'event-tally' }, { species_code: 'monqua', client_id: uuid(), observed_at: T(180), lat: 31.881, lng: -109.17 })
+    const earlier = await sam('POST', { kind: 'event-tally' }, { species_code: 'monqua', client_id: quail, observed_at: T(30), lat: 31.95, lng: -109.25 })
+    assert.deepEqual([earlier.body.entry.added_by_name, earlier.body.entry.observed_at.toISOString(), earlier.body.entry.lat, earlier.body.entry.stop_index, earlier.body.entry.stop_name], ['Sam', T(30), 31.95, null, null])
+
+    // Two members adding the same bird at once, seen at the same minute: one row, the first one in kept as finder.
+    for (let round = 0; round < 5; round++) {
+      const code = `mexch${round}`
+      const tapped = T(240)
+      const results = await Promise.all([
+        events.addTally(people.matt, event.id, { species_code: code, client_id: uuid(), observed_at: tapped }),
+        events.addTally(people.sam, event.id, { species_code: code, client_id: uuid(), observed_at: tapped })
+      ])
+      const rows = await db('event_tally').where({ event_id: event.id, species_code: code })
+      assert.equal(rows.length, 1)
+      const finder = rows[0].added_by
+      assert.ok([people.matt.id, people.sam.id].includes(finder))
+      // The one that inserted is the one whose client_id is on the row; both answers name that finder.
+      assert.equal((await db('event_tally').where({ id: rows[0].id }).first()).client_id !== null, true)
+      for (const r of results) assert.equal(r.entry.added_by_name, finder === people.matt.id ? 'Matt' : 'Sam')
+    }
+    // ...and seen at different times, racing: the earlier sighting wins whichever lands first.
+    for (let round = 0; round < 5; round++) {
+      const code = `acowo${round}`
+      await Promise.all([
+        events.addTally(people.sam, event.id, { species_code: code, client_id: uuid(), observed_at: T(245) }),
+        events.addTally(people.matt, event.id, { species_code: code, client_id: uuid(), observed_at: T(241) })
+      ])
+      const row = await db('event_tally').where({ event_id: event.id, species_code: code }).first()
+      assert.deepEqual([row.added_by, new Date(row.observed_at).toISOString()], [people.matt.id, T(241)])
+    }
+
+    // A client_id used for a different bird is still the add already made.
+    const mixed = await sam('POST', { kind: 'event-tally' }, { species_code: 'flaowl', client_id: quail })
+    assert.equal(mixed.body.entry.code, 'monqua')
+    assert.equal(await db('event_tally').where({ event_id: event.id, species_code: 'flaowl' }).first(), undefined)
+
+    // Bad input, in the member's language; never an email in the payload.
+    assert.equal((await matt('POST', { kind: 'event-tally' }, { species_code: 'eletro', client_id: 'nope' })).statusCode, 400)
+    const french = await matt('POST', { kind: 'event-tally', locale: 'fr-CA' }, { species_code: 'eletro', observed_at: 'soon' })
+    assert.deepEqual([french.statusCode, french.body.error], [400, 'observed_at doit être une date et une heure'])
+    assert.equal((await matt('POST', { kind: 'event-tally' }, { species_code: 'eletro', lat: 31.9 })).statusCode, 400)
+    assert.ok(!JSON.stringify(later.body).includes('@example.com'))
+    // A bare code still works (older apps).
+    assert.equal((await events.addTally(people.kim, event.id, 'brrspa')).tally.find((t) => t.code === 'brrspa').added_by_name, 'Kim')
+  } finally {
+    await restore()
+    await db('events').where({ id: event.id }).del()
+    await db('users').whereIn('id', ids).del()
+  }
+})
+
+test('removing a bird keeps it for undo; undo or adding it again brings back who found it and when; the log shows it all in the order seen', async () => {
+  // Sighting times: n minutes after a moment 12 hours ago (an add is never in the future).
+  const base = Math.floor((Date.now() - 12 * 3600_000) / 1000) * 1000
+  const T = (n) => new Date(base + n * 60_000).toISOString()
+  const saved = require('../api/saved')
+  const { fakeReq, fakeRes } = require('./helpers')
+  const { createSession } = require('../lib/auth')
+  const { events, people, event, restore, ids } = await cochiseBigDay('tz-undo')
+  const outsider = (await db('users').insert({ email: 'tz-undo-outsider@example.com', password_hash: 'x', location: 'US-GA-139', state: 'GA' }).returning('*'))[0]
+  const as = (user) => {
+    const session = fakeRes(); createSession(session, user)
+    const cookie = String(session.headers['set-cookie']).split(';')[0]
+    return async (method, query, body) => { const res = fakeRes(); await saved(fakeReq({ method, headers: { cookie }, query: { id: String(event.id), ...query }, body }), res); return res }
+  }
+  await db('birds').insert([['eletro', 'Elegant Trogon'], ['monqua', 'Montezuma Quail'], ['mexchi', 'Mexican Chickadee']].map(([speciesCode, comName]) => ({ speciesCode, comName, sciName: comName }))).onConflict('speciesCode').ignore()
+  try {
+    await db('event_routes').insert({ event_id: event.id, stops: JSON.stringify([{ locId: 'L1', name: 'Cave Creek Canyon', lat: 31.88, lng: -109.17 }]), updated_by: people.matt.id })
+    const sam = as(people.sam)
+    await events.addTally(people.matt, event.id, { species_code: 'eletro', observed_at: T(65), lat: 31.88, lng: -109.17 })
+    await events.addTally(people.sam, event.id, { species_code: 'mexchi', observed_at: T(150) })
+    // Kim's chickadee-less morning quail synced last but seen first.
+    await events.addTally(people.kim, event.id, { species_code: 'monqua', observed_at: T(10) })
+
+    // Sam removes Matt's trogon: off the tally, but kept.
+    const removed = await sam('DELETE', { kind: 'event-tally', code: 'eletro' })
+    assert.deepEqual(removed.body.tally.map((t) => t.code).sort(), ['mexchi', 'monqua'])
+    const row = await db('event_tally').where({ event_id: event.id, species_code: 'eletro' }).first()
+    assert.equal(row.removed_by, people.sam.id)
+    assert.ok(row.removed_at)
+    assert.equal((await events.viewEvent(event.view_token)).tally.some((t) => t.code === 'eletro'), false, 'off the view link too')
+    assert.equal((await events.listEvents(people.matt)).find((e) => e.id === event.id).recap.species, 2)
+
+    // Undo, ten minutes on (and any time after): back as it was.
+    await db('event_tally').where({ id: row.id }).update({ removed_at: new Date(Date.now() - 11 * 60_000) })
+    const undone = await sam('POST', { kind: 'event-tally-undo' }, { species_code: 'eletro' })
+    assert.equal(undone.statusCode, 200)
+    assert.deepEqual([undone.body.entry.id, undone.body.entry.added_by_name, undone.body.entry.observed_at.toISOString(), undone.body.entry.stop_name], [row.id, 'Matt', T(65), 'Cave Creek Canyon'])
+    assert.equal((await sam('POST', { kind: 'event-tally-undo' }, { species_code: 'eletro' })).statusCode, 200, 'undoing twice is harmless')
+    const never = await sam('POST', { kind: 'event-tally-undo', locale: 'es-MX' }, { species_code: 'flaowl' })
+    assert.deepEqual([never.statusCode, never.body.error], [404, 'Esa ave no está en el conteo'])
+
+    // Removed again, then re-added by Sam an hour later: Matt's find and time come back, not Sam's.
+    await events.removeTally(people.sam, event.id, 'eletro')
+    const readded = await events.addTally(people.sam, event.id, { species_code: 'eletro', observed_at: T(180) })
+    assert.deepEqual([readded.entry.id, readded.entry.added_by_name, readded.entry.observed_at.toISOString()], [row.id, 'Matt', T(65)])
+
+    // The log: everything put on the tally, removed too, in the order seen, by the names chosen.
+    await events.removeTally(people.matt, event.id, 'mexchi')
+    const log = await sam('GET', { kind: 'event-log' })
+    assert.equal(log.statusCode, 200)
+    assert.deepEqual(log.body.map((l) => [l.speciesCode, l.comName, l.by_name, l.observed_at.toISOString(), l.stop_index, l.stop_name, l.removed]), [
+      ['monqua', 'Montezuma Quail', 'Kim', T(10), null, null, false],
+      ['eletro', 'Elegant Trogon', 'Matt', T(65), 0, 'Cave Creek Canyon', false],
+      ['mexchi', 'Mexican Chickadee', 'Sam', T(150), null, null, true]
+    ])
+    assert.ok(log.body.every((l) => Number.isInteger(l.id)))
+    assert.ok(!JSON.stringify(log.body).includes('@example.com'), 'names, never emails')
+    assert.equal((await as(outsider)('GET', { kind: 'event-log' })).statusCode, 404, 'members only')
+    assert.equal((await as(outsider)('POST', { kind: 'event-tally-undo' }, { species_code: 'mexchi' })).statusCode, 404)
+  } finally {
+    await restore()
+    await db('events').where({ id: event.id }).del()
+    await db('users').whereIn('id', [...ids, outsider.id]).del()
+  }
+})
+
+test('"On my eBird checklist": each member ticks birds for themselves; members only, birds on this event\'s tally only', async () => {
+  const saved = require('../api/saved')
+  const { fakeReq, fakeRes } = require('./helpers')
+  const { createSession } = require('../lib/auth')
+  const { events, people, event, restore, ids } = await cochiseBigDay('tz-marks')
+  const outsider = (await db('users').insert({ email: 'tz-marks-outsider@example.com', password_hash: 'x', location: 'US-GA-139', state: 'GA' }).returning('*'))[0]
+  const as = (user, eventId = event.id) => {
+    const session = fakeRes(); createSession(session, user)
+    const cookie = String(session.headers['set-cookie']).split(';')[0]
+    return async (method, query, body) => { const res = fakeRes(); await saved(fakeReq({ method, headers: { cookie }, query: { id: String(eventId), ...query }, body }), res); return res }
+  }
+  const other = await events.createEvent(outsider, { name: 'Elsewhere', state: 'AZ', location: 'US-AZ-019', starts_on: '2026-11-10', kind: 'bigday' }, new Date('2026-11-03T18:00:00Z'))
+  try {
+    const trogon = (await events.addTally(people.matt, event.id, { species_code: 'eletro' })).entry
+    const quail = (await events.addTally(people.sam, event.id, { species_code: 'monqua' })).entry
+    const elsewhere = (await events.addTally(outsider, other.id, { species_code: 'eletro' })).entry
+    const sam = as(people.sam)
+
+    const marked = await sam('POST', { kind: 'event-tally-mark' }, { tally_id: trogon.id })
+    assert.equal(marked.statusCode, 200)
+    const mark = (body, id) => body.tally.find((t) => t.id === id).marked_by_me
+    assert.deepEqual([mark(marked.body, trogon.id), mark(marked.body, quail.id)], [true, false])
+    assert.equal((await sam('POST', { kind: 'event-tally-mark' }, { tally_id: trogon.id })).statusCode, 200, 'twice is once')
+    assert.equal(await db('event_tally_marks').where({ tally_id: trogon.id }).count('* as n').first().then((r) => Number(r.n)), 1)
+    // Sam's ticks are Sam's: Matt sees none.
+    const forMatt = (await events.listEvents(people.matt)).find((e) => e.id === event.id)
+    assert.deepEqual(forMatt.tally.map((t) => t.marked_by_me), [false, false])
+    await events.markTally(people.matt, event.id, quail.id)
+    const forSam = (await events.listEvents(people.sam)).find((e) => e.id === event.id)
+    assert.deepEqual([mark(forSam, trogon.id), mark(forSam, quail.id)], [true, false])
+
+    // Unticked.
+    const unmarked = await sam('DELETE', { kind: 'event-tally-mark', tally_id: String(trogon.id) })
+    assert.deepEqual([unmarked.statusCode, mark(unmarked.body, trogon.id)], [200, false])
+
+    // Not a member: no such event. Another event's bird, or a removed one: not on this tally.
+    assert.equal((await as(outsider)('POST', { kind: 'event-tally-mark' }, { tally_id: trogon.id })).statusCode, 404)
+    assert.equal((await as(outsider)('DELETE', { kind: 'event-tally-mark', tally_id: String(trogon.id) })).statusCode, 404)
+    assert.equal((await sam('POST', { kind: 'event-tally-mark' }, { tally_id: elsewhere.id })).statusCode, 404)
+    assert.equal((await sam('POST', { kind: 'event-tally-mark' }, { tally_id: 'x' })).statusCode, 404)
+    await events.removeTally(people.matt, event.id, 'monqua')
+    assert.equal((await sam('POST', { kind: 'event-tally-mark' }, { tally_id: quail.id })).statusCode, 404)
+    // A mark stays with the bird through undo.
+    const back = await events.undoRemoveTally(people.matt, event.id, 'monqua')
+    assert.equal(back.entry.marked_by_me, true)
+  } finally {
+    await restore()
+    await db('events').whereIn('id', [event.id, other.id]).del()
+    await db('users').whereIn('id', [...ids, outsider.id]).del()
+  }
 })
