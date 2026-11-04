@@ -11,7 +11,7 @@ const seasonality = require('../lib/seasonality')
 let userId
 before(async () => {
   await db.migrate.latest()
-  for (const table of ['event_routes', 'event_tally', 'event_targets', 'event_members', 'events', 'trips', 'place_targets', 'places', 'taxonomy_names', 'hq_alerts', 'hotspot_weeks', 'hq_picks', 'feedback', 'passkeys', 'shares', 'seen_birds', 'taxonomy_ref', 'user_routes', 'hotspot_ref', 'mail_counts', 'error_log', 'drive_cache', 'nearby_cache', 'place_predictions', 'checklist_species', 'checklists', 'bird_sounds', 'digest_log', 'push_handoff', 'push_log', 'push_subscriptions', 'saved_birds', 'auth_throttle', 'season_firsts', 'region_species_days', 'region_days', 'job_runs', 'users', 'birds']) await db(table).del()
+  for (const table of ['event_routes', 'event_tally_marks', 'event_tally', 'event_targets', 'event_members', 'events', 'trips', 'place_targets', 'places', 'taxonomy_names', 'hq_alerts', 'hotspot_weeks', 'hq_picks', 'feedback', 'passkeys', 'shares', 'seen_birds', 'taxonomy_ref', 'user_routes', 'hotspot_ref', 'mail_counts', 'error_log', 'drive_cache', 'nearby_cache', 'place_predictions', 'checklist_species', 'checklists', 'bird_sounds', 'digest_log', 'push_handoff', 'push_log', 'push_subscriptions', 'saved_birds', 'auth_throttle', 'season_firsts', 'region_species_days', 'region_days', 'job_runs', 'users', 'birds']) await db(table).del()
   // Nothing in here may reach eBird; the hourly job's history fetch is a no-op unless a test says otherwise.
   ebird.historicObservations = async () => []
   ;[{ id: userId }] = await db('users').insert({
@@ -1684,12 +1684,15 @@ const dayFrom = (n) => new Date(Date.now() + n * 86_400_000).toISOString().slice
 /**
  * A solo event as lib/events makes one from a place, straight into the tables so any dates go: the
  * place's area and targets, the person its organizer with no name chosen yet. `place.id` may be null.
+
+ * Its days are UTC days (timezone 'UTC') unless given, so dayFrom's dates are the event's own at any
+ * hour; lib/events judges an event's day in its own zone (the area's, from lib/timezones, otherwise).
  */
 const eventAt = async (userId, place, fields = {}) => {
   const token = () => require('crypto').randomBytes(16).toString('base64url')
   const [event] = await db('events').insert({
     owner_id: userId, place_id: place.id ?? null, name: place.name, state: place.state, location: place.location, range_mi: place.range_mi ?? 30,
-    home_lat: place.home_lat ?? null, home_lng: place.home_lng ?? null, kind: 'trip', scout: false, scout_days: 21, invite_token: token(), view_token: token(), ...fields
+    home_lat: place.home_lat ?? null, home_lng: place.home_lng ?? null, kind: 'trip', scout: false, scout_days: 21, timezone: 'UTC', invite_token: token(), view_token: token(), ...fields
   }).returning('*')
   await db('event_members').insert({ event_id: event.id, user_id: userId, display_name: null, role: 'organizer' })
   const targets = place.id ? await db('place_targets').where({ place_id: place.id }).pluck('species_code') : []
@@ -2121,6 +2124,9 @@ test('event notes: to each member, one when an event starts and one the day befo
     const user = await db('users').where({ id }).first()
     const place = await places.createPlace(user, { name: 'Colorado (work)', state: 'CO', location: 'US-CO-031' })
     const trip = await events.createEvent(user, { place_id: place.id, starts_on: dayFrom(0), ends_on: dayFrom(3) })
+    assert.equal(trip.timezone, 'America/Denver', 'its zone, from its area')
+    // dayFrom's days are UTC days: the event's too (it would be Denver's, from its area).
+    await db('events').where({ owner_id: id }).update({ timezone: 'UTC' })
     await events.runEventNotices({ send })
     assert.deepEqual(notes.map((n) => [n.kind, n.place, n.ends, n.home, n.eventId]), [['started', 'Colorado (work)', dayFrom(3), 'Hall County', trip.id]], 'home said the way the app says it')
     await events.runEventNotices({ send })
@@ -2136,6 +2142,8 @@ test('event notes: to each member, one when an event starts and one the day befo
     // Turned off, or an unconfirmed address: none.
     notes.length = 0
     const later = await events.createEvent(user, { place_id: place.id, starts_on: dayFrom(0), ends_on: dayFrom(5) })
+    // dayFrom's days are UTC days: the event's too (it would be Denver's, from its area).
+    await db('events').where({ owner_id: id }).update({ timezone: 'UTC' })
     await db('users').where({ id }).update({ trip_emails_enabled: false })
     await events.runEventNotices({ send })
     assert.equal(notes.length, 0)
@@ -2365,6 +2373,8 @@ test('Big Days scout by default, and scouting sends one report a day in the wind
     const trip = await events.createEvent(user, { place_id: place.id, starts_on: dayFrom(5), ends_on: dayFrom(7), kind: 'bigday' })
     assert.deepEqual([trip.kind, trip.ends_on, trip.scout, trip.scout_days, trip.scout_from], ['bigday', dayFrom(5), true, 21, dayFrom(-16)])
     const plain = await events.createEvent(user, { place_id: place.id, starts_on: dayFrom(40), ends_on: dayFrom(41) })
+    // dayFrom's days are UTC days: the event's too (it would be Phoenix's, from its area).
+    await db('events').where({ owner_id: id }).update({ timezone: 'UTC' })
     assert.deepEqual([plain.kind, plain.scout], ['trip', false])
     assert.equal((await events.updateEvent(user, plain.id, { scout: true, scout_days: 14 })).scout_from, dayFrom(26))
     await assert.rejects(events.createEvent(user, { place_id: place.id, starts_on: dayFrom(5), ends_on: dayFrom(5), kind: 'party' }), (e) => e.status === 400)

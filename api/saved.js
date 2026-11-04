@@ -50,9 +50,19 @@ const savedBirdsFor = (userId) =>
 // POST   /api/saved?kind=event { name?, state?, location?, range_mi?, home_lat?, home_lng?, starts_on, ends_on, kind?: trip|bigday, scout?, scout_days?: 7|14|21|28, place_id? }
 //                                                 -> 201 the event, solo, you the organizer (from a place: its area, range, spot and targets, unless given)
 // GET    /api/saved?kind=events                   -> [{ id, name, state, location, range_mi, home_lat, home_lng, place_id, starts_on, ends_on, kind, scout, scout_days, scout_from,
-//                                                     active, past, archived, role, display_name, members: [{ display_name|null, role, you }],
-//                                                     targets: [{ code, lifer_for: [name], lifer_for_you }], tally: [{ code, added_by_name, added_by_you, added_at }],
+//                                                     timezone, active, past, tally_open, archived, role, display_name, members: [{ display_name|null, role, you }],
+//                                                     targets: [{ code, lifer_for: [name], lifer_for_you }],
+//                                                     tally: [{ id, code, client_id|null, added_by_name|null, added_by_you, added_at, observed_at, lat|null, lng|null, stop_index|null, stop_name|null, marked_by_me }],
 //                                                     recap: { species, targets_got, targets_total }, invite_url|null, view_url|null }] (links once you've a display_name)
+//                                                     The event's day is judged in its own zone (timezone: an IANA name, stored on the event from its area, lib/timezones;
+//                                                     the caller's own zone, else UTC, where the area can't say), the same for every member whatever their account's zone:
+//                                                     active: today there is one of its days; past: its last day is over there; tally_open: active, or before 3 AM there the
+//                                                     morning after the last day (late entries). Adds are taken at any time all the same (an offline add can sync late).
+//                                                     tally: birds not removed, in observed_at order. added_by_name: the first finder's display_name in the event (never an email;
+//                                                     null when they haven't chosen one or left); added_at: when it reached the server; observed_at: when it was seen (the app's
+//                                                     clock; added_at for older rows); lat/lng: 3 decimals; stop_index: 0-based in the group's saved route (event-route-plan stops),
+//                                                     the nearest stop within 2 km of lat/lng when added, else null; stop_name: that stop's name in the route as saved now;
+//                                                     marked_by_me: you ticked it as on your own eBird checklist (event-tally-mark)
 // POST   /api/saved?kind=event-invite-start&id= { display_name } -> the event, with its links
 // PATCH  /api/saved?kind=event-member&id= { archived?, display_name? } -> the event
 // GET    /api/saved?kind=event-suggestions&id=&scope=life|place&limit=1..50 -> { from, to, sampled, scope, suggestions: [{ speciesCode, comName, days, sampled }] }
@@ -90,10 +100,28 @@ const savedBirdsFor = (userId) =>
 // POST   /api/saved?kind=event-leave&id=          -> 204
 // POST   /api/saved?kind=event-invite-rotate&id=  -> the event with a new invite link (organizer)
 // PUT    /api/saved?kind=event-targets&id= { codes } -> the event
-// POST   /api/saved?kind=event-tally&id= { species_code } -> the event; DELETE ...&code= -> the event
+// POST   /api/saved?kind=event-tally&id= { species_code, client_id?: uuid, observed_at?: ISO time, lat?, lng? }
+//                                                 -> 200 { ...the event, entry: the bird's tally row as above } (always 200). client_id: the app's own id for this add;
+//                                                    a repeat with one already seen changes nothing and gives back that row (entry is { id, code, removed: true } if it's
+//                                                    since been removed). observed_at: the sighting's time (default now; one in the future is taken as now). lat/lng: both or
+//                                                    neither, kept to 3 decimals. One row a bird: already on the tally, it stays credited to whoever saw it FIRST (the
+//                                                    earliest observed_at, with that one's spot and stop; on a tie, the one already there), so two members adding it at once
+//                                                    keep the first finder. A removed bird added again comes back with its original finder and time (unless this one is earlier).
+//                                                    400 'client_id is a UUID' | 'observed_at is a date and time' | 'That spot is not a place on the map' | 'Unknown species' | 'The tally is full'
+// DELETE /api/saved?kind=event-tally&id=&code=   -> the event. Off the tally for everyone, but kept (removed_at, removed_by): undo or a re-add restores it
+// POST   /api/saved?kind=event-tally-undo&id= { species_code } (or &code=) -> 200 { ...the event, entry } the removed bird back as it was (finder, time, spot,
+//                                                    marks), however long ago it was removed; already on the tally: unchanged. 404 'That bird isn’t on the tally' if never added
+// POST   /api/saved?kind=event-tally-mark&id= { tally_id } -> the event: "added to my eBird checklist" for that bird, yours alone (marked_by_me); idempotent
+// DELETE /api/saved?kind=event-tally-mark&id=&tally_id= -> the event, the tick gone. Both: 404 'That bird isn’t on the tally' for a removed bird or another event's
+// GET    /api/saved?kind=event-log&id=&locale=   -> [{ id, speciesCode, comName, by_name|null, observed_at, stop_index|null, stop_name|null, removed }] every bird put on
+//                                                    the tally, removed ones too, in observed_at order (then id); by_name: the first finder's display_name, never an email.
+//                                                    Bird names in ?locale= or your own language
+// Every event-tally* and event-log call: members only (404 'No such event' otherwise).
 // POST   /api/saved?kind=event-join { token, display_name } -> the event
 // GET    /api/saved?kind=event-preview&token=     -> { name, area, starts_on, ends_on, kind, members } (no sign-in)
-// GET    /api/saved?kind=event-view&token=&locale= -> { name, area, starts_on, ends_on, kind, targets, tally, count, route: { start: null, stops }|null } (no sign-in, no names; the saved route never shows its start)
+// GET    /api/saved?kind=event-view&token=&locale= -> { name, area, starts_on, ends_on, kind, timezone, active, tally_open, targets, tally: [{ code, speciesCode, comName, added_at }],
+//                                                     count, route: { start: null, stops }|null } (no sign-in, no names, no spots; the saved route never shows its start;
+//                                                     removed birds left out; active and tally_open as for members, in the event's zone, so the page knows to keep refreshing)
 module.exports = route(['GET', 'POST', 'PUT', 'PATCH', 'DELETE'], async (req, res) => {
   // The two event links anyone can open: what the event is, and (view-only) its plan and tally.
   if (req.query.kind === 'event-preview' || req.query.kind === 'event-view') {
@@ -194,18 +222,18 @@ module.exports = route(['GET', 'POST', 'PUT', 'PATCH', 'DELETE'], async (req, re
     }
     if (kind === 'event-join' && req.method === 'POST') {
       const event = await events.joinEvent(user, body(req))
-      if (places.startsSoon(event, user.timezone)) ready(event.location)
+      if (places.startsSoon(event, event.timezone || user.timezone)) ready(event.location)
       return res.status(200).json(event)
     }
     if (kind === 'event') {
       if (req.method === 'POST') {
         const event = await events.createEvent(user, body(req))
-        if (places.startsSoon(event, user.timezone)) ready(event.location)
+        if (places.startsSoon(event, event.timezone || user.timezone)) ready(event.location)
         return res.status(201).json(event)
       }
       if (req.method === 'PATCH') {
         const event = await events.updateEvent(user, id, body(req))
-        if (places.startsSoon(event, user.timezone)) ready(event.location)
+        if (places.startsSoon(event, event.timezone || user.timezone)) ready(event.location)
         return res.status(200).json(event)
       }
       if (req.method === 'DELETE') { await events.endEvent(user, id); return res.status(204).end() }
@@ -214,9 +242,15 @@ module.exports = route(['GET', 'POST', 'PUT', 'PATCH', 'DELETE'], async (req, re
     if (kind === 'event-invite-rotate' && req.method === 'POST') return res.status(200).json(await events.rotateInvite(user, id))
     if (kind === 'event-targets' && req.method === 'PUT') return res.status(200).json(await events.setEventTargets(user, id, body(req).codes))
     if (kind === 'event-tally') {
-      if (req.method === 'POST') return res.status(200).json(await events.addTally(user, id, body(req).species_code))
+      if (req.method === 'POST') return res.status(200).json(await events.addTally(user, id, body(req)))
       if (req.method === 'DELETE') return res.status(200).json(await events.removeTally(user, id, req.query.code))
     }
+    if (kind === 'event-tally-undo' && req.method === 'POST') return res.status(200).json(await events.undoRemoveTally(user, id, body(req).species_code ?? req.query.code))
+    if (kind === 'event-tally-mark') {
+      if (req.method === 'POST') return res.status(200).json(await events.markTally(user, id, body(req).tally_id))
+      if (req.method === 'DELETE') return res.status(200).json(await events.unmarkTally(user, id, req.query.tally_id))
+    }
+    if (kind === 'event-log' && req.method === 'GET') return res.status(200).json(await localize(await events.eventLog(user, id), req.query.locale || user.locale))
     throw new HttpError(405, 'Method not allowed')
   }
   if (req.method === 'PATCH') throw new HttpError(405, 'Method not allowed')
