@@ -99,3 +99,28 @@ test('OSRM failing (null, a throw, or legs that don\'t fit): routed false, no le
     assert.equal(plan.stops.length, 3)
   }
 })
+
+test('the start\'s meeting time: HH:MM on a 24-hour clock, kept as given; null or absent is none', () => {
+  const at = (time) => cleanPlan({ start: { name: 'Motel', lat: 31.4, lng: -110.2, time }, stops: [], version: 0 }).start
+  assert.deepEqual(at('05:15'), { name: 'Motel', lat: 31.4, lng: -110.2, time: '05:15' })
+  assert.equal(at('00:00').time, '00:00')
+  assert.equal(at('23:59').time, '23:59')
+  assert.deepEqual(at(null), { name: 'Motel', lat: 31.4, lng: -110.2 })
+  assert.deepEqual(at(undefined), { name: 'Motel', lat: 31.4, lng: -110.2 })
+  for (const bad of ['5:15', '24:00', '12:60', '0515', '05:15:00', '5:15 AM', '', 515, false, {}]) {
+    assert.throws(() => at(bad), (e) => e.status === 400 && /HH:MM/.test(e.message), JSON.stringify(bad))
+  }
+})
+
+const { cleanPosition } = require('../lib/eventRoutePlan')
+
+test('a position: a stop index (-1 the meeting point) or null, and when it was tapped, never later than now', () => {
+  const now = new Date('2026-11-04T13:00:00Z')
+  assert.deepEqual(cleanPosition({ stop: 2, at: '2026-11-04T12:40:00Z' }, now), { stop: 2, at: new Date('2026-11-04T12:40:00Z') })
+  assert.deepEqual(cleanPosition({ stop: -1, at: '2026-11-04T12:40:00-07:00' }, now), { stop: -1, at: now }, 'later than now: now')
+  assert.deepEqual(cleanPosition({ stop: null }, now), { stop: null, at: now })
+  assert.deepEqual(cleanPosition({}, now), { stop: null, at: now })
+  for (const bad of [{ stop: -2 }, { stop: 1.5 }, { stop: '1' }, { stop: 1, at: 'soon' }, { stop: 1, at: 1730000000000 }]) {
+    assert.throws(() => cleanPosition(bad, now), (e) => e.status === 400, JSON.stringify(bad))
+  }
+})
