@@ -89,7 +89,7 @@ test('the daily email: the countdown and bar, what\'s new, the bird of the day, 
   assert.equal(mail.subject, 'Big Day 2027: Rufous-backed Robin and 1 more new today · 6 days to go')
   assert.equal(mail.to, 'pat@example.com')
   assert.deepEqual(sections(mail.text), ['Big Day 2027 · 6 days to go', 'New: Rufous-backed Robin, Sandhill Crane', 'Bird of the day: Rufous-backed Robin (ABA Code 3)', 'Where they’re being seen:',
-    'Still missing (nothing in the last 2 weeks): Montezuma Quail, Flammulated Owl', 'Your group’s route:', 'Open the event: https://bird-alert.vercel.app/events/7', sections(mail.text)[7], sections(mail.text)[8]])
+    'Still missing (nothing in the last 2 weeks): Montezuma Quail, Flammulated Owl', 'Your group’s route:', 'Open the event: https://bird-alert.vercel.app/events/7#scouting', sections(mail.text)[7], sections(mail.text)[8]])
   assert.match(mail.text, /^Big Day 2027 · 6 days to go\nWith your group\n4 of 8 targets reported in the last 3 days\n/)
   assert.match(mail.text, /1\. Ramsey Canyon Preserve \(yesterday\)\n   Arizona Woodpecker, Painted Redstart\n   Checklist on eBird: https:\/\/ebird.org\/checklist\/S-arizwo\n2\. Miller Canyon--Beatty's Guest Ranch \(today\)\n   Rufous-backed Robin \(rare there\)/)
   assert.match(mail.text, /Your group’s route:\nMeeting point: Sierra Vista Motel\n1\. Ramsey Canyon Preserve\n2\. San Pedro House/)

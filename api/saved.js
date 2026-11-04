@@ -68,7 +68,19 @@ const savedBirdsFor = (userId) =>
 // GET    /api/saved?kind=event-suggestions&id=&scope=life|place&limit=1..50 -> { from, to, sampled, scope, suggestions: [{ speciesCode, comName, days, sampled }] }
 // GET    /api/saved?kind=event-scouting&id=&locale= -> { checked_at, days_to_go|null, window: { from, to }, using: 'targets'|'likely_lifers',
 //                                                     reported: [{ code, comName, locName, locId, lat, lng, obsDt, birders, confirmed|null, media, subId }],
-//                                                     unreported: [{ code, comName }] } (last 7 days / none in 14; the area's feed kept an hour)
+//                                                     unreported: [{ code, comName }],
+//                                                     fresh: [{ code, speciesCode, comName, locName, locId, obsDt, aba|null, flagged }] targets whose newest report is in the 24 h
+//                                                       before now on your clock, rarest first (ABA code 3-5, then flagged by eBird), then newest,
+//                                                     bird_of_day: { code, speciesCode, comName, locName, obsDt, aba|null, evidence|null, photo|null }|null the rarest reported this week
+//                                                       (ABA code, then flagged, then newest); evidence: the reviewer line, only for a flagged report; photo: our picture of the bird,
+//                                                     headline: string|null the scouting email's subject line as it'd read today, in `locale` ("Big Day: Rufous-backed Robin new today ·
+//                                                       6 days to go", "…: 42 of 50 targets around · …"),
+//                                                     targets: [{ code, speciesCode, comName, status: 'around'|'missing'|'quiet', last_obs_dt|null, last_loc_name|null, aba|null, lifer }]
+//                                                       one per target (or likely lifer when using is 'likely_lifers'): around = reported in the last 7 days, missing = nothing in
+//                                                       14, quiet = in between; around, then quiet (each newest first), then missing. aba: US/CA only. lifer: not on your life list
+//                                                       (lib/lifeList lifeListFor, as lifer alerts: all false while it has under 10 birds) }
+//                                                     (last 7 days / none in 14; the area's feed kept an hour). fresh, bird_of_day and headline come from the same code as the morning
+//                                                     push and email (lib/scoutMail scoutSummary); a past event, or one with nothing to scout: [], null, null, [].
 // GET    /api/saved?kind=event-route&id=&from=lat,lng&add=L1,L2&drop=L3&locale= -> { from|null, stops: [{ n, locId, locName, lat, lng, new_birds: [{ code, speciesCode, comName }], leg_min, leg_mi, private, merged: [{ locId, locName }], picked, species: [code],
 //                                                     targets_here, suggested_stay_min }],
 //                                                     extras: [{ locId, locName, lat, lng, new_birds, add_min, add_mi, private, merged, dropped, species: [code] }], total_min, total_mi, stay_min_total, covered, covered_with_extras,
@@ -212,7 +224,8 @@ module.exports = route(['GET', 'POST', 'PUT', 'PATCH', 'DELETE'], async (req, re
       return res.status(200).json({ ...found, suggestions: await named(found.suggestions) })
     }
     if (kind === 'event-scouting' && req.method === 'GET') {
-      return res.status(200).json(await localize(await events.eventScouting(user, id), req.query.locale || user.locale))
+      const locale = req.query.locale || user.locale
+      return res.status(200).json(await localize(await events.eventScouting(user, id, { locale }), locale))
     }
     if (kind === 'event-scouting-email' && req.method === 'POST') {
       const { status, body: answer } = await emailScoutingNow(user, id)

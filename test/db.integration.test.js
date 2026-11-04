@@ -2411,7 +2411,7 @@ test('Big Days scout by default, and scouting sends one report a day in the wind
     const mine = pushes.filter((p) => p.userId === id)
     assert.equal(mine.length, 1)
     assert.equal(mine[0].title, '🔭 Scouting Chiricahuas · 5 days to go', 'solo: no group')
-    assert.match(mine[0].data.url, new RegExp(`/events/${trip.id}$`))
+    assert.match(mine[0].data.url, new RegExp(`/events/${trip.id}#scouting$`))
     assert.match(mine[0].body, /Elegant Trogon · South Fork, Cave Creek Canyon/)
     const mail = mails.find((m) => m.to === 'scout@example.com')
     // Reported yesterday at 07:10: new in the last 24 hours only before 07:10 today.
