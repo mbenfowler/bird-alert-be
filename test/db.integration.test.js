@@ -4030,7 +4030,15 @@ const recapDay = async (prefix, day = '2026-11-10') => {
   await db('seen_birds').insert([...['grhowl', ...Array.from({ length: 11 }, (_, i) => `xbird${i}`)].map((code) => ({ species_code: code, first_seen: '2026-01-01' })),
     { species_code: 'arwoo', first_seen: day }].map((r) => ({ user_id: people.matt.id, ...r })))
   await db('seen_birds').insert({ user_id: people.sam.id, species_code: 'grhowl', first_seen: '2026-01-01' })
-  await db('event_scout_birds').insert({ event_id: event.id, day: new Date(Date.parse(`${day}T00:00:00Z`) - 86_400_000).toISOString().slice(0, 10), species_code: 'eletro' })
+  // What the scouting emails named: the trogon (the bird of the day) at Portal, the robin at a
+  // personal spot, the woodpecker the day before; the owl only after the day, so it doesn't count.
+  const before = (n) => new Date(Date.parse(`${day}T00:00:00Z`) + n * 86_400_000).toISOString().slice(0, 10)
+  const spot = (code, loc, locName) => ({ code, loc, locName })
+  await db('event_scout_birds').insert([
+    { day: before(-2), species_code: 'monqua', species: JSON.stringify([spot('monqua', 'L9', 'Miller Canyon'), spot('arwoo', 'L1', 'Cave Creek Canyon')]) },
+    { day: before(-1), species_code: 'eletro', species: JSON.stringify([spot('eletro', 'L3', 'Portal'), spot('rubrob', 'L77', 'Aunt May’s feeder')]) },
+    { day: before(1), species_code: 'grhowl', species: JSON.stringify([spot('grhowl', 'L1', 'Cave Creek Canyon')]) }
+  ].map((r) => ({ event_id: event.id, ...r })))
   const stubs = { scoutFeed: events.scoutFeed, drive: routing.drive, regionCenter: range.regionCenter }
   events.scoutFeed = async () => ({ records: [
     { speciesCode: 'monqua', comName: 'Montezuma Quail', obsDt: `${day} 07:00` },
@@ -4091,7 +4099,19 @@ test('the recap: members see it all once the tally closes, anyone with the share
     assert.equal(r.timeline[1].at, wallClock(dayFrom(-2), '07:12').toISOString())
     assert.deepEqual(r.lifers.map((l) => [l.speciesCode, l.who, l.number, l.place]), [['arwoo', 'Matt', 13, 'Cave Creek Canyon'], ['rubrob', 'Matt', 14, 'Aunt May’s yard'], ['eletro', 'Matt', 15, 'Portal']])
     assert.deepEqual(r.highlights.rarest, { speciesCode: 'rubrob', comName: 'Rufous-backed Robin', aba: 3, at: wallClock(dayFrom(-2), '08:47').toISOString(), place: 'Aunt May’s yard' })
-    assert.deepEqual(r.highlights.scoutingCalled, { speciesCode: 'eletro', comName: 'Elegant Trogon', emailedOn: dayFrom(-3), at: wallClock(dayFrom(-2), '13:52').toISOString(), place: 'Portal' })
+    // The scouting card: of the birds the emails named, the trogon, a lifer and a bird of the day (the robin is the rarest, with its own card).
+    assert.deepEqual(r.highlights.scoutingCalled, {
+      reports: 2,
+      star: {
+        speciesCode: 'eletro', comName: 'Elegant Trogon', at: wallClock(dayFrom(-2), '13:52').toISOString(), place: 'Portal', why: 'lifer', aba: null, liferFor: ['Matt'],
+        firstScouted: dayFrom(-3), timesScouted: 1, scoutedAt: 'Portal', birdOfTheDay: true
+      },
+      others: [
+        { speciesCode: 'rubrob', comName: 'Rufous-backed Robin', at: wallClock(dayFrom(-2), '08:47').toISOString(), place: 'Aunt May’s yard', firstScouted: dayFrom(-3), timesScouted: 1, lifer: true, aba: 3 },
+        { speciesCode: 'arwoo', comName: 'Arizona Woodpecker', at: wallClock(dayFrom(-2), '07:12').toISOString(), place: 'Cave Creek Canyon', firstScouted: dayFrom(-4), timesScouted: 1, lifer: true, aba: null }
+      ],
+      othersTotal: 2
+    })
     assert.deepEqual(r.targets, { total: 2, found: 1, missed: ['Montezuma Quail'] })
     assert.deepEqual(r.stops.map((s) => [s.index, s.name, s.species, s.added, s.stayMin]), [[0, 'Cave Creek Canyon', 1, 1, null], [1, 'Aunt May’s yard', 1, 1, 30], [2, 'Portal', 1, 1, null]])
     assert.deepEqual(r.route, { miles: 41, line: [[31.88, -109.17], [31.5, -110.2], [31.913, -109.141]] })
@@ -4122,6 +4142,8 @@ test('the recap: members see it all once the tally closes, anyone with the share
     assert.deepEqual(p.timeline.map((t) => [t.place, t.stopIndex, t.liferFor]), [[null, null, null], ['Cave Creek Canyon', 0, null], [null, null, null], ['Portal', 2, null]])
     assert.deepEqual(p.lifers.map((l) => [l.who, l.place]), [[null, 'Cave Creek Canyon'], [null, null], [null, 'Portal']])
     assert.equal(p.highlights.rarest.place, null)
+    assert.deepEqual([p.highlights.scoutingCalled.star.liferFor, p.highlights.scoutingCalled.star.scoutedAt, p.highlights.scoutingCalled.star.place], [null, 'Portal', 'Portal'], 'a public hotspot stays')
+    assert.deepEqual(p.highlights.scoutingCalled.others.map((o) => [o.speciesCode, o.place]), [['rubrob', null], ['arwoo', 'Cave Creek Canyon']])
     for (const word of ['Matt', 'Sam', 'Uma', 'Kim', 'Aunt May', 'example.com']) assert.equal(JSON.stringify(p).includes(word), false, word)
 
     // Who can see what.
@@ -4244,7 +4266,7 @@ test('"your recap is ready": once to each member on the first run after the tall
   }
 })
 
-test('the morning scouting email keeps its bird of the day, once a day per event, for the recap', async () => {
+test('the scouting emails keep their bird of the day and every bird they named, the morning\'s and the one asked for merged into the day\'s row, for the recap', async () => {
   const scouting = require('../lib/scouting')
   const [{ id: owner }] = await db('users').insert({ email: 'scout-pick@example.com', password_hash: 'x', location: 'US-AZ-003', state: 'AZ', email_confirmed: true, timezone: 'UTC' }).returning('id')
   const now = new Date(`${dayFrom(0)}T15:00:00Z`)
@@ -4257,8 +4279,54 @@ test('the morning scouting email keeps its bird of the day, once a day per event
       { speciesCode: 'rubrob', comName: 'Rufous-backed Robin', locName: 'San Pedro House', locId: 'L2', obsDt: `${dayFrom(-1)} 09:00`, lat: 31.55, lng: -110.14, obsReviewed: true, obsValid: true }
     ]
     await scouting.runScouting({ now, fetchFeed: async () => records, send: async () => {}, push: async () => ({ sent: false }), drive: async () => null })
-    const picks = await db('event_scout_birds').where({ event_id: id }).select('day', 'species_code')
+    const picks = await db('event_scout_birds').where({ event_id: id }).select('day', 'species_code', 'species')
     assert.deepEqual(picks.map((p) => [require('../lib/places').dayOf(p.day), p.species_code]), [[dayFrom(0), 'rubrob']], 'the rarer one, as the email led with it')
+    assert.deepEqual(picks[0].species, [{ code: 'rubrob', loc: 'L2', locName: 'San Pedro House' }, { code: 'eletro', loc: 'L1', locName: 'Cave Creek' }], 'every bird it named, where it placed it')
+
+    // "Email me the scouting report now", later the same day, from a fresher feed: what it adds goes into the same row, the bird of the day stays.
+    const { emailScoutingNow } = require('../lib/scoutEmail')
+    const kept = `api:${require('crypto').createHash('sha1').update('scout-view:county:US-AZ-003').digest('hex')}`
+    await db('nearby_cache').whereIn('key', [kept, `scout-email:${id}:${owner}`]).del()
+    const fresher = [
+      ...records,
+      { speciesCode: 'eletro', comName: 'Elegant Trogon', locName: 'Portal', locId: 'L3', obsDt: `${dayFrom(0)} 14:00`, lat: 31.91, lng: -109.14 },
+      { speciesCode: 'cacwre', comName: 'Cactus Wren', locName: 'Willcox Twin Lakes', locId: 'L4', obsDt: `${dayFrom(0)} 13:00`, lat: 32.25, lng: -109.85 }
+    ]
+    // Its targets now: the trogon and the wren, so its bird of the day (the newest, neither coded) isn't the morning's.
+    await db('birds').insert([['cacwre', 'Cactus Wren'], ['verfly', 'Vermilion Flycatcher']].map(([speciesCode, comName]) => ({ speciesCode, comName, sciName: comName }))).onConflict('speciesCode').ignore()
+    await db('event_targets').where({ event_id: id, species_code: 'rubrob' }).del()
+    await db('event_targets').insert({ event_id: id, species_code: 'cacwre' })
+    const user = await db('users').where({ id: owner }).first()
+    const sent = []
+    assert.equal((await emailScoutingNow(user, id, { now: new Date(`${dayFrom(0)}T16:00:00Z`), fetchFeed: async () => fresher, send: async (m) => { sent.push(m) }, drive: async () => null })).status, 200)
+    assert.equal(sent.length, 1)
+    const merged = await db('event_scout_birds').where({ event_id: id }).select('day', 'species_code', 'species')
+    assert.equal(merged.length, 1, 'one row a day')
+    assert.equal(merged[0].species_code, 'rubrob', 'the morning\'s bird of the day stays')
+    assert.deepEqual(merged[0].species.map((b) => b.code).sort(), ['cacwre', 'eletro', 'rubrob'], 'the wren it added, alongside the morning\'s')
+    assert.deepEqual(merged[0].species.find((b) => b.code === 'eletro'), { code: 'eletro', loc: 'L1', locName: 'Cave Creek' }, 'a bird named before keeps its first spot')
+
+    // Asked for with nothing kept yet that day, it makes the row; with none of the targets about, no bird of the day, and what else is about this week named.
+    await db('event_scout_birds').where({ event_id: id }).del()
+    await db('nearby_cache').where({ key: kept }).del()
+    const quiet = [{ speciesCode: 'verfly', comName: 'Vermilion Flycatcher', locName: 'Willcox Twin Lakes', locId: 'L4', obsDt: `${dayFrom(0)} 13:00`, lat: 32.25, lng: -109.85 }]
+    assert.equal((await emailScoutingNow(user, id, { now: new Date(`${dayFrom(0)}T16:05:00Z`), fetchFeed: async () => quiet, send: async () => {}, drive: async () => null })).status, 200)
+    const asked = await db('event_scout_birds').where({ event_id: id }).select('species_code', 'species')
+    assert.deepEqual(asked.map((a) => [a.species_code, a.species]), [[null, [{ code: 'verfly', loc: 'L4', locName: 'Willcox Twin Lakes' }]]])
+
+    // Keeping it never fails the email: with the table gone missing, the email still goes.
+    const errorsBefore = Number((await db('error_log').where('where', 'like', 'scouting record%').count('* as n').first()).n)
+    await db.schema.renameTable('event_scout_birds', 'event_scout_birds_away')
+    try {
+      await db('nearby_cache').where({ key: kept }).del()
+      const failing = []
+      assert.equal((await emailScoutingNow(user, id, { now: new Date(`${dayFrom(0)}T16:10:00Z`), fetchFeed: async () => quiet, send: async (m) => { failing.push(m) }, drive: async () => null })).status, 200)
+      assert.equal(failing.length, 1)
+    } finally {
+      await db.schema.renameTable('event_scout_birds_away', 'event_scout_birds')
+    }
+    assert.equal(Number((await db('error_log').where('where', 'like', 'scouting record%').count('* as n').first()).n), errorsBefore + 1, 'reported')
+    await db('nearby_cache').whereIn('key', [kept, `scout-email:${id}:${owner}`]).del()
   } finally {
     await db('events').where({ owner_id: owner }).del()
     await db('users').where({ id: owner }).del()

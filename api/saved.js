@@ -156,7 +156,10 @@ const savedBirdsFor = (userId) =>
 //                                                       bestHour: { start: 'HH:00', added }|null },
 //                                                     timeline: [{ n, speciesCode, comName, at, stopIndex|null, place|null, lifer, liferFor: [name] }],
 //                                                     lifers: [{ speciesCode, comName, at, place|null, who|null, number }],
-//                                                     highlights: { rarest: { speciesCode, comName, aba, at, place|null }|null, scoutingCalled: { speciesCode, comName, emailedOn, at, place|null }|null },
+//                                                     highlights: { rarest: { speciesCode, comName, aba, at, place|null }|null, scoutingCalled: { reports, star: { speciesCode, comName, at, place|null,
+//                                                       why: 'lifer'|'rarity'|'bird_of_the_day', aba|null, liferFor: [name]|null, firstScouted, timesScouted, scoutedAt|null, birdOfTheDay }|null,
+//                                                       others: [{ speciesCode, comName, at, place|null, firstScouted, timesScouted, lifer, aba|null }] (up to 12), othersTotal }|null
+//                                                       (what the scouting emails named before the day that the day found; null with no scouting kept) },
 //                                                     targets: { total, found, missed: [comName] }, stops: [{ index, name, lat, lng, arrive|null, stayMin|null, species, added }],
 //                                                     route: { miles|null, line: [[lat, lng]]|null }, byMember: [{ name|null, count, only: [comName] }], together,
 //                                                     candidates: [{ speciesCode, comName }] (open only; [] sealed) }
@@ -164,7 +167,7 @@ const savedBirdsFor = (userId) =>
 //                                                     day, in the event's zone). open: computed live, and the tally takes fixes until fixesUntil (48 hours after it
 //                                                     closes); sealed: frozen at the first read or morning run after that. Birds named in ?locale= or your own language.
 // GET    /api/saved?kind=event-recap&share=&locale= -> the same with audience 'public', for anyone (no sign-in): no members, byMember, together, candidates or
-//                                                     shareCode; liferFor and who null; stops that aren't public eBird hotspots left out of stops and the line, and
+//                                                     shareCode; liferFor and who null (the scouting star's too, and its scoutedAt at a personal spot); stops that aren't public eBird hotspots left out of stops and the line, and
 //                                                     their names null wherever a bird was found there. English unless ?locale=. 404 for a bad code; the same 409.
 module.exports = route(['GET', 'POST', 'PUT', 'PATCH', 'DELETE'], async (req, res) => {
   // The recap's public view: anyone with the share code.

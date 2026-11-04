@@ -91,15 +91,70 @@ test('who found what: their adds and their own checklist ticks; birds only they 
   assert.deepEqual(recap.whoFound([], members), { byMember: [{ name: 'Matt', count: 0, only: [] }, { name: 'Kirin', count: 0, only: [] }], together: 0 })
 })
 
-test('the scouting called it: the latest emailed bird of the day that made the tally; the rarest by its ABA code', () => {
+test('the rarest bird on the tally by its ABA code', () => {
   const ordered = recap.inOrder([row(1, 'lewwoo', 400, { stop_index: 3 }), row(2, 'rubrob', 225), row(3, 'grhowl', 0)])
-  const called = recap.scoutingCalled([{ day: '2026-11-08', species_code: 'rubrob' }, { day: '2026-11-09', species_code: 'lewwoo' }, { day: '2026-11-10', species_code: 'eletro' }], ordered)
-  assert.deepEqual(called, { speciesCode: 'lewwoo', emailedOn: '2026-11-09', at: '2026-11-10T18:40:00.000Z', stopIndex: 3 })
-  assert.equal(recap.scoutingCalled([], ordered), null)
-  assert.equal(recap.scoutingCalled([{ day: '2026-11-09', species_code: 'eletro' }], ordered), null)
   const aba = { rubrob: 3, lewwoo: 1, grhowl: 1 }
   assert.deepEqual(recap.rarest(ordered, (c) => aba[c]), { speciesCode: 'rubrob', aba: 3, at: '2026-11-10T15:45:00.000Z', stopIndex: null })
   assert.equal(recap.rarest(ordered, () => 2), null, 'nothing coded 3 or up')
+})
+
+// Scouting rows as the table has them: the day, its bird of the day, and every bird it named.
+const scout = (day, botd, codes) => ({ day, species_code: botd, species: codes.map((code) => ({ code, loc: `L-${code}`, locName: `Spot ${code}` })) })
+
+test('the scouting star: a lifer beats a rarity, a rarity beats a bird of the day, and it\'s never the rarest bird', () => {
+  const ordered = recap.inOrder([row(1, 'lifer1', 10, { stop_index: 0 }), row(2, 'rare2', 20), row(3, 'botd', 30), row(4, 'plain', 40), row(5, 'rarest', 50), row(6, 'lifer2', 60)])
+  const records = [
+    scout('2026-11-07', 'botd', ['botd', 'plain', 'rare2']),
+    scout('2026-11-08', 'rarest', ['rarest', 'lifer1', 'plain', 'lifer2']),
+    scout('2026-11-09', 'botd', ['botd', 'plain', 'lifer1']),
+    // On the day itself, it counts; after, it doesn't.
+    scout('2026-11-10', null, ['lifer1']),
+    scout('2026-11-11', 'never', ['never', 'rare2'])
+  ]
+  const aba = { rare2: 2, rarest: 4, lifer1: 1 }
+  const lifers = { lifer1: ['Kirin'], lifer2: ['Kirin', 'Matt'], rarest: ['Kirin', 'Matt', 'Sam'] }
+  const opts = { firstDay: '2026-11-10', abaOf: (c) => aba[c] ?? null, liferFor: (c) => lifers[c] || [], rarestCode: 'rarest' }
+  const called = recap.scoutingCalled(records, ordered, opts)
+  assert.equal(called.reports, 4)
+  // Lifer for two beats lifer for one; the rarest, a lifer for three, has its own card.
+  assert.equal(called.star.speciesCode, 'lifer2')
+  assert.equal(called.star.why, 'lifer')
+  assert.deepEqual(called.star.liferFor, ['Kirin', 'Matt'])
+  assert.deepEqual(called.others.map((o) => o.speciesCode), ['rarest', 'lifer1', 'rare2', 'botd', 'plain'], 'the rest, most significant first: the rarest stays among them')
+  assert.equal(called.othersTotal, 5)
+  const lifer1 = called.others.find((o) => o.speciesCode === 'lifer1')
+  assert.deepEqual([lifer1.firstScouted, lifer1.timesScouted, lifer1.scoutedAt, lifer1.loc, lifer1.birdOfTheDay, lifer1.stopIndex], ['2026-11-08', 3, 'Spot lifer1', 'L-lifer1', false, 0])
+
+  // With no lifers, the rarity; with no rarity either, the bird of the day, the more often scouted first.
+  const none = () => []
+  const rarity = recap.scoutingCalled(records, ordered, { ...opts, liferFor: none })
+  assert.deepEqual([rarity.star.speciesCode, rarity.star.why, rarity.star.aba, rarity.star.liferFor], ['rare2', 'rarity', 2, []])
+  const day = recap.scoutingCalled(records, ordered, { ...opts, liferFor: none, abaOf: () => null })
+  assert.deepEqual([day.star.speciesCode, day.star.why, day.star.birdOfTheDay, day.star.timesScouted], ['botd', 'bird_of_the_day', true, 2])
+  assert.equal(day.others[0].speciesCode, 'rarest', 'a bird of the day too, scouted once')
+  assert.deepEqual(day.others.slice(1).map((o) => o.speciesCode), ['lifer1', 'plain', 'rare2', 'lifer2'], 'then the more often scouted (three times each: the earlier found first), then the rest')
+
+  // Nothing that's a lifer, a rarity or a bird of the day: no star, the birds all the same.
+  const plain = recap.scoutingCalled([scout('2026-11-08', null, ['plain', 'rare2'])], ordered, { ...opts, liferFor: none, abaOf: () => 1 })
+  assert.equal(plain.star, null)
+  assert.deepEqual([plain.others.map((o) => o.speciesCode), plain.othersTotal], [['rare2', 'plain'], 2])
+  // The rarest is never the star, even when it's the only one that qualifies.
+  assert.equal(recap.scoutingCalled([scout('2026-11-08', 'rarest', ['rarest'])], ordered, opts).star, null)
+  // Scouted but nothing found; no scouting at all; an older row with only its bird of the day.
+  assert.deepEqual(recap.scoutingCalled([scout('2026-11-08', 'never', ['never'])], ordered, opts), { reports: 1, star: null, others: [], othersTotal: 0 })
+  assert.equal(recap.scoutingCalled([], ordered, opts), null)
+  assert.equal(recap.scoutingCalled([scout('2026-11-12', 'botd', [])], ordered, opts), null, 'only after the day')
+  const old = recap.scoutingCalled([{ day: new Date(2026, 10, 9), species_code: 'botd', species: null }], ordered, { ...opts, liferFor: none })
+  assert.deepEqual([old.star.speciesCode, old.star.scoutedAt, old.star.firstScouted], ['botd', null, '2026-11-09'])
+})
+
+test('the scouting card lists up to 12 others and says how many there were', () => {
+  const codes = Array.from({ length: 15 }, (_, i) => `b${i}`)
+  const ordered = recap.inOrder(codes.map((code, i) => row(i + 1, code, i)))
+  const called = recap.scoutingCalled([scout('2026-11-09', 'b0', codes)], ordered, { firstDay: '2026-11-10' })
+  assert.equal(called.star.speciesCode, 'b0')
+  assert.equal(called.others.length, recap.MAX_SCOUTED_OTHERS)
+  assert.equal(called.othersTotal, 14)
 })
 
 test('the public view: no names, no personal spots, and nothing underscored leaves', () => {
@@ -112,7 +167,15 @@ test('the public view: no names, no personal spots, and nothing underscored leav
       { n: 2, speciesCode: 'b', comName: 'B', at, stopIndex: 1, place: 'Aunt May\'s yard', lifer: false, liferFor: [] }
     ],
     lifers: [{ speciesCode: 'b', comName: 'B', at, place: 'Aunt May\'s yard', who: 'Matt', number: 12, _stopIndex: 1, _userId: 1 }],
-    highlights: { rarest: { speciesCode: 'b', comName: 'B', aba: 3, at, place: 'Aunt May\'s yard', _stopIndex: 1 }, scoutingCalled: null },
+    highlights: {
+      rarest: { speciesCode: 'b', comName: 'B', aba: 3, at, place: 'Aunt May\'s yard', _stopIndex: 1 },
+      scoutingCalled: {
+        reports: 3,
+        star: { speciesCode: 'a', comName: 'A', at, place: 'Ramsey Canyon', why: 'lifer', aba: null, liferFor: ['Matt'], firstScouted: '2026-11-07', timesScouted: 2, scoutedAt: 'Aunt May\'s feeder', birdOfTheDay: false, _stopIndex: 0, _scoutedPrivate: true },
+        others: [{ speciesCode: 'b', comName: 'B', at, place: 'Aunt May\'s yard', firstScouted: '2026-11-08', timesScouted: 1, lifer: false, aba: 3, _stopIndex: 1 }],
+        othersTotal: 1
+      }
+    },
     targets: { total: 1, found: 1, missed: [] },
     stops: [{ index: 0, name: 'Ramsey Canyon', lat: 31.44, lng: -110.3, _private: false }, { index: 1, name: 'Aunt May\'s yard', lat: 31.5, lng: -110.2, _private: true }],
     route: { miles: 40, line: [[31.44, -110.3], [31.5, -110.2]], _publicLine: null },
@@ -127,6 +190,16 @@ test('the public view: no names, no personal spots, and nothing underscored leav
   assert.deepEqual(view.timeline.map((t) => [t.place, t.stopIndex, t.liferFor]), [['Ramsey Canyon', 0, null], [null, null, null]])
   assert.deepEqual(view.lifers, [{ speciesCode: 'b', comName: 'B', at, place: null, who: null, number: 12 }])
   assert.equal(view.highlights.rarest.place, null)
+  assert.deepEqual(view.highlights.scoutingCalled.star, { speciesCode: 'a', comName: 'A', at, place: 'Ramsey Canyon', why: 'lifer', aba: null, liferFor: null, firstScouted: '2026-11-07', timesScouted: 2, scoutedAt: null, birdOfTheDay: false })
+  assert.deepEqual(view.highlights.scoutingCalled.others, [{ speciesCode: 'b', comName: 'B', at, place: null, firstScouted: '2026-11-08', timesScouted: 1, lifer: false, aba: 3 }])
+  assert.equal(view.highlights.scoutingCalled.othersTotal, 1)
+  // Where the scouting placed it stays when it's a public hotspot.
+  const atHotspot = { ...facts, highlights: { ...facts.highlights, scoutingCalled: { ...facts.highlights.scoutingCalled, star: { ...facts.highlights.scoutingCalled.star, scoutedAt: 'Portal', _scoutedPrivate: false } } } }
+  assert.equal(recap.redact(atHotspot).highlights.scoutingCalled.star.scoutedAt, 'Portal')
+  // A recap sealed with the older shape (the bird of the day alone) shows no scouting card, and doesn't break.
+  const older = { ...facts, highlights: { rarest: null, scoutingCalled: { speciesCode: 'a', comName: 'A', emailedOn: '2026-11-09', at, place: 'Ramsey Canyon', _stopIndex: 0 } } }
+  assert.deepEqual(recap.redact(older).highlights, { rarest: null, scoutingCalled: null })
+  assert.deepEqual(recap.redact({ ...facts, highlights: undefined }).highlights, { rarest: null, scoutingCalled: null })
   assert.deepEqual(view.totals.bestStop, { index: 1, name: null, species: 1 })
   assert.ok(!JSON.stringify(view).includes('Matt'), 'no names anywhere')
   assert.ok(!JSON.stringify(view).includes('Aunt May'), 'no personal place anywhere')
@@ -141,7 +214,7 @@ test('the recap email: their lifers, the highlights, how long fixes are open, on
       { speciesCode: 'rubrob', comName: 'Rufous-backed Robin', at: '2026-11-10T15:47:00.000Z', place: 'San Pedro House', _userId: 9 },
       { speciesCode: 'wsowl', comName: 'Whiskered Screech-Owl', at: '2026-11-11T01:30:00.000Z', place: null, _userId: 5 }
     ],
-    highlights: { rarest: { speciesCode: 'rubrob', comName: 'Rufous-backed Robin', aba: 3, place: 'San Pedro House' }, scoutingCalled: { speciesCode: 'lewwoo', comName: 'Lewis\'s Woodpecker' } },
+    highlights: { rarest: { speciesCode: 'rubrob', comName: 'Rufous-backed Robin', aba: 3, place: 'San Pedro House' }, scoutingCalled: { reports: 4, star: { speciesCode: 'lewwoo', comName: 'Lewis\'s Woodpecker' }, others: [], othersTotal: 0 } },
     targets: { total: 20, found: 14, missed: [] }
   }
   const vars = { event: { id: 7, name: 'Big Day 2027', kind: 'bigday', starts_on: '2026-11-10' }, facts, name: 'Kirin', area: 'Cochise County', fixesUntil: new Date('2026-11-13T10:00:00Z'), zone: 'America/Phoenix' }
