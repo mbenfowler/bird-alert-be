@@ -89,7 +89,7 @@ test('the daily email: the countdown and bar, what\'s new, the bird of the day, 
   assert.equal(mail.subject, 'Big Day 2027: Rufous-backed Robin and 1 more new today · 6 days to go')
   assert.equal(mail.to, 'pat@example.com')
   assert.deepEqual(sections(mail.text), ['Big Day 2027 · 6 days to go', 'New: Rufous-backed Robin, Sandhill Crane', 'Bird of the day: Rufous-backed Robin (ABA Code 3)', 'Where they’re being seen:',
-    'Still missing (nothing in the last 2 weeks): Montezuma Quail, Flammulated Owl', 'Your group’s route:', 'Open the event: https://bird-alert.vercel.app/events/7', sections(mail.text)[7], sections(mail.text)[8]])
+    'Still missing (nothing in the last 2 weeks): Montezuma Quail, Flammulated Owl', 'Your group’s route:', 'Open the event: https://bird-alert.vercel.app/events/7#scouting', sections(mail.text)[7], sections(mail.text)[8]])
   assert.match(mail.text, /^Big Day 2027 · 6 days to go\nWith your group\n4 of 8 targets reported in the last 3 days\n/)
   assert.match(mail.text, /1\. Ramsey Canyon Preserve \(yesterday\)\n   Arizona Woodpecker, Painted Redstart\n   Checklist on eBird: https:\/\/ebird.org\/checklist\/S-arizwo\n2\. Miller Canyon--Beatty's Guest Ranch \(today\)\n   Rufous-backed Robin \(rare there\)/)
   assert.match(mail.text, /Your group’s route:\nMeeting point: Sierra Vista Motel\n1\. Ramsey Canyon Preserve\n2\. San Pedro House/)
@@ -253,4 +253,33 @@ test('a timed route\'s names are escaped in the HTML and read as typed in the te
   assert.match(mail.html, /Meeting point: Mo &amp; Jo&#39;s &lt;Motel&gt;/)
   assert.match(mail.html, /1\. &lt;i&gt;Stop&lt;\/i&gt; &amp; &quot;Co&quot; · 45 min there/)
   assert.match(mail.text, /Meeting point: Mo & Jo's <Motel>\n↓ 24 min drive · 12 mi\n1\. <i>Stop<\/i> & "Co" · 45 min there \(6 targets\)\nDriving 24 min · At stops 45 min · Total 1 h 9 min/)
+})
+
+test('one summary for the push, the email and the event page: what\'s new, the bird of the day and the subject, in the reader\'s language', () => {
+  const { scoutSummary } = require('../lib/scoutMail')
+  for (const locale of ['en', 'es-MX', 'fr-CA']) {
+    const reader = { ...pat, locale }
+    const mail = scoutingMessage(reader, daily)
+    const summary = scoutSummary({ locale, timezone: pat.timezone, now, place: daily.place, daysToGo: daily.daysToGo, seen, targetCount: daily.targetCount })
+    assert.equal(summary.subject, mail.subject, locale)
+    assert.equal(summary.hero.code, 'rubrob')
+    assert.deepEqual(summary.fresh.map((s) => s.code), ['rubrob', 'sancra'])
+  }
+  assert.equal(scoutSummary({ locale: 'en', timezone: pat.timezone, now, place: 'Big Day 2027', daysToGo: 6, seen: seen.slice(0, 2), targetCount: 8, standIn: true }).subject,
+    'Big Day 2027: 2 of 8 likely lifers around · 6 days to go', 'nothing new: how many are about')
+})
+
+test('"Open the event" lands on the scouting card', () => {
+  const mail = scoutingMessage(pat, daily)
+  assert.match(mail.html, /href="https:\/\/bird-alert\.vercel\.app\/events\/7#scouting"[^>]*>Open the event</)
+  assert.match(mail.text, /Open the event: https:\/\/bird-alert\.vercel\.app\/events\/7#scouting\n/)
+})
+
+test('each target where it stands: around in the window, quiet before it, missing with nothing in the feed; around, quiet, then missing', () => {
+  const { targetStatuses } = require('../lib/scouting')
+  const o = (speciesCode, obsDt) => ({ speciesCode, comName: speciesCode, locName: `at ${speciesCode}`, obsDt })
+  const records = [o('a', '2026-11-01 08:00'), o('a', '2026-10-20 08:00'), o('b', '2026-10-27 07:00'), o('c', '2026-10-28 07:00'), o('d', '2026-11-03 06:00'), o('other', '2026-11-03 06:00')]
+  const found = targetStatuses(['e', 'a', 'b', 'c', 'd'], records, '2026-11-03', 7)
+  assert.deepEqual(found.map((t) => [t.code, t.status, t.latest?.obsDt ?? null]), [
+    ['d', 'around', '2026-11-03 06:00'], ['a', 'around', '2026-11-01 08:00'], ['c', 'around', '2026-10-28 07:00'], ['b', 'quiet', '2026-10-27 07:00'], ['e', 'missing', null]])
 })
