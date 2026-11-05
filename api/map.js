@@ -1,6 +1,7 @@
 const { route, HttpError } = require('../lib/http')
 const { renderMap } = require('../lib/staticMap')
-const { renderShareCard } = require('../lib/shareCard')
+const { renderShareCard, renderRecapCard } = require('../lib/shareCard')
+const { recapShare } = require('../lib/shares')
 const db = require('../lib/db')
 
 const num = (value, min, max, label) => {
@@ -26,9 +27,17 @@ const parsePins = (value) => {
 // pins: the map in email digests. Cached hard: the same places always render the same map.
 // GET /api/map?card=<share id> -> the 1200x630 picture for a shared sighting's preview card: the
 // bird's photo whole, over a blurred copy of itself. Cached hard: a share never changes.
+// GET /api/map?recap=<share code>&v= -> the 1200x630 picture for a finished event's public recap
+// link: the species count, lifers, stops and miles. Cached hard once sealed; while late fixes are
+// still taken, ten minutes (v changes with what the card shows). 404 for a bad code, 409 too early.
 module.exports = route(['GET'], async (req, res) => {
   let jpeg
-  if (req.query.card !== undefined) {
+  let cacheControl = 'public, max-age=86400, s-maxage=2592000, immutable'
+  if (req.query.recap !== undefined) {
+    const recap = await recapShare(String(req.query.recap))
+    jpeg = await renderRecapCard(recap)
+    if (recap.status !== 'sealed') cacheControl = 'public, max-age=300, s-maxage=600'
+  } else if (req.query.card !== undefined) {
     const id = String(req.query.card)
     if (!/^[A-Za-z0-9]{6,12}$/.test(id)) throw new HttpError(404, 'Not found')
     const share = await db('shares').where({ id, kind: 'sighting' }).first('payload')
@@ -43,6 +52,6 @@ module.exports = route(['GET'], async (req, res) => {
     jpeg = await renderMap({ lat: Number(lat.toFixed(4)), lng: Number(lng.toFixed(4)), zoom })
   }
   res.setHeader('Content-Type', 'image/jpeg')
-  res.setHeader('Cache-Control', 'public, max-age=86400, s-maxage=2592000, immutable')
+  res.setHeader('Cache-Control', cacheControl)
   res.status(200).send(jpeg)
 })

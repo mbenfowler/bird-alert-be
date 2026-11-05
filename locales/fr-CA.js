@@ -23,7 +23,17 @@ module.exports = {
     abaCode: 'CODE ABA {code}',
     confirmed: 'CONFIRME PAR LES REVISEURS EBIRD',
     where: '{state} · {county} · {date}',
-    whereNoCounty: '{state} · {date}'
+    whereNoCounty: '{state} · {date}',
+    // An event recap's card (renderRecapCard).
+    recapBigDay: 'BIG DAY',
+    recapTrip: 'SORTIE',
+    recapSpecies: 'especes',
+    recapLifer: 'NOUVELLE ESPECE',
+    recapLifers: 'NOUVELLES ESPECES',
+    recapStop: 'ARRET',
+    recapStops: 'ARRETS',
+    recapMile: 'MILLE',
+    recapMiles: 'MILLES'
   },
   areaName: {
     county: 'Comté de {name}',

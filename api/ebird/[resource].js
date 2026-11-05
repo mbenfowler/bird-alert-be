@@ -175,8 +175,8 @@ const resources = {
     // Not cached at the edge, so every open is counted (one small read); link previewers aren't.
     cacheControl: 'no-store'
   },
-  // GET /api/ebird/share-page?kind=r|s&id= -> the app's page with the share's preview card (title, picture) in its head;
-  //   the front end rewrites /share/:kind/:id here, so links pasted anywhere unfurl properly
+  // GET /api/ebird/share-page?kind=r|s|recap&id= -> the app's page with the share's preview card (title, picture) in its head;
+  //   the front end rewrites /share/:kind/:id and /recap/:code here (a recap that's bad or not over gets the plain page), so links pasted anywhere unfurl properly
   'share-page': {
     handler: (query, req) => sharePage(query, req),
     // Never saved at the edge. The page names the build of the front end that asked for it (a preview
