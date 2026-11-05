@@ -25,7 +25,17 @@ module.exports = {
     abaCode: 'ABA CODE {code}',
     confirmed: 'CONFIRMED BY EBIRD REVIEWERS',
     where: '{state} · {county} · {date}',
-    whereNoCounty: '{state} · {date}'
+    whereNoCounty: '{state} · {date}',
+    // An event recap's card (renderRecapCard).
+    recapBigDay: 'BIG DAY',
+    recapTrip: 'TRIP',
+    recapSpecies: 'species',
+    recapLifer: 'LIFER',
+    recapLifers: 'LIFERS',
+    recapStop: 'STOP',
+    recapStops: 'STOPS',
+    recapMile: 'MILE',
+    recapMiles: 'MILES'
   },
   // An area named in prose (lib/places areaLabel): "Hall County", "Division No. 11 area".
   areaName: {
