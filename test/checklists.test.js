@@ -35,3 +35,23 @@ test("a history day's rows keep each species' place and time, first report wins"
     { region: 'US-GA-139', day: '2026-10-20', speciesCode: 'cangoo', locId: 'L5', locName: 'Lake', obsTime: null, subId: null }
   ])
 })
+
+test('an eBird call in the sync never runs more than a few seconds past the deadline', () => {
+  const { callBudget } = require('../lib/checklists')
+  const now = Date.now()
+  assert.equal(callBudget(Infinity), 15_000, 'a long way from the deadline, the usual limit')
+  const near = callBudget(now + 2_000)
+  assert.ok(near <= 7_000 && near > 6_000, String(near))
+  assert.equal(callBudget(now - 60_000), 1000, 'long past it, a token second')
+})
+
+test('retention starts only with time to finish, else the next call does it', async () => {
+  const { pruneWithin, RETENTION_RESERVE_MS } = require('../lib/retention')
+  let ran = 0
+  const prune = async () => { ran += 1; return { checklists: 3 } }
+  const due = async () => true
+  assert.deepEqual(await pruneWithin(Date.now() + RETENTION_RESERVE_MS + 10_000, { prune, due }), { retention: { checklists: 3 }, more: false })
+  assert.deepEqual(await pruneWithin(Date.now() + RETENTION_RESERVE_MS - 1_000, { prune, due }), { retention: null, more: true })
+  assert.deepEqual(await pruneWithin(Date.now() - 1_000, { prune, due: async () => false }), { retention: null, more: false }, 'already done today: nothing to wait for')
+  assert.equal(ran, 1)
+})

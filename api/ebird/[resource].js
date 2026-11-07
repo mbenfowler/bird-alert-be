@@ -3,9 +3,9 @@ const { guard, shared, requestKey, privately, sharedSeconds } = require('../../l
 const ebird = require('../../lib/ebird')
 const db = require('../../lib/db')
 const { arrivingSoon, seasonality } = require('../../lib/seasonality')
-const { runChecklistSync, userRegions, fillExploredSoon } = require('../../lib/checklists')
+const { runChecklistSync, userRegions, fillExploredSoon, callBudget } = require('../../lib/checklists')
 const { EBIRD_THROTTLED } = require('../../lib/adminStats')
-const { pruneDaily } = require('../../lib/retention')
+const { pruneWithin } = require('../../lib/retention')
 const { whereToFind, notableCodes } = require('../../lib/hotspots')
 const { dailyPass, accuracy } = require('../../lib/grading')
 const { whereToGo, parseOrigin } = require('../../lib/whereToGo')
@@ -223,14 +223,20 @@ const resources = {
       assertCronCaller(req)
       const regions = region ? [ebird.assertRegion(region)] : await userRegions()
       const deadline = Date.now() + 45_000
-      // Once a day per region: record what the ranking says and grade last week's predictions.
-      const grade = async (code) => dailyPass(code, { where: whereToFind, notable: await notableCodes(code), deadline })
+      // Once a day per region: record what the ranking says and grade last week's predictions. The
+      // notable feed is fetched only when the region's pass is due, within the call's time.
+      const grade = (code) => dailyPass(code, { where: whereToFind, notable: () => notableCodes(code, { timeoutMs: callBudget(deadline) }), deadline })
       const result = await runChecklistSync({ regions, deadline, grade })
       // Logged so the morning admin numbers can count how often eBird pushed back.
       if (result.throttled) await require('../../lib/errors').reportError(EBIRD_THROTTLED, new Error('eBird throttled the key; the round stopped'))
-      // Once a day, after a round is done: drop detail older than the app reads.
+      // Once a day, after a round is done: drop detail older than the app reads. Too little time left
+      // to start it: say more, and the next call does it (unless eBird is throttling; the next hour then).
       if (!result.more) {
-        try { result.retention = await pruneDaily() } catch (error) { console.error('Retention failed:', error.message) }
+        try {
+          const pass = await pruneWithin(deadline)
+          result.retention = pass.retention
+          if (pass.more && !result.throttled) result.more = true
+        } catch (error) { console.error('Retention failed:', error.message) }
       }
       return result
     },

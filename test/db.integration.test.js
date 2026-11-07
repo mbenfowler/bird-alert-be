@@ -356,6 +356,32 @@ test('checklists are listed once, fetched in full newest first, and not fetched 
   assert.equal(fetched.length, 2)
 })
 
+test('a checklist sync stops waiting on eBird when it hangs', async () => {
+  const { syncChecklists } = require('../lib/checklists')
+  const quiet = console.error
+  console.error = () => {}
+  try {
+    // The list never comes: the region fails within the call's time instead of holding it.
+    const asked = []
+    ebird.recentChecklists = async (_region, _max, { timeoutMs }) => { asked.push(timeoutMs); const e = new Error('eBird took too long to answer'); e.upstream = 'timeout'; throw e }
+    await assert.rejects(syncChecklists('US-GA-131', { deadline: Date.now() + 2_000, pause: 0 }), (error) => error.upstream === 'timeout')
+    assert.ok(asked[0] > 0 && asked[0] <= 7_000, String(asked[0]))
+    // Full fetches: the first that times out ends the region's run; the rest wait for the next.
+    ebird.recentChecklists = async () => [
+      { locId: 'LT', subId: 'ST2', obsTime: '09:00', isoObsDate: '2026-10-25 09:00', loc: { locName: 'T' } },
+      { locId: 'LT', subId: 'ST1', obsTime: '08:00', isoObsDate: '2026-10-24 08:00', loc: { locName: 'T' } }
+    ]
+    const fetched = []
+    ebird.checklistView = async (subId) => { fetched.push(subId); const e = new Error('eBird took too long to answer'); e.upstream = 'timeout'; throw e }
+    const result = await syncChecklists('US-GA-131', { detailLimit: 10, pause: 0 })
+    assert.deepEqual(fetched, ['ST2'])
+    assert.equal(result.failed, 1)
+    assert.equal(result.pending, 2)
+  } finally {
+    console.error = quiet
+  }
+})
+
 test('the checklist sync takes the region synced longest ago first, and says more when out of time', async () => {
   const { runChecklistSync } = require('../lib/checklists')
   const regions = ['US-GA-139', 'US-NC-119', 'US-FL-071']
@@ -602,9 +628,19 @@ test('predictions are recorded once a day and graded a week later against the ch
   assert.equal(first.region, 'US-GA-139')
   assert.ok(first.species >= 1 && first.predicted === first.species && first.recorded === first.species, JSON.stringify(first))
   assert.equal(first.graded, 0)
-  const second = await dailyPass('US-GA-139', { where, asOf: '2026-10-08' })
+  // Done for the day: the notable feed (an eBird call) isn't even asked for.
+  let notableAsked = 0
+  const second = await dailyPass('US-GA-139', { where, asOf: '2026-10-08', notable: async () => { notableAsked += 1; return new Set() } })
   assert.deepEqual(second, { region: 'US-GA-139', skipped: true })
+  assert.equal(notableAsked, 0)
   assert.equal(whereCalls, first.species)
+  // Due the next day, it is asked for once; and grading out of time leaves the rest for the next pass.
+  await recordPredictions('US-GA-139', 'norcar', '2026-10-02', result)
+  const late = await dailyPass('US-GA-139', { where, asOf: '2026-10-09', notable: async () => { notableAsked += 1; return new Set() }, deadline: Date.now() - 1 })
+  assert.equal(notableAsked, 1)
+  assert.equal(late.graded, 0, 'past the deadline nothing is graded')
+  assert.equal(await gradeDue('2026-10-09', { deadline: Date.now() - 1 }), 0)
+  assert.equal(await gradeDue('2026-10-09'), 3, 'the next pass with time grades what was left')
 })
 
 test('public land near a point comes from eBird and OpenStreetMap once, then from the cache', async () => {

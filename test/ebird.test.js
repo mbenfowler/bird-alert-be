@@ -118,3 +118,26 @@ test('a full national notable answer is asked again state by state, so the oldes
   assert.equal(urls.length, 1)
 })
 
+
+test('an eBird call given a time limit gives up when the answer never comes', async () => {
+  const { withFetch, jsonResponse } = require('./helpers')
+  const ebird = require('../lib/ebird')
+  const quiet = console.error
+  console.error = () => {}
+  try {
+    // Hangs until aborted, as eBird does for most of a minute in the small hours.
+    const hang = (_url, init) => new Promise((_resolve, reject) => init.signal.addEventListener('abort', () => reject(init.signal.reason)))
+    const started = Date.now()
+    await assert.rejects(withFetch(hang, () => ebird.recentChecklists('US-GA-139', 200, { timeoutMs: 50 })), (error) => error.status === 504 && error.upstream === 'timeout')
+    assert.ok(Date.now() - started < 2000)
+    await assert.rejects(withFetch(hang, () => ebird.checklistView('S1', { timeoutMs: 50 })), (error) => error.upstream === 'timeout')
+    // Without a limit nothing is aborted, and an answer in time comes through as before.
+    let signalled = null
+    const data = await withFetch((_url, init) => { signalled = Boolean(init.signal); return jsonResponse([{ subId: 'S1' }]) }, () => ebird.recentChecklists('US-GA-139'))
+    assert.equal(signalled, false)
+    assert.deepEqual(data, [{ subId: 'S1' }])
+    assert.deepEqual(await withFetch(() => jsonResponse({ subId: 'S1' }), () => ebird.checklistView('S1', { timeoutMs: 1000 })), { subId: 'S1' })
+  } finally {
+    console.error = quiet
+  }
+})
