@@ -4368,3 +4368,79 @@ test('the scouting emails keep their bird of the day and every bird they named, 
     await db('users').where({ id: owner }).del()
   }
 })
+
+test('a device that subscribes again replaces its old subscriptions, and a check marks the live one seen', async () => {
+  const { saveSubscription, subscriptionStatus, resetColumnCheck } = require('../lib/pushSubscriptions')
+  resetColumnCheck()
+  const iphone = 'Mozilla/5.0 (iPhone; CPU iPhone OS 18_7 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.7 Mobile/15E148 Safari/604.1'
+  const mac = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/142.0.0.0 Safari/537.36'
+  const [{ id: me }] = await db('users').insert({ email: 'push-dedupe@example.com', password_hash: 'x', email_confirmed: true }).returning('id')
+  const [{ id: other }] = await db('users').insert({ email: 'push-dedupe-other@example.com', password_hash: 'x', email_confirmed: true }).returning('id')
+  const sub = (endpoint, ua) => ({ endpoint, p256dh: 'k', auth: 'a', user_agent: ua })
+  const endpoints = async (userId) => (await db('push_subscriptions').where({ user_id: userId }).orderBy('id')).map((row) => row.endpoint)
+  const old = new Date(Date.now() - 10 * 86_400_000)
+
+  // Before device ids: two dead iPhone endpoints, two Macs with the same browser, another person's iPhone.
+  await db('push_subscriptions').insert([
+    { ...sub('https://web.push.apple.com/dead1', iphone), user_id: me, created_at: old, last_seen_at: old },
+    { ...sub('https://web.push.apple.com/dead2', iphone), user_id: me, created_at: old, last_seen_at: old },
+    { ...sub('https://fcm.googleapis.com/mac-a', mac), user_id: me, created_at: new Date(), last_seen_at: new Date() },
+    { ...sub('https://web.push.apple.com/someone-else', iphone), user_id: other, created_at: old, last_seen_at: old }
+  ])
+  // Mac A opens the app: its row is marked seen and given its device id.
+  const a = await subscriptionStatus(me, { endpoint: 'https://fcm.googleapis.com/mac-a', deviceId: 'mac-a-device-0001', userAgent: mac })
+  assert.equal(a.subscribed, true)
+  assert.equal((await db('push_subscriptions').where({ endpoint: 'https://fcm.googleapis.com/mac-a' }).first()).device_id, 'mac-a-device-0001')
+
+  // The iPhone lost its subscription: the server still knows this kind of device had alerts on.
+  const lost = await subscriptionStatus(me, { deviceId: 'iphone-device-0001', userAgent: iphone })
+  assert.deepEqual([lost.subscribed, lost.knownDevice], [false, true])
+  assert.equal((await subscriptionStatus(other, { deviceId: 'x-device-00001', userAgent: mac })).knownDevice, false)
+
+  // It subscribes again: the dead endpoints go, the Mac and the other person stay.
+  assert.equal(await saveSubscription(me, sub('https://web.push.apple.com/live1', iphone), { deviceId: 'iphone-device-0001' }), 2)
+  assert.deepEqual(await endpoints(me), ['https://fcm.googleapis.com/mac-a', 'https://web.push.apple.com/live1'])
+  assert.deepEqual(await endpoints(other), ['https://web.push.apple.com/someone-else'])
+
+  // A second Mac with an identical browser keeps Mac A's row (it has a device id now).
+  await saveSubscription(me, sub('https://fcm.googleapis.com/mac-b', mac), { deviceId: 'mac-b-device-0001' })
+  assert.equal((await endpoints(me)).length, 3)
+
+  // Again on the iPhone: one live row per device, with last_seen_at refreshed on the upsert.
+  await db('push_subscriptions').where({ endpoint: 'https://web.push.apple.com/live1' }).update({ last_seen_at: old })
+  await saveSubscription(me, sub('https://web.push.apple.com/live1', iphone), { deviceId: 'iphone-device-0001' })
+  const live = await db('push_subscriptions').where({ endpoint: 'https://web.push.apple.com/live1' }).first()
+  assert.ok(Date.now() - new Date(live.last_seen_at).getTime() < 60_000, 'the upsert refreshes last_seen_at')
+  await saveSubscription(me, sub('https://web.push.apple.com/live2', iphone), { deviceId: 'iphone-device-0001' })
+  assert.deepEqual((await endpoints(me)).filter((e) => e.includes('apple')), ['https://web.push.apple.com/live2'])
+
+  // The service worker renews a subscription with no device id: the old endpoint goes, its device id carries over.
+  assert.equal(await saveSubscription(me, sub('https://web.push.apple.com/live3', iphone), { oldEndpoint: 'https://web.push.apple.com/live2' }), 1)
+  assert.equal((await db('push_subscriptions').where({ endpoint: 'https://web.push.apple.com/live3' }).first()).device_id, 'iphone-device-0001')
+
+  // A stale row is marked seen when the app checks it.
+  await db('push_subscriptions').where({ endpoint: 'https://fcm.googleapis.com/mac-b' }).update({ last_seen_at: old })
+  await subscriptionStatus(me, { endpoint: 'https://fcm.googleapis.com/mac-b', deviceId: 'mac-b-device-0001', userAgent: mac })
+  const seen = await db('push_subscriptions').where({ endpoint: 'https://fcm.googleapis.com/mac-b' }).first()
+  assert.ok(Date.now() - new Date(seen.last_seen_at).getTime() < 60_000)
+  await db('users').whereIn('id', [me, other]).del()
+})
+
+test('the notification trace keeps each device\'s events', async () => {
+  const handler = require('../api/push/[action].js')
+  const { fakeReq, fakeRes } = require('./helpers')
+  const { createSession } = require('../lib/auth')
+  const user = await db('users').where({ id: userId }).first()
+  const session = fakeRes(); createSession(session, user)
+  const cookie = String(session.headers['set-cookie']).split(';')[0]
+  const post = async (detail, ua) => {
+    const res = fakeRes()
+    await handler(fakeReq({ method: 'POST', query: { action: 'trace' }, headers: { cookie, 'user-agent': ua }, body: detail }), res)
+    assert.equal(res.statusCode, 204)
+  }
+  await post({ event: 'app-load', device: 'iphone-device-0001' }, 'iPhone')
+  for (let i = 0; i < 35; i += 1) await post({ event: 'push', ua: 'Macintosh Chrome/142' }, 'Macintosh Chrome/142')
+  const { events } = (await db('job_runs').where({ kind: `sw-trace:${userId}` }).first()).detail
+  assert.equal(events.filter((e) => e.event === 'app-load').length, 1)
+  assert.equal(events.filter((e) => e.event === 'push').length, 30)
+})
