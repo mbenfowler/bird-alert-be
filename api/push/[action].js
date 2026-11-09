@@ -10,6 +10,7 @@ const { t, langFor } = require('../../lib/i18n')
 const { inLanguage } = require('../../lib/birdNames')
 const handoff = require('../../lib/handoff')
 const ebird = require('../../lib/ebird')
+const { saveSubscription, subscriptionStatus, traceDeviceOf, appendTrace } = require('../../lib/pushSubscriptions')
 
 const assertConfigured = () => {
   if (!push.configured) throw new HttpError(503, 'Push notifications are not configured on the server')
@@ -33,18 +34,18 @@ const actions = {
     }
   },
 
-  // POST /api/push/subscribe { endpoint, keys: { p256dh, auth }, userAgent? } -> 201 (idempotent per endpoint)
+  // POST /api/push/subscribe { endpoint, keys: { p256dh, auth }, userAgent?, deviceId?, oldEndpoint? } -> 201 (idempotent per endpoint)
+  // deviceId is the app's id for this browser: the device's older subscriptions are replaced. oldEndpoint
+  // comes from the service worker when the browser renewed the subscription (pushsubscriptionchange).
   subscribe: {
     methods: ['POST'],
     handler: async (req, res) => {
       assertConfigured()
       const user = await requireUser(req)
       const subscription = subscriptionFromBody(req)
-      await db('push_subscriptions')
-        .insert({ ...subscription, user_id: user.id })
-        .onConflict('endpoint')
-        .merge({ user_id: user.id, p256dh: subscription.p256dh, auth: subscription.auth, user_agent: subscription.user_agent, last_seen_at: db.fn.now() })
-      res.status(201).json({ ok: true })
+      const { deviceId, oldEndpoint } = body(req)
+      const replaced = await saveSubscription(user.id, subscription, { deviceId, oldEndpoint, origin: req.headers.origin || req.headers.referer })
+      res.status(201).json({ ok: true, replaced })
     }
   },
 
@@ -60,19 +61,18 @@ const actions = {
     }
   },
 
-  // GET /api/push/status?endpoint= -> { subscribed, devices, lastRun: { at, notified, heldForQuietHours } | null }
+  // GET /api/push/status?endpoint=&deviceId= -> { subscribed, knownDevice, devices, lastRun: { at, notified, heldForQuietHours } | null }
+  // knownDevice: this device (or, for rows from before device ids, this kind of browser) had alerts on.
   status: {
     methods: ['GET'],
     handler: async (req, res) => {
       const user = await requireUser(req)
-      const [rows, run] = await Promise.all([
-        db('push_subscriptions').where({ user_id: user.id }).select('endpoint'),
+      const [status, run] = await Promise.all([
+        subscriptionStatus(user.id, { endpoint: req.query.endpoint, deviceId: req.query.deviceId, userAgent: req.headers['user-agent'], origin: req.headers.origin || req.headers.referer }),
         lastRun('push')
       ])
-      const subscribed = typeof req.query.endpoint === 'string' && rows.some((row) => row.endpoint === req.query.endpoint)
       res.status(200).json({
-        subscribed,
-        devices: rows.length,
+        ...status,
         lastRun: run ? { at: run.ran_at, ...(run.detail || {}) } : null
       })
     }
@@ -143,8 +143,9 @@ const actions = {
     }
   },
 
-  // POST /api/push/trace { event, ... } -> remembers the last 30 things this user's service worker and
-  // app did with notifications, so a tap that goes nowhere on a phone can be read back from the server.
+  // POST /api/push/trace { event, device?, ... } -> remembers the last 30 things this user's service worker
+  // and app did with notifications on each device (the six latest devices), so a tap that goes nowhere on
+  // a phone can be read back from the server, however busy the user's laptops are.
   trace: {
     methods: ['POST'],
     handler: async (req, res) => {
@@ -153,8 +154,10 @@ const actions = {
       if (!detail || typeof detail.event !== 'string') throw new HttpError(400, 'An event is required')
       const kind = `sw-trace:${user.id}`
       const previous = (await lastRun(kind))?.detail?.events || []
-      const entry = { ...JSON.parse(JSON.stringify(detail).slice(0, 4000)), at: new Date().toISOString() }
-      await recordRun(kind, { events: [...previous, entry].slice(-30) })
+      let entry
+      try { entry = JSON.parse(JSON.stringify(detail).slice(0, 4000)) } catch { entry = { event: detail.event.slice(0, 100), truncated: true } }
+      entry = { ...entry, dev: traceDeviceOf(detail, req.headers['user-agent']), at: new Date().toISOString() }
+      await recordRun(kind, { events: appendTrace(previous, entry) })
       res.status(204).end()
     }
   },
