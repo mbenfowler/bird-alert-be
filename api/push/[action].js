@@ -44,7 +44,7 @@ const actions = {
       const user = await requireUser(req)
       const subscription = subscriptionFromBody(req)
       const { deviceId, oldEndpoint } = body(req)
-      const replaced = await saveSubscription(user.id, subscription, { deviceId, oldEndpoint })
+      const replaced = await saveSubscription(user.id, subscription, { deviceId, oldEndpoint, origin: req.headers.origin || req.headers.referer })
       res.status(201).json({ ok: true, replaced })
     }
   },
@@ -68,7 +68,7 @@ const actions = {
     handler: async (req, res) => {
       const user = await requireUser(req)
       const [status, run] = await Promise.all([
-        subscriptionStatus(user.id, { endpoint: req.query.endpoint, deviceId: req.query.deviceId, userAgent: req.headers['user-agent'] }),
+        subscriptionStatus(user.id, { endpoint: req.query.endpoint, deviceId: req.query.deviceId, userAgent: req.headers['user-agent'], origin: req.headers.origin || req.headers.referer }),
         lastRun('push')
       ])
       res.status(200).json({

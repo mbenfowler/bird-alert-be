@@ -1,6 +1,6 @@
 const { test } = require('node:test')
 const assert = require('node:assert/strict')
-const { familyOf, traceDeviceOf, appendTrace, TRACE_PER_DEVICE } = require('../lib/pushSubscriptions')
+const { isProductionOrigin, originOf, familyOf, traceDeviceOf, appendTrace, TRACE_PER_DEVICE } = require('../lib/pushSubscriptions')
 
 const IPHONE = 'Mozilla/5.0 (iPhone; CPU iPhone OS 18_7 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.7 Mobile/15E148 Safari/604.1'
 const MAC_CHROME = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/142.0.0.0 Safari/537.36'
@@ -24,4 +24,14 @@ test('a busy laptop cannot push a phone out of the notification trace', () => {
   assert.equal(events.at(-1).n, 99, 'newest last')
   // Old traces without a device label still count as one device.
   assert.equal(appendTrace([{ event: 'old' }], { event: 'new', dev: phone }).length, 2)
+})
+
+test('preview builds and dev servers are not the production app', () => {
+  assert.equal(isProductionOrigin(null), true, 'rows from before origins were kept')
+  assert.equal(isProductionOrigin('https://bird-alert.vercel.app'), true)
+  assert.equal(isProductionOrigin('https://birdalert.info'), true)
+  assert.equal(isProductionOrigin('https://bird-alert-git-fix-push-self-heal-mben.vercel.app'), false)
+  assert.equal(isProductionOrigin('http://localhost:5173'), false)
+  assert.equal(originOf('https://bird-alert-git-x-mben.vercel.app/settings?tab=alerts'), 'https://bird-alert-git-x-mben.vercel.app')
+  assert.equal(originOf('javascript:alert(1)'), null)
 })

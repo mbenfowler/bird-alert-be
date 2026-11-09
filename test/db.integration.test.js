@@ -4418,6 +4418,19 @@ test('a device that subscribes again replaces its old subscriptions, and a check
   assert.equal(await saveSubscription(me, sub('https://web.push.apple.com/live3', iphone), { oldEndpoint: 'https://web.push.apple.com/live2' }), 1)
   assert.equal((await db('push_subscriptions').where({ endpoint: 'https://web.push.apple.com/live3' }).first()).device_id, 'iphone-device-0001')
 
+  // A preview build on the same Mac browser never replaces the production app's rows, and is not
+  // told the production subscription is its own.
+  const preview = 'https://bird-alert-git-fix-mben.vercel.app'
+  await db('push_subscriptions').insert({ ...sub('https://fcm.googleapis.com/mac-legacy', mac), user_id: me, created_at: old, last_seen_at: old })
+  assert.equal((await subscriptionStatus(me, { deviceId: 'preview-device-01', userAgent: mac, origin: preview })).knownDevice, false)
+  assert.equal(await saveSubscription(me, sub('https://fcm.googleapis.com/mac-preview', mac), { deviceId: 'preview-device-01', origin: preview }), 0)
+  assert.ok((await endpoints(me)).includes('https://fcm.googleapis.com/mac-legacy'))
+  assert.equal((await db('push_subscriptions').where({ endpoint: 'https://fcm.googleapis.com/mac-preview' }).first()).origin, preview)
+  // The production app on that Mac does replace its own legacy row.
+  assert.equal(await saveSubscription(me, sub('https://fcm.googleapis.com/mac-c', mac), { deviceId: 'mac-c-device-0001', origin: 'https://bird-alert.vercel.app' }), 1)
+  assert.ok(!(await endpoints(me)).includes('https://fcm.googleapis.com/mac-legacy'))
+  assert.ok((await endpoints(me)).includes('https://fcm.googleapis.com/mac-preview'))
+
   // A stale row is marked seen when the app checks it.
   await db('push_subscriptions').where({ endpoint: 'https://fcm.googleapis.com/mac-b' }).update({ last_seen_at: old })
   await subscriptionStatus(me, { endpoint: 'https://fcm.googleapis.com/mac-b', deviceId: 'mac-b-device-0001', userAgent: mac })
