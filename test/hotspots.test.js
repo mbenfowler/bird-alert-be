@@ -143,3 +143,25 @@ test('checklists since the last report that missed the bird lower the chance, wh
   assert.equal(counted.missesSince, 2)
   assert.ok(counted.chance < without.chance)
 })
+
+test('a rarity seen daily but awaiting review keeps its chance: the live feed asks for unreviewed reports too', async () => {
+  const ebird = require('../lib/ebird')
+  const { liveFeed, liveReports } = require('../lib/hotspots')
+  const original = ebird.speciesObservations
+  let asked
+  ebird.speciesObservations = async (...args) => { asked = args; return [] }
+  try { await liveFeed('US-CA-037', 'sagthr') } finally { ebird.speciesObservations = original }
+  assert.deepEqual(asked, ['US-CA-037', 'sagthr', 30, { provisional: true }])
+
+  // Toyon Landfill: one reviewed report two weeks back, then daily reports a reviewer hasn't reached.
+  const asOf = '2026-11-09'
+  const row = (day, subId) => ({ locId: 'L1', locName: 'Toyon Landfill', obsDt: `${day} 08:00`, lat: 34.13, lng: -118.29, locationPrivate: false, subId })
+  const reviewed = [row('2026-10-26', 'S0')]
+  const awaiting = ['2026-11-04', '2026-11-05', '2026-11-07', '2026-11-08'].map((d, i) => row(d, `S${i + 1}`))
+  const [stale] = rankPlaces({ reports: liveReports(reviewed), asOf, halfLife: HALF_LIVES.rare, prior: 0.001 })
+  assert.equal(stale.chance, 0, 'the old reviewed report alone fades to nothing')
+  const [place] = rankPlaces({ reports: liveReports([...reviewed, ...awaiting]), asOf, halfLife: HALF_LIVES.rare, prior: 0.001 })
+  assert.ok(place.chance > 0)
+  assert.equal(place.lastSeen.day, '2026-11-08')
+  assert.equal(place.lastSeen.time, '08:00')
+})
