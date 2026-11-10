@@ -2259,13 +2259,18 @@ test('event notes: to each member, one when an event starts and one the day befo
     assert.equal(places.areaLabel('en', 'GB-ENG', 'Kent'), 'Kent')
 
     // The words.
-    const start = tripNoticeMessage(user, 'started', { eventId: trip.id, place: 'Colorado (work)', ends: '2026-11-15', home: 'Hall County' })
+    const start = tripNoticeMessage(user, 'started', { eventId: trip.id, place: 'Colorado (work)', area: 'Denver County', ends: '2026-11-15', home: 'Hall County' })
     assert.equal(start.subject, 'Your trip to Colorado (work) has started')
-    assert.match(start.text, /You’re set for Colorado \(work\) until November 15\. Your account will switch back to Hall County when your trip ends\./)
-    assert.match(start.text, /\/unsubscribe\//)
+    assert.match(start.text, /Your alerts are set to Denver County until November 15\. They switch back to Hall County when the trip ends\./)
+    assert.match(start.html, new RegExp(`/events/${trip.id}"[^>]*>Open the trip</a>`))
+    assert.match(start.html, /\/unsubscribe\//)
+    const bigDay = tripNoticeMessage(user, 'started', { eventId: trip.id, place: 'Big Day 2027', area: 'Cochise County', ends: '2026-11-10', home: 'Hall County', bigDay: true })
+    assert.equal(bigDay.subject, 'Big Day 2027 is today')
+    assert.match(bigDay.text, /Your alerts are set to Cochise County for the day, and switch back to Hall County after\./)
+    assert.match(bigDay.html, new RegExp(`/events/${trip.id}/tally"[^>]*>Open the tally</a>`))
     const ending = tripNoticeMessage(user, 'ending', { eventId: trip.id, place: 'Colorado (work)', ends: '2026-11-15', home: 'Hall County' })
     assert.equal(ending.subject, 'Your trip to Colorado (work) ends tomorrow')
-    assert.match(ending.text, /A reminder: your account switches back to Hall County at the end of your trip on November 15\./)
+    assert.match(ending.text, /Your alerts switch back to Hall County after November 15\./)
     assert.match(ending.text, new RegExp(`Extend my trip: .*/events/${trip.id}\\b`))
   } finally {
     ebird.subregions = original

@@ -126,14 +126,23 @@ module.exports = {
     trip: {
       started: {
         subject: 'Tu viaje a {place} ya empezó',
-        body: 'Todo listo para {place} hasta el {ends}. Cuando termine tu viaje, tu cuenta regresará a casa ({home}).'
+        heading: 'Tu viaje ya empezó',
+        body: 'Tus alertas están en {area} hasta el {ends}. Regresan a casa ({home}) cuando termine el viaje.'
+      },
+      startedBigDay: {
+        subject: '{place} es hoy',
+        heading: '{place} es hoy',
+        body: 'Tus alertas están en {area} por hoy, y después regresan a casa ({home}). ¡Buena pajareada!'
       },
       ending: {
         subject: 'Tu viaje a {place} termina mañana',
-        body: 'Un recordatorio: al terminar tu viaje, el {ends}, tu cuenta regresa a casa ({home}).'
+        heading: 'Tu viaje termina mañana',
+        body: 'Tus alertas regresan a casa ({home}) después del {ends}. ¿Te quedas más? Alarga el viaje.'
       },
-      extend: 'Alargar mi viaje:',
-      unsubscribe: '¿No quieres estos avisos de viaje? Desactívalos:'
+      openTally: 'Abrir el conteo',
+      openTrip: 'Abrir el viaje',
+      extend: 'Alargar mi viaje',
+      unsubscribe: 'Desactivar los correos de viaje'
     },
     scout: {
       countdown: { one: 'Falta {count} día', other: 'Faltan {count} días' },
