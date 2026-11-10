@@ -131,14 +131,23 @@ module.exports = {
     trip: {
       started: {
         subject: 'Your trip to {place} has started',
-        body: 'You’re set for {place} until {ends}. Your account will switch back to {home} when your trip ends.'
+        heading: 'Your trip has started',
+        body: 'Your alerts are set to {area} until {ends}. They switch back to {home} when the trip ends.'
+      },
+      startedBigDay: {
+        subject: '{place} is today',
+        heading: '{place} is today',
+        body: 'Your alerts are set to {area} for the day, and switch back to {home} after. Good birding!'
       },
       ending: {
         subject: 'Your trip to {place} ends tomorrow',
-        body: 'A reminder: your account switches back to {home} at the end of your trip on {ends}.'
+        heading: 'Your trip ends tomorrow',
+        body: 'Your alerts switch back to {home} after {ends}. Staying longer? Extend the trip.'
       },
-      extend: 'Extend my trip:',
-      unsubscribe: 'Don’t want these trip notes? Turn them off:'
+      openTally: 'Open the tally',
+      openTrip: 'Open the trip',
+      extend: 'Extend my trip',
+      unsubscribe: 'Turn off trip emails'
     },
     // The scouting email (lib/scoutMail), daily and asked for now from the event page.
     scout: {
