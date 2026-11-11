@@ -2293,9 +2293,13 @@ test('back home: /me says an event just ended, once, until the app says it was s
     const [place] = await db('places').insert({ user_id: id, name: 'Colorado (work)', state: 'CO', location: 'US-CO-031' }).returning('*')
     const ended = await eventAt(id, place, { starts_on: dayFrom(-4), ends_on: dayFrom(-1) })
     assert.deepEqual((await me()).lastEvent, { id: ended.id, name: 'Colorado (work)', ended_on: dayFrom(-1) })
+    // "I'm here now" at the event's area during it: cleared with the welcome, so alerts are home.
+    await db('users').where({ id }).update({ active_place_id: place.id })
     const res = fakeRes()
     await userApi(fakeReq({ method: 'PATCH', headers: { cookie }, body: { event_return_seen: true } }), res)
     assert.equal(res.body.lastEvent, null)
+    assert.equal(res.body.activePlace, null)
+    assert.equal((await db('users').where({ id }).first()).active_place_id, null)
     assert.equal((await me()).lastEvent, null, 'once')
     // The old name is still taken, harmlessly; anything but true isn't.
     const old = fakeRes()
