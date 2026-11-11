@@ -77,10 +77,15 @@ module.exports = route(['GET', 'PATCH', 'DELETE'], async (req, res) => {
   // to measure it from (both null: the county's center).
   // The app showed "welcome back" for an event that just ended: not again. (trip_return_seen, the
   // old name, is still taken.)
+  // A place set to the event's area ("I'm here now" during it) goes with it: alerts really are home.
   for (const key of ['event_return_seen', 'trip_return_seen']) {
     if (!(key in input)) continue
     if (input[key] !== true) throw new HttpError(400, `${key} can only be set to true`)
-    await markEventReturnSeen(user)
+    const ended = await markEventReturnSeen(user)
+    if (ended.length && user.active_place_id && !('active_place_id' in input)) {
+      const at = await db('places').where({ id: user.active_place_id }).first()
+      if (at && ended.some((e) => e.location === at.location)) changes.active_place_id = null
+    }
   }
   // "I'm here now": one of the person's own places, or null for home. An event covering today still wins.
   let nowAt = null
