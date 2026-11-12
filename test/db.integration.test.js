@@ -1065,9 +1065,9 @@ test('the HQ desk stores its picks, makes share links, emails them, and never pi
   } finally { delete process.env.FEEDBACK_TO }
 })
 
-test('an HQ rarity alert: a Code 4-5 bird goes to the owner at once with a post ready, a Code 6 report gets a heads-up, each once a week', async () => {
+test('an HQ rarity alert: a Code 4-6 bird goes to the owner at once with a post ready (a Code 6 saying what eBird makes of it), a private Code 6 gets a heads-up, each once a week', async () => {
   const { runHqAlerts } = require('../lib/hqAlerts')
-  const codes = { bySci: new Map([['Phylloscopus inornatus', 4], ['Anhinga anhinga', 1], ['Campephilus principalis', 6], ['Calidris pugnax', 3]]), byName: new Map() }
+  const codes = { bySci: new Map([['Phylloscopus inornatus', 4], ['Anhinga anhinga', 1], ['Campephilus principalis', 6], ['Calidris pugnax', 3], ['Amazona oratrix', 6]]), byName: new Map() }
   const base = { subnational1Code: 'US-CA', subnational1Name: 'California', subnational2Name: 'San Mateo', lat: 37.52, lng: -122.5, obsDt: '2026-10-22 12:50', userDisplayName: 'A', locationPrivate: false }
   // Awaiting review (valid false, not reviewed) still counts: that's how a true rarity looks on day one.
   const warbler = { ...base, speciesCode: 'yebwar3', comName: 'Yellow-browed Warbler', sciName: 'Phylloscopus inornatus', locId: 'L77', locName: 'Rancho Corral de Tierra--Moss Beach area', subId: 'S900', obsValid: false, obsReviewed: false }
@@ -1080,46 +1080,63 @@ test('an HQ rarity alert: a Code 4-5 bird goes to the owner at once with a post 
     // Code 6, in someone's yard: a heads-up, the place never named.
     { ...base, speciesCode: 'ivbwoo', comName: 'Ivory-billed Woodpecker', sciName: 'Campephilus principalis', subnational1Code: 'US-AR', subnational1Name: 'Arkansas', subnational2Name: 'Monroe', locId: 'L3', locName: '12 Private Lane', subId: 'S903', obsValid: false, obsReviewed: false, locationPrivate: true },
     // Mexico has no ABA codes.
-    { ...warbler, subnational1Code: 'MX-BCN', subnational1Name: 'Baja California', subId: 'S904' }
+    { ...warbler, subnational1Code: 'MX-BCN', subnational1Name: 'Baja California', subId: 'S904' },
+    // Code 6 at a public place, a feral flock eBird marks Exotic: Provisional: a full alert, said plainly.
+    { ...base, speciesCode: 'yehpar', comName: 'Yellow-headed Amazon', sciName: 'Amazona oratrix', subnational2Name: 'Orange', locId: 'L4', locName: 'Huntington Central Park', subId: 'S906', obsValid: false, obsReviewed: false }
   ]
   await db('birds').insert({ speciesCode: 'yebwar3', comName: 'Yellow-browed Warbler', sciName: 'Phylloscopus inornatus', birdImg: 'https://img.example/ybw.jpg' }).onConflict('speciesCode').ignore()
   const [{ id: owner }] = await db('users').insert({ email: 'Owner@example.com', password_hash: 'x' }).returning('id')
   const [{ id: someone }] = await db('users').insert({ email: 'someone@example.com', password_hash: 'x' }).returning('id')
   const pushes = []
   const mails = []
-  const run = (now) => runHqAlerts({ records, codes, now, push: async (userId, payload) => { pushes.push({ userId, payload }); return { sent: 1 } }, send: async (m) => { mails.push(m); return {} } })
+  const run = (now) => runHqAlerts({ records, codes, now, exotic: async (p) => (p.speciesCode === 'yehpar' ? 'P' : null), push: async (userId, payload) => { pushes.push({ userId, payload }); return { sent: 1 } }, send: async (m) => { mails.push(m); return {} } })
   process.env.FEEDBACK_TO = 'owner@example.com'
   try {
     const first = await run(new Date('2026-10-22T20:00:00Z'))
-    assert.deepEqual([first.post, first.extinct, first.pushed, first.emailed], [1, 1, true, true])
+    assert.deepEqual([first.post, first.extinct, first.pushed, first.emailed], [2, 1, true, true])
     assert.deepEqual([...new Set(pushes.map((p) => p.userId))], [owner], 'the owner\'s devices only')
     assert.ok(!pushes.some((p) => p.userId === someone))
-    const [code4, code6] = pushes.map((p) => p.payload)
+    const titled = (re) => pushes.map((p) => p.payload).find((p) => re.test(p.title))
+    const mailed = (re) => mails.find((m) => re.test(m.subject))
+    const code4 = titled(/Warbler/)
+    const code6 = titled(/Ivory-billed/)
+    const amazon = titled(/Amazon/)
+    assert.equal(amazon.title, '🚨 ABA Code 6 (exotic, provisional): Yellow-headed Amazon in California')
+    assert.match(amazon.data.url, /\/share\/s\/[A-Za-z0-9]{10}$/, 'a public Code 6 gets a share page')
+    const amazonMail = mailed(/Amazon/)
+    assert.equal(amazonMail.subject, 'HQ alert: ABA Code 6 (exotic, provisional) Yellow-headed Amazon in California')
+    assert.match(amazonMail.html, /eBird: Exotic, Provisional \(feral\); no countable wild population in the US or Canada\./)
+    assert.match(amazonMail.html, /Post on X/)
+    assert.match(amazonMail.html, /🚨 ABA CODE 6 · YELLOW-HEADED AMAZON in California!/)
+    assert.match(amazonMail.html, /🚨 ABA Code 6 in California: YELLOW-HEADED AMAZON/)
+    assert.doesNotMatch(amazonMail.html, /rediscovery|believed extinct/i)
     assert.equal(code4.title, '🚨 ABA Code 4: Yellow-browed Warbler in California')
     assert.match(code4.body, /Rancho Corral de Tierra – Moss Beach area, San Mateo Co\. · Oct 22, 12:50 PM · 1 checklist, awaiting review/)
     assert.match(code4.data.url, /\/share\/s\/[A-Za-z0-9]{10}$/)
-    assert.match(mails[0].subject, /^HQ alert: ABA Code 4 Yellow-browed Warbler in California$/)
+    const warblerMail = mailed(/Warbler/)
+    assert.match(warblerMail.subject, /^HQ alert: ABA Code 4 Yellow-browed Warbler in California$/)
     // A Code 4 gets the mega drafts: the X post and one to copy for Facebook.
-    assert.match(mails[0].html, /🚨 ABA CODE 4 · YELLOW-BROWED WARBLER in California!/)
-    assert.match(mails[0].html, /Post on X/)
-    assert.match(mails[0].html, /Copy for Facebook/)
-    assert.match(mails[0].html, /🚨 An ABA Code 4 rarity in California: YELLOW-BROWED WARBLER/)
-    assert.match(mails[0].html, /facebook\.com\/sharer\/sharer\.php\?u=/)
+    assert.match(warblerMail.html, /🚨 ABA CODE 4 · YELLOW-BROWED WARBLER in California!/)
+    assert.match(warblerMail.html, /Post on X/)
+    assert.match(warblerMail.html, /Copy for Facebook/)
+    assert.match(warblerMail.html, /🚨 An ABA Code 4 rarity in California: YELLOW-BROWED WARBLER/)
+    assert.match(warblerMail.html, /facebook\.com\/sharer\/sharer\.php\?u=/)
     // Its share keeps the mega card's details.
     const megaShare = await db('shares').whereRaw("payload->>'speciesCode' = 'yebwar3'").first('payload')
     assert.equal(megaShare?.payload?.card?.aba, 4)
-    assert.equal(code6.title, '⚠️ Unconfirmed: Ivory-billed Woodpecker reported in Arkansas')
-    assert.match(code6.body, /Almost certainly a misidentification/)
-    assert.equal(code6.data.url, 'https://ebird.org/checklist/S903', 'no share page for a Code 6')
-    assert.match(mails[1].subject, /^HQ heads-up: unconfirmed Ivory-billed Woodpecker report in Arkansas$/)
-    assert.doesNotMatch(mails[1].html, /Post on X|\/share\/|Private Lane/)
+    assert.equal(code6.title, '🚨 ABA Code 6: Ivory-billed Woodpecker reported in Arkansas')
+    assert.match(code6.body, /private place: a rediscovery, an escaped bird or a mistake/)
+    assert.equal(code6.data.url, 'https://ebird.org/checklist/S903', 'no share page for a private Code 6')
+    const ivbMail = mailed(/Ivory-billed/)
+    assert.match(ivbMail.subject, /^HQ alert: ABA Code 6 Ivory-billed Woodpecker reported in Arkansas$/)
+    assert.doesNotMatch(ivbMail.html, /Post on X|\/share\/|Private Lane|misidentification/)
     assert.equal(await db('shares').whereRaw("payload->>'speciesCode' = 'ivbwoo'").count('* as n').first().then((r) => Number(r.n)), 0)
     // Reported again the next day: already told this week.
     records.push({ ...warbler, subId: 'S905', obsDt: '2026-10-23 08:37', userDisplayName: 'B' })
     const again = await run(new Date('2026-10-23T18:00:00Z'))
-    assert.deepEqual([again.post, again.extinct, pushes.length, mails.length], [0, 0, 2, 2])
+    assert.deepEqual([again.post, again.extinct, pushes.length, mails.length], [0, 0, 3, 3])
     // A week on, it would be news again.
-    assert.equal((await run(new Date('2026-10-30T21:00:00Z'))).post, 1)
+    assert.equal((await run(new Date('2026-10-30T21:00:00Z'))).post, 2)
     // The owner can sign in with another address than the desk mails: HQ_PUSH_EMAIL names that account.
     process.env.HQ_PUSH_EMAIL = 'someone@example.com'
     await db('hq_alerts').del()
