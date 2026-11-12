@@ -78,3 +78,16 @@ test('a mega card renders a 1200x630 JPEG (photo and map tiles stubbed)', async 
     assert.deepEqual([image.bitmap.width, image.bitmap.height], [1200, 630])
   } finally { global.fetch = realFetch }
 })
+
+test('a Code 6 post says what eBird makes of the birds: a rediscovery if native, a feral or escaped population if not', () => {
+  const amazon = { ...owl, aba: 6, comName: 'Yellow-headed Amazon', stateName: 'California', state: 'US-CA', exotic: 'P' }
+  const x = xDraft(amazon, URL_)
+  assert.match(x, /^🚨 ABA CODE 6 · YELLOW-HEADED AMAZON in California!/)
+  assert.match(x, /eBird: Exotic, Provisional \(feral\)\. No native birds left in the ABA Area\./)
+  assert.doesNotMatch(x, /rediscovery/)
+  assert.ok(xLength(x, URL_) <= 280)
+  assert.match(facebookDraft(amazon, URL_), /^🚨 ABA Code 6 in California: YELLOW-HEADED AMAZON\n\nThe Yellow-headed Amazon has no native birds left in the ABA Area, and eBird marks these as a provisional exotic population \(feral birds\)/)
+  const ivb = { ...amazon, comName: 'Ivory-billed Woodpecker', exotic: null }
+  assert.match(xDraft(ivb, URL_), /a rediscovery if it holds up/)
+  assert.match(facebookDraft(ivb, URL_), /is believed extinct or gone from the ABA Area/)
+})
