@@ -81,13 +81,17 @@ test('a mega card renders a 1200x630 JPEG (photo and map tiles stubbed)', async 
 
 test('a Code 6 post says what eBird makes of the birds: a rediscovery if native, a feral or escaped population if not', () => {
   const amazon = { ...owl, aba: 6, comName: 'Yellow-headed Amazon', stateName: 'California', state: 'US-CA', exotic: 'P' }
-  const x = xDraft(amazon, URL_)
+  const x = xDraft({ ...amazon, place: { ...amazon.place, locName: 'Huntington Central Park' } }, URL_)
   assert.match(x, /^🚨 ABA CODE 6 · YELLOW-HEADED AMAZON in California!/)
-  assert.match(x, /eBird: Exotic, Provisional \(feral\)\. No native birds left in the ABA Area\./)
+  assert.match(x, /eBird: Exotic, Provisional \(feral\); no countable wild population in the US or Canada\./)
   assert.doesNotMatch(x, /rediscovery/)
   assert.ok(xLength(x, URL_) <= 280)
-  assert.match(facebookDraft(amazon, URL_), /^🚨 ABA Code 6 in California: YELLOW-HEADED AMAZON\n\nThe Yellow-headed Amazon has no native birds left in the ABA Area, and eBird marks these as a provisional exotic population \(feral birds\)/)
-  const ivb = { ...amazon, comName: 'Ivory-billed Woodpecker', exotic: null }
+  // A long place and an access note: the short line, never none.
+  const tight = xDraft(amazon, URL_)
+  assert.match(tight, /eBird: Exotic, Provisional \(feral\)\. Seen/)
+  assert.ok(xLength(tight, URL_) <= 280)
+  assert.match(facebookDraft(amazon, URL_), /^🚨 ABA Code 6 in California: YELLOW-HEADED AMAZON\n\nThe Yellow-headed Amazon has no countable wild population in the US or Canada \(ABA Code 6\), and eBird marks these as a provisional exotic population \(feral birds\)/)
+  const ivb = { ...amazon, comName: 'Ivory-billed Woodpecker', exotic: null, place: { ...amazon.place, locName: 'Bayou DeView' } }
   assert.match(xDraft(ivb, URL_), /a rediscovery if it holds up/)
   assert.match(facebookDraft(ivb, URL_), /is believed extinct or gone from the ABA Area/)
 })

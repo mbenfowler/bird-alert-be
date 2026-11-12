@@ -1105,7 +1105,7 @@ test('an HQ rarity alert: a Code 4-6 bird goes to the owner at once with a post 
     assert.match(amazon.data.url, /\/share\/s\/[A-Za-z0-9]{10}$/, 'a public Code 6 gets a share page')
     const amazonMail = mailed(/Amazon/)
     assert.equal(amazonMail.subject, 'HQ alert: ABA Code 6 (exotic, provisional) Yellow-headed Amazon in California')
-    assert.match(amazonMail.html, /eBird: Exotic, Provisional \(feral\)\. No native birds left in the ABA Area\./)
+    assert.match(amazonMail.html, /eBird: Exotic, Provisional \(feral\); no countable wild population in the US or Canada\./)
     assert.match(amazonMail.html, /Post on X/)
     assert.match(amazonMail.html, /🚨 ABA CODE 6 · YELLOW-HEADED AMAZON in California!/)
     assert.match(amazonMail.html, /🚨 ABA Code 6 in California: YELLOW-HEADED AMAZON/)
