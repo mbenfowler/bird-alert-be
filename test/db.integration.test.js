@@ -3596,7 +3596,10 @@ test('the event-day migration: down and up again, filling an Arizona event\'s zo
 })
 
 /** A Big Day in Cochise County, AZ on Nov 10, with members whose accounts are in Phoenix, New York, UTC and no zone yet. */
-const cochiseBigDay = async (prefix) => {
+/** Today in Phoenix, as YYYY-MM-DD. */
+const phoenixToday = () => new Date().toLocaleDateString('en-CA', { timeZone: 'America/Phoenix' })
+// `on` moves the day (default the real Big Day, Nov 10): tests that add with the real clock pass today, so the recap isn't sealed yet.
+const cochiseBigDay = async (prefix, { on = '2026-11-10' } = {}) => {
   const events = require('../lib/events')
   // Nothing here may reach eBird: Arizona's counties, as eBird lists them.
   const ebirdApi = require('../lib/ebird')
@@ -3605,7 +3608,7 @@ const cochiseBigDay = async (prefix) => {
   const restore = async () => { ebirdApi.subregions = original; await db('nearby_cache').where('key', 'like', 'areas:%').del() }
   const person = async (key, timezone) => (await db('users').insert({ email: `${prefix}-${key}@example.com`, password_hash: 'x', location: 'US-GA-139', state: 'GA', email_confirmed: true, timezone }).returning('*'))[0]
   const people = { matt: await person('matt', 'America/Phoenix'), sam: await person('sam', 'America/New_York'), utc: await person('utc', 'UTC'), kim: await person('kim', null) }
-  const made = await events.createEvent(people.matt, { name: 'Cochise Big Day', state: 'AZ', location: 'US-AZ-003', starts_on: '2026-11-10', kind: 'bigday' }, new Date('2026-11-03T18:00:00Z'))
+  const made = await events.createEvent(people.matt, { name: 'Cochise Big Day', state: 'AZ', location: 'US-AZ-003', starts_on: on, kind: 'bigday' }, new Date(Date.parse(on) - 7 * 86400_000 + 18 * 3600_000))
   await db('event_members').where({ event_id: made.id, user_id: people.matt.id }).update({ display_name: 'Matt' })
   await db('event_members').insert([['sam', 'Sam'], ['utc', 'Uma'], ['kim', 'Kim']].map(([key, display_name]) => ({ event_id: made.id, user_id: people[key].id, display_name, role: 'member' })))
   const event = await db('events').where({ id: made.id }).first()
@@ -3663,7 +3666,7 @@ test('the tally: a repeated client_id is the same add; the first finder is kept,
   const saved = require('../api/saved')
   const { fakeReq, fakeRes } = require('./helpers')
   const { createSession } = require('../lib/auth')
-  const { events, people, event, restore, ids } = await cochiseBigDay('tz-tally')
+  const { events, people, event, restore, ids } = await cochiseBigDay('tz-tally', { on: phoenixToday() })
   const as = (user) => {
     const session = fakeRes(); createSession(session, user)
     const cookie = String(session.headers['set-cookie']).split(';')[0]
@@ -3754,7 +3757,7 @@ test('removing a bird keeps it for undo; undo or adding it again brings back who
   const saved = require('../api/saved')
   const { fakeReq, fakeRes } = require('./helpers')
   const { createSession } = require('../lib/auth')
-  const { events, people, event, restore, ids } = await cochiseBigDay('tz-undo')
+  const { events, people, event, restore, ids } = await cochiseBigDay('tz-undo', { on: phoenixToday() })
   const outsider = (await db('users').insert({ email: 'tz-undo-outsider@example.com', password_hash: 'x', location: 'US-GA-139', state: 'GA' }).returning('*'))[0]
   const as = (user) => {
     const session = fakeRes(); createSession(session, user)
@@ -3817,14 +3820,14 @@ test('"On my eBird checklist": each member ticks birds for themselves; members o
   const saved = require('../api/saved')
   const { fakeReq, fakeRes } = require('./helpers')
   const { createSession } = require('../lib/auth')
-  const { events, people, event, restore, ids } = await cochiseBigDay('tz-marks')
+  const { events, people, event, restore, ids } = await cochiseBigDay('tz-marks', { on: phoenixToday() })
   const outsider = (await db('users').insert({ email: 'tz-marks-outsider@example.com', password_hash: 'x', location: 'US-GA-139', state: 'GA' }).returning('*'))[0]
   const as = (user, eventId = event.id) => {
     const session = fakeRes(); createSession(session, user)
     const cookie = String(session.headers['set-cookie']).split(';')[0]
     return async (method, query, body) => { const res = fakeRes(); await saved(fakeReq({ method, headers: { cookie }, query: { id: String(eventId), ...query }, body }), res); return res }
   }
-  const other = await events.createEvent(outsider, { name: 'Elsewhere', state: 'AZ', location: 'US-AZ-019', starts_on: '2026-11-10', kind: 'bigday' }, new Date('2026-11-03T18:00:00Z'))
+  const other = await events.createEvent(outsider, { name: 'Elsewhere', state: 'AZ', location: 'US-AZ-019', starts_on: phoenixToday(), kind: 'bigday' }, new Date(Date.now() - 7 * 86400_000))
   try {
     const trogon = (await events.addTally(people.matt, event.id, { species_code: 'eletro' })).entry
     const quail = (await events.addTally(people.sam, event.id, { species_code: 'monqua' })).entry

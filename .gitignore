@@ -13,3 +13,6 @@ npm-debug.log*
 
 # The ABA Checklist is the ABA's copyrighted work: load it into the database, never commit it.
 ABA_Checklist*
+
+# Report scripts: the owner's account email stays local.
+scripts/reports/.owner
