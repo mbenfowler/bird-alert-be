@@ -42,14 +42,10 @@ test('the evidence line is plain, and unconfirmed reports still go out marked as
   assert.doesNotMatch(watched.body, /review/, 'no evidence, no line')
 })
 
-test('a Code 3-5 bird sent before review is followed; confirmed ones and Codes 1-2 are not', () => {
+test('push_log only remembers a sighting; following it is lib/reportFollows\' (every code); the follow-up push', () => {
   const unconfirmed = { ...report({}), evidence: { confirmed: false, media: null, birders: 1 } }
-  assert.equal(reviewFields(unconfirmed, 3, 'US-CA-075').review_state, 'pending')
-  assert.equal(reviewFields(unconfirmed, 5, 'US-CA-075').review_state, 'pending')
-  assert.equal(reviewFields(unconfirmed, 2, 'US-CA-075').review_state, null)
-  assert.equal(reviewFields(unconfirmed, null, 'US-CA-075').review_state, null)
-  assert.equal(reviewFields({ ...unconfirmed, evidence: { confirmed: true, media: null, birders: 4 } }, 4, 'US-CA-075').review_state, null)
-  // A range alert is followed in the county it was reported in.
+  for (const aba of [2, 3, 5, null]) assert.equal(reviewFields(unconfirmed, aba, 'US-CA-075').review_state, null)
+  // A range alert is kept under the county it was reported in.
   assert.equal(reviewFields({ ...unconfirmed, away: { miles: 20, region: 'US-CA-081' } }, 4, 'US-CA-075').sighting_region, 'US-CA-081')
   const follow = reviewNotification({ speciesCode: 'yebwar', subId: 'S9', comName: 'Yellow-browed Warbler', locName: 'Rancho Corral de Tierra', obsDt: '2026-10-22 12:50', aba: 4, region: 'US-CA-081' })
   assert.equal(follow.title, '✅ Now confirmed by eBird: Yellow-browed Warbler')
@@ -63,4 +59,12 @@ test('proof for strict alerts: a reviewer, a photo or recording, or a second bir
   assert.equal(hasProof({ evidence: { confirmed: false, media: 'audio', birders: 1 } }), true)
   assert.equal(hasProof({ evidence: { confirmed: false, media: null, birders: 2 } }), true)
   assert.equal(hasProof({ speciesCode: 'cangoo' }), true, 'a lifer from an ordinary report has nothing to prove')
+})
+
+test('the evidence line says whether the observer described the bird, when that is known', () => {
+  const { evidenceLine } = require('../lib/evidence')
+  const base = { confirmed: false, media: null, birders: 1 }
+  assert.equal(evidenceLine({ ...base, described: false }, 'en'), 'Unconfirmed: not yet reviewed · no description · 1 birder')
+  assert.equal(evidenceLine({ ...base, media: 'photo', described: true }, 'en'), 'Unconfirmed: not yet reviewed · photo · described by the observer · 1 birder')
+  assert.equal(evidenceLine(base, 'en'), 'Unconfirmed: not yet reviewed · 1 birder', 'unknown: nothing said')
 })

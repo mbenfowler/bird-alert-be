@@ -57,6 +57,8 @@ module.exports = {
     photo: 'photo',
     audio: 'son',
     video: 'vidéo',
+    described: 'décrit par l’observateur',
+    notDescribed: 'aucune description',
     birders: { one: '{count} observateur', other: '{count} observateurs' }
   },
   push: {
@@ -234,6 +236,11 @@ module.exports = {
       unsubscribe: 'Se désabonner de ce résumé'
     },
     rare: {
+      updatesHeading: 'Depuis notre avis',
+      updatesIntro: 'Ce qu’il est advenu des oiseaux rares qu’on vous a signalés.',
+      confirmed: '✅ Confirmé par eBird',
+      gone: 'Retiré d’eBird (par l’observateur ou non accepté)',
+      subjectUpdates: { one: 'Du nouveau sur un oiseau rare signalé : {bird}', other: 'Du nouveau sur {count} oiseaux rares signalés' },
       subjectAba: 'Code ABA {code} près de chez toi : {bird}{more}',
       subjectAbaMore: ' + {count} de plus',
       subject: { one: 'Oiseau peu commun près de chez toi : {bird}', other: '{count} oiseaux peu communs signalés près de chez toi' },
