@@ -56,6 +56,8 @@ module.exports = {
     photo: 'foto',
     audio: 'audio',
     video: 'video',
+    described: 'con descripción del observador',
+    notDescribed: 'sin descripción',
     birders: { one: '{count} observador', other: '{count} observadores' }
   },
   push: {
@@ -233,6 +235,14 @@ module.exports = {
       unsubscribe: 'Cancelar la suscripción a este resumen'
     },
     rare: {
+      postButton: 'Publicar en X',
+      post: '✅ Confirmado por los revisores de eBird: {bird} en {place}, {when}. {link}',
+      postPrivate: '✅ Confirmado por los revisores de eBird: {bird}, {when} (en terreno privado). {link}',
+      updatesHeading: 'Desde que te avisamos',
+      updatesIntro: 'Qué pasó con las aves raras de las que te avisamos.',
+      confirmed: '✅ Confirmada por eBird',
+      gone: 'Ya no está en eBird (retirada o no aceptada)',
+      subjectUpdates: { one: 'Novedad sobre un ave rara de la que te avisamos: {bird}', other: 'Novedades sobre {count} aves raras de las que te avisamos' },
       subjectAba: 'Código ABA {code} cerca de ti: {bird}{more}',
       subjectAbaMore: ' y {count} más',
       subject: { one: 'Ave poco común cerca de ti: {bird}', other: '{count} aves poco comunes reportadas cerca de ti' },

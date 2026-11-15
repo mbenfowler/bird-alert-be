@@ -60,6 +60,8 @@ module.exports = {
     photo: 'photo',
     audio: 'audio',
     video: 'video',
+    described: 'described by the observer',
+    notDescribed: 'no description',
     birders: { one: '{count} birder', other: '{count} birders' }
   },
   push: {
@@ -241,6 +243,14 @@ module.exports = {
       unsubscribe: 'Unsubscribe from this digest'
     },
     rare: {
+      postButton: 'Post on X',
+      post: '✅ Confirmed by eBird reviewers: {bird} at {place}, {when}. {link}',
+      postPrivate: '✅ Confirmed by eBird reviewers: {bird}, {when} (on private land). {link}',
+      updatesHeading: 'Since we told you',
+      updatesIntro: 'How rare birds we told you about turned out.',
+      confirmed: '✅ Confirmed by eBird',
+      gone: 'No longer on eBird (withdrawn or not accepted)',
+      subjectUpdates: { one: 'Update on a rare bird we told you about: {bird}', other: 'Updates on {count} rare birds we told you about' },
       subjectAba: 'ABA Code {code} near you: {bird}{more}',
       subjectAbaMore: ' + {count} more',
       subject: { one: 'Uncommon bird near you: {bird}', other: '{count} uncommon birds reported near you' },

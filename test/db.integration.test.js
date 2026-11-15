@@ -1532,47 +1532,124 @@ test('best hotspots for one bird: ranked by how reliably it was reported, a long
   await db('taxonomy_ref').whereIn('species_code', ['zzbun', 'zzbun1']).del()
 })
 
-test('a rare bird sent before review: one follow-up when eBird confirms it, none if rejected, never for Codes 1-2, never after a week', async () => {
-  const { runReviewChecks } = require('../lib/reviewWatch')
-  const [{ id }] = await db('users').insert({ email: 'review@example.com', password_hash: 'x', location: 'US-CA-081', state: 'CA', email_confirmed: true }).returning('id')
-  const row = (over) => ({ user_id: id, speciesCode: 'yebwar', sub_id: 'S1', kind: 'notable', aba: 4, sighting_region: 'US-CA-081', loc_name: 'Rancho Corral de Tierra', review_state: 'pending', ...over })
-  await db('push_log').insert([
-    row({}),
-    row({ speciesCode: 'rejected', sub_id: 'S2' }),
-    row({ speciesCode: 'common', sub_id: 'S3', aba: 2 })
-  ])
-  await db('push_log').insert(row({ speciesCode: 'old', sub_id: 'S4', created_at: db.raw("now() - interval '8 days'") }))
-  const feed = (reviewed) => [
-    { speciesCode: 'yebwar', subId: 'S1', comName: 'Yellow-browed Warbler', locName: 'Rancho Corral de Tierra', obsDt: '2026-10-22 12:50', obsReviewed: reviewed, obsValid: reviewed },
-    { speciesCode: 'common', subId: 'S3', comName: 'Common', obsReviewed: true, obsValid: true },
-    { speciesCode: 'old', subId: 'S4', comName: 'Old', obsReviewed: true, obsValid: true }
-  ]
-  const keep = ebird.notableObservations
+test('rare birds told of before review are followed, any code, push or email: confirmed, gone after a second look, or out of time; a push while it can be chased, the email lists each once', async () => {
+  const follows = require('../lib/reportFollows')
+  const mk = (email, over = {}) => db('users').insert({ email, password_hash: 'x', location: 'US-CA-081', state: 'CA', email_confirmed: true, ...over }).returning('*').then((r) => r[0])
+  const pusher = await mk('follow-push@example.com')
+  const reader = await mk('follow-mail@example.com')
+  await db('taxonomy_ref').insert({ species_code: 'zzwarb', sci_name: 'Phylloscopus zz', com_name: 'Zz Warbler', category: 'species', fetched_at: new Date() }).onConflict('species_code').ignore()
+  const obs = (over) => ({ speciesCode: 'zzwarb', subId: 'S1', locId: 'L1', locName: 'Rancho Corral de Tierra', lat: 37.5, lng: -122.5, obsDt: '2026-11-14 07:30', subnational2Code: 'US-CA-081', subnational1Name: 'California', aba: 2, evidence: { confirmed: false, media: null, birders: 1 }, ...over })
+  const now = new Date('2026-11-15T15:00:00Z')
+  const hours = (n) => new Date(now.getTime() + n * 3_600_000)
   const sent = []
   const send = async (userId, payload) => { sent.push([userId, payload.title]); return { sent: 1, gone: 0 } }
   try {
-    // Still unreviewed: it waits; the report missing from the feed was rejected and is dropped quietly.
-    ebird.notableObservations = async () => feed(false)
-    const first = await runReviewChecks({ send })
-    assert.deepEqual([first.pending, first.confirmed, first.dropped, sent.length], [2, 0, 1, 0])
-    // Confirmed: told once, and only once.
-    ebird.notableObservations = async () => feed(true)
-    await runReviewChecks({ send })
-    await runReviewChecks({ send })
-    assert.deepEqual(sent, [[id, '✅ Now confirmed by eBird: Yellow-browed Warbler']])
-    const states = Object.fromEntries((await db('push_log').where({ user_id: id }).select('speciesCode', 'review_state')).map((r) => [r.speciesCode, r.review_state]))
-    assert.deepEqual(states, { yebwar: 'confirmed', rejected: 'dropped', common: 'pending', old: 'pending' }, 'Code 2 and week-old rows are never acted on')
-    // Quiet hours hold a follow-up until they end.
-    await db('push_log').insert(row({ sub_id: 'S5' }))
-    await db('users').where({ id }).update({ push_quiet_start: 0, push_quiet_end: 24, timezone: 'UTC' })
-    ebird.notableObservations = async () => [{ ...feed(true)[0], subId: 'S5' }]
-    await runReviewChecks({ send })
-    assert.equal(sent.length, 1, 'held for quiet hours')
-    assert.equal((await db('push_log').where({ user_id: id, sub_id: 'S5' }).first()).review_state, 'pending')
+    // A Code 2 is followed now; a confirmed report and one without evidence (an ordinary report) aren't.
+    await follows.follow(pusher.id, 'push', [obs(), obs({ speciesCode: 'zzok', subId: 'S2', evidence: { confirmed: true, media: null, birders: 3 } }), obs({ speciesCode: 'zzplain', subId: 'S3', evidence: undefined })])
+    await follows.follow(reader.id, 'email', [obs(), obs({ speciesCode: 'zzgone', subId: 'S4', locId: 'L9', lat: 38, lng: -121 })])
+    await follows.follow(reader.id, 'email', [obs()])
+    assert.deepEqual((await db('rare_reports').whereIn('sub_id', ['S1', 'S2', 'S3', 'S4']).orderBy('sub_id').pluck('sub_id')), ['S1', 'S4'])
+    assert.equal(Number((await db('report_follows').where({ user_id: reader.id }).count('* as n').first()).n), 2, 'told twice, followed once')
+
+    // Still awaiting review: open. Gone from the feed: noted, but not settled on one look.
+    let feed = [{ ...obs(), obsReviewed: false, obsValid: false }]
+    // Other tests' reports may be open too: only these counties are asked about.
+    const check = (at) => follows.checkReports({ now: at, feedFor: async (region) => (region === 'US-CA-081' ? feed : Promise.reject(new Error('not this test'))) })
+    const state = async () => Object.fromEntries((await db('rare_reports').whereIn('sub_id', ['S1', 'S4']).select('sub_id', 'outcome', 'missing_since')).map((r) => [r.sub_id, [r.outcome, Boolean(r.missing_since)]]))
+    await check(now)
+    assert.deepEqual(await state(), { S1: ['pending', false], S4: ['pending', true] })
+    // Back in the feed clears it; gone again for six hours, it's gone.
+    feed = [{ ...obs(), obsReviewed: false, obsValid: false }, { ...obs({ speciesCode: 'zzgone', subId: 'S4', locId: 'L9' }), obsReviewed: false, obsValid: false }]
+    await check(hours(1))
+    assert.equal((await db('rare_reports').where({ sub_id: 'S4' }).first()).missing_since, null)
+    feed = [{ ...obs(), obsReviewed: false, obsValid: false }]
+    await check(hours(2))
+    assert.equal((await check(hours(5))).gone, 0, 'three hours missing is a hiccup')
+    assert.equal((await check(hours(8))).gone, 1)
+
+    // A later report of the bird at the spot, confirmed, confirms it.
+    feed = [{ ...obs(), obsReviewed: false, obsValid: false }, { ...obs({ subId: 'S7' }), obsReviewed: true, obsValid: true }]
+    assert.equal((await check(hours(9))).confirmed, 1)
+
+    // The push: once, after quiet hours, only while the bird may still be there.
+    await db('users').where({ id: pusher.id }).update({ push_quiet_start: 0, push_quiet_end: 24, timezone: 'UTC' })
+    await follows.pushConfirmations({ send, now: hours(10) })
+    assert.equal(sent.length, 0, 'held for quiet hours')
+    await db('users').where({ id: pusher.id }).update({ push_quiet_start: null, push_quiet_end: null })
+    await follows.pushConfirmations({ send, now: hours(11) })
+    await follows.pushConfirmations({ send, now: hours(12) })
+    assert.deepEqual(sent, [[pusher.id, '✅ Now confirmed by eBird: Zz Warbler']])
+    const late = await mk('follow-late@example.com')
+    await db('report_follows').insert({ report_id: (await db('rare_reports').where({ sub_id: 'S1' }).first()).id, user_id: late.id, via: 'push', told_at: hours(-96) })
+    await follows.pushConfirmations({ send, now: hours(12) })
+    assert.equal(sent.length, 1, 'told four days ago: the email has it, no push')
+
+    // The email lists each ending once, whoever told them and however often.
+    const updates = await follows.updatesFor(reader, { now: hours(12) })
+    assert.deepEqual(updates.map((u) => [u.comName, u.outcome]), [['Zz Warbler', 'confirmed'], ['zzgone', 'gone']])
+    await follows.markMailed(updates, '2026-11-16')
+    assert.deepEqual(await follows.updatesFor(reader, { now: hours(12) }), [])
+    assert.equal((await follows.updatesFor(pusher, { now: hours(12) })).length, 1, 'push people see it in their email too')
+
+    // Out of time: a report still open after two weeks is left unsettled, and told to nobody.
+    await follows.follow(reader.id, 'email', [obs({ speciesCode: 'zzslow', subId: 'S8' })])
+    await db('rare_reports').where({ sub_id: 'S8' }).update({ created_at: hours(-15 * 24) })
+    assert.equal((await check(hours(13))).expired, 1)
+    assert.equal((await follows.updatesFor(reader, { now: hours(13) })).length, 0)
+
+    // The morning email: the updates lead; with no new birds, it's the updates alone.
+    const { rareSightingsMessage } = require('../lib/mailer')
+    const alone = rareSightingsMessage({ ...reader, locale: 'en' }, [], new Map(), updates)
+    assert.equal(alone.subject, 'Updates on 2 rare birds we told you about')
+    assert.match(alone.text, /^Since we told you:\n {3}- ✅ Confirmed by eBird: Zz Warbler · Rancho Corral de Tierra, Nov 14, 7:30 AM \(https:\/\/ebird\.org\/checklist\/S1\)\n {3}- No longer on eBird \(withdrawn or not accepted\): zzgone/)
+    // A confirmed bird has a Post on X button, its post in the link; a gone one doesn't.
+    const posts = [...alone.html.matchAll(/x\.com\/intent\/post\?text=([^"]+)/g)].map((m) => decodeURIComponent(m[1]))
+    assert.deepEqual(posts, ['✅ Confirmed by eBird reviewers: Zz Warbler at Rancho Corral de Tierra, Nov 14, 7:30 AM. https://ebird.org/checklist/S1 #birding #rarebird #Californiabirds'])
+    const { confirmedPost } = require('../lib/mailer')
+    assert.equal(confirmedPost({ comName: 'Zz Warbler', speciesCode: 'zzwarb', subId: 'S1', region: 'US-CA-081', stateName: 'California', obsDt: '2026-11-14 07:30', locName: 'Smith Ranch (restricted access)', privatePlace: true }, 'en'),
+      '✅ Confirmed by eBird reviewers: Zz Warbler, Nov 14, 7:30 AM (on private land). https://ebird.org/species/zzwarb/US-CA #birding #rarebird #Californiabirds', 'a private place is never named or linked')
   } finally {
-    ebird.notableObservations = keep
-    await db('push_log').where({ user_id: id }).del()
-    await db('users').where({ id }).del()
+    await db('rare_reports').where('species_code', 'like', 'zz%').del()
+    await db('users').whereIn('email', ['follow-push@example.com', 'follow-mail@example.com', 'follow-late@example.com']).del()
+    await db('taxonomy_ref').where({ species_code: 'zzwarb' }).del()
+  }
+})
+
+test('the HQ desk hears how its alerts turned out: confirmed brings fresh drafts and a confirmed share card; gone, a note not to post', async () => {
+  const { hqOutcomes } = require('../lib/hqAlerts')
+  const { trackReports } = require('../lib/reportFollows')
+  const place = { locId: 'L5', locName: 'Cape May Point SP', county: 'Cape May', region: 'US-NJ-009', lat: 38.93, lng: -74.96, obsDt: '2026-11-14 08:00', subId: 'S50', howMany: 1, days: ['2026-11-14'], media: false }
+  const pick = { speciesCode: 'zzblue', comName: 'Red-flanked Bluetail', state: 'US-NJ', stateName: 'New Jersey', aba: 4, checklists: 1, confirmed: 0, observers: 1, place }
+  const [shareRow] = await db('shares').insert({ id: 'zzhqshare', kind: 'sighting', user_id: null, payload: JSON.stringify({ comName: 'Red-flanked Bluetail', card: { aba: 4, confirmed: false } }) }).returning('id')
+  const [ok, gone] = await trackReports([
+    { speciesCode: 'zzblue', subId: 'S50', locId: 'L5', subnational2Code: 'US-NJ-009', evidence: { confirmed: false, birders: 1 } },
+    { speciesCode: 'zzgrey', subId: 'S51', locId: 'L6', subnational2Code: 'US-NJ-009', evidence: { confirmed: false, birders: 1 } }
+  ])
+  await db('hq_alerts').insert([
+    { species_code: 'zzblue', state: 'US-NJ', aba: 4, first_sub_id: 'S50', report_id: ok, share_url: `https://bird-alert.vercel.app/share/s/${shareRow.id}`, pick: JSON.stringify(pick) },
+    { species_code: 'zzgrey', state: 'US-NJ', aba: 4, first_sub_id: 'S51', report_id: gone, pick: JSON.stringify({ ...pick, speciesCode: 'zzgrey', comName: 'Grey Bird', place: { ...place, subId: 'S51' } }) }
+  ])
+  await db('rare_reports').where({ id: ok }).update({ outcome: 'confirmed', settled_at: new Date() })
+  await db('rare_reports').where({ id: gone }).update({ outcome: 'gone', settled_at: new Date() })
+  const mails = []
+  const pushes = []
+  const keep = { FEEDBACK_TO: process.env.FEEDBACK_TO, HQ_PUSH_EMAIL: process.env.HQ_PUSH_EMAIL }
+  const [owner] = await db('users').insert({ email: 'hq-owner-follow@example.com', password_hash: 'x', location: 'US-NJ-009', state: 'NJ' }).returning('*')
+  process.env.FEEDBACK_TO = 'hq-owner-follow@example.com'
+  try {
+    const told = await hqOutcomes({ send: async (m) => mails.push(m), push: async (id, p) => pushes.push([id, p.title]) })
+    assert.deepEqual(told, { confirmed: 1, gone: 1 })
+    assert.deepEqual(pushes, [[owner.id, '✅ Confirmed: Red-flanked Bluetail in New Jersey']])
+    assert.deepEqual(mails.map((m) => m.subject), ['HQ: confirmed, Red-flanked Bluetail in New Jersey', 'HQ: Grey Bird in New Jersey is gone from eBird'])
+    assert.match(mails[0].text, /✅ Confirmed by eBird reviewers/, 'the fresh draft says so')
+    assert.equal((await db('shares').where({ id: 'zzhqshare' }).first()).payload.card.confirmed, true)
+    assert.deepEqual(await hqOutcomes({ send: async (m) => mails.push(m), push: async () => {} }), { confirmed: 0, gone: 0 }, 'told once')
+  } finally {
+    for (const [k, v] of Object.entries(keep)) { if (v === undefined) delete process.env[k]; else process.env[k] = v }
+    await db('hq_alerts').whereIn('species_code', ['zzblue', 'zzgrey']).del()
+    await db('rare_reports').whereIn('id', [ok, gone]).del()
+    await db('shares').where({ id: 'zzhqshare' }).del()
+    await db('users').where({ id: owner.id }).del()
   }
 })
 
