@@ -235,6 +235,9 @@ module.exports = {
       unsubscribe: 'Cancelar la suscripción a este resumen'
     },
     rare: {
+      postButton: 'Publicar en X',
+      post: '✅ Confirmado por los revisores de eBird: {bird} en {place}, {when}. {link} #aves #avesraras',
+      postPrivate: '✅ Confirmado por los revisores de eBird: {bird}, {when} (en terreno privado). {link} #aves #avesraras',
       updatesHeading: 'Desde que te avisamos',
       updatesIntro: 'Qué pasó con las aves raras de las que te avisamos.',
       confirmed: '✅ Confirmada por eBird',

@@ -19,6 +19,8 @@ exports.up = async function (knex) {
     table.string('obs_dt', 16)
     table.float('lat')
     table.float('lng')
+    // A personal location or one eBird marks private or restricted: never named in a post.
+    table.boolean('private_place').notNullable().defaultTo(false)
     table.boolean('media').notNullable().defaultTo(false)
     table.integer('birders').notNullable().defaultTo(1)
     table.boolean('described')

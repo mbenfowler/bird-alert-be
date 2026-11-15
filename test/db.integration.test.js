@@ -1602,6 +1602,12 @@ test('rare birds told of before review are followed, any code, push or email: co
     const alone = rareSightingsMessage({ ...reader, locale: 'en' }, [], new Map(), updates)
     assert.equal(alone.subject, 'Updates on 2 rare birds we told you about')
     assert.match(alone.text, /^Since we told you:\n {3}- ✅ Confirmed by eBird: Zz Warbler · Rancho Corral de Tierra, Nov 14, 7:30 AM \(https:\/\/ebird\.org\/checklist\/S1\)\n {3}- No longer on eBird \(withdrawn or not accepted\): zzgone/)
+    // A confirmed bird has a Post on X button, its post in the link; a gone one doesn't.
+    const posts = [...alone.html.matchAll(/x\.com\/intent\/post\?text=([^"]+)/g)].map((m) => decodeURIComponent(m[1]))
+    assert.deepEqual(posts, ['✅ Confirmed by eBird reviewers: Zz Warbler at Rancho Corral de Tierra, Nov 14, 7:30 AM. https://ebird.org/checklist/S1 #birding #rarebird'])
+    const { confirmedPost } = require('../lib/mailer')
+    assert.equal(confirmedPost({ comName: 'Zz Warbler', speciesCode: 'zzwarb', subId: 'S1', region: 'US-CA-081', obsDt: '2026-11-14 07:30', locName: 'Smith Ranch (restricted access)', privatePlace: true }, 'en'),
+      '✅ Confirmed by eBird reviewers: Zz Warbler, Nov 14, 7:30 AM (on private land). https://ebird.org/species/zzwarb/US-CA #birding #rarebird', 'a private place is never named or linked')
   } finally {
     await db('rare_reports').where('species_code', 'like', 'zz%').del()
     await db('users').whereIn('email', ['follow-push@example.com', 'follow-mail@example.com', 'follow-late@example.com']).del()

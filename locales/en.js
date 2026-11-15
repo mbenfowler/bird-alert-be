@@ -243,6 +243,9 @@ module.exports = {
       unsubscribe: 'Unsubscribe from this digest'
     },
     rare: {
+      postButton: 'Post on X',
+      post: '✅ Confirmed by eBird reviewers: {bird} at {place}, {when}. {link} #birding #rarebird',
+      postPrivate: '✅ Confirmed by eBird reviewers: {bird}, {when} (on private land). {link} #birding #rarebird',
       updatesHeading: 'Since we told you',
       updatesIntro: 'How rare birds we told you about turned out.',
       confirmed: '✅ Confirmed by eBird',
