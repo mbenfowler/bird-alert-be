@@ -237,8 +237,8 @@ module.exports = {
     },
     rare: {
       postButton: 'Publier sur X',
-      post: '✅ Confirmé par les vérificateurs d’eBird : {bird} à {place}, {when}. {link} #ornithologie #oiseauxrares',
-      postPrivate: '✅ Confirmé par les vérificateurs d’eBird : {bird}, {when} (terrain privé). {link} #ornithologie #oiseauxrares',
+      post: '✅ Confirmé par les vérificateurs d’eBird : {bird} à {place}, {when}. {link}',
+      postPrivate: '✅ Confirmé par les vérificateurs d’eBird : {bird}, {when} (terrain privé). {link}',
       updatesHeading: 'Depuis notre avis',
       updatesIntro: 'Ce qu’il est advenu des oiseaux rares qu’on vous a signalés.',
       confirmed: '✅ Confirmé par eBird',

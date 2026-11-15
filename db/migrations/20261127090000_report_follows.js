@@ -15,6 +15,7 @@ exports.up = async function (knex) {
     table.string('loc_id', 16)
     table.string('loc_name', 200)
     table.string('region', 16).notNullable()
+    table.string('state_name', 60)
     table.integer('aba')
     table.string('obs_dt', 16)
     table.float('lat')
