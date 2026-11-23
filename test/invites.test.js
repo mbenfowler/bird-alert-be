@@ -38,4 +38,6 @@ test('a signup from an invite link is stored as an invite with the inviter, and 
   assert.equal(sourceLabel(src), 'invite')
   assert.equal(sourceLabel({ invite: true, utm: 'fb-ebird' }), 'invite')
   assert.equal(sourceLabel({ utm: 'fb-ebird' }), 'fb-ebird')
+  assert.equal(sourceLabel({ landing: 'event-invite', utm: 'snowgoose' }), 'event invite')
+  assert.equal(sourceLabel({ landing: 'event-view', utm: 'snowgoose' }), 'snowgoose')
 })

@@ -36,6 +36,8 @@ test('what brought someone in is cut down to safe pieces, and never sent back to
   const { cleanSignupSource, sourceLabel } = require('../lib/signupSource')
   const { sanitizeUser } = require('../lib/users')
   assert.deepEqual(cleanSignupSource({ ref: 'WWW.Instagram.com', utm: 'Instagram', share: 'jHwrtfGDai', landing: 'share-sighting' }), { ref: 'instagram.com', utm: 'instagram', share: 'jHwrtfGDai', landing: 'share-sighting' })
+  assert.deepEqual(cleanSignupSource({ landing: 'event-invite', utm: 'snowgoose' }), { landing: 'event-invite', utm: 'snowgoose' })
+  assert.deepEqual(cleanSignupSource({ landing: 'event-view' }), { landing: 'event-view' })
   assert.deepEqual(cleanSignupSource({ ref: 'https://evil.example/path?x=1', utm: 'x; drop table', share: '../../etc', landing: '/reset/abc' }), null, 'anything odd is dropped')
   assert.equal(cleanSignupSource('nope'), null)
   assert.equal(sourceLabel({ ref: 'l.instagram.com' }), 'instagram')
